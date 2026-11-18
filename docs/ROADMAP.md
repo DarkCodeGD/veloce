@@ -6,10 +6,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor (round 2 done: direct manipulation and text editing)
+- **Active phase:** Phase 3: Manual editor (round 3 done; left: history panel, theme/color pickers, asset import)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (255 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (278 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -31,8 +31,13 @@
   - **Round 2, typing on the slide (D44):** double-click or Enter edits a text layer in place
     with TipTap, pixel-identical to the render; the layout reflows live; formatting toolbar
     (marks, lists, links). One transaction per session (`tests/integration/phase3-text.test.ts`).
-  - **Next:** marquee, spacing indicators, slide drag reordering, clipboard and the history
-    panel. Text color/alignment/style controls in the text toolbar.
+  - **Round 3 (D45):** marquee selection, spacing indicators (while dragging, and Alt + hover),
+    dragging slides in the rail, and copy/cut/paste through the system clipboard (between
+    slides and decks; text from other apps becomes a text layer).
+    `tests/integration/phase3-structure.test.ts` covers the rail and the clipboard.
+  - **Next:** the history panel, then the theme picker with token-aware color/font pickers,
+    then asset import (which also lets images be pasted between decks). Text
+    color/alignment/style controls in the text toolbar.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -212,22 +217,17 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 
 ## Phase 3 — Manual editor
 
-- [ ] Selection (click, shift-click, marquee), hover outlines, layers panel
-  - Done: click / shift-click / double-click drill-in, Esc/Enter/Ctrl+A, hover outlines, layers
-    panel (rename, hide, lock). Left: marquee.
-- [ ] Move/resize/rotate; snapping guides + spacing indicators
-  - Done: move, resize, rotate, snapping guides, arrow nudging (D43). Left: spacing indicators.
+- [x] Selection (click, shift-click, marquee), hover outlines, layers panel (D39, D45)
+- [x] Move/resize/rotate; snapping guides + spacing indicators (D43, D45)
 - [x] Auto-layout-aware drag (reorder within frame, drop into frames)
 - [x] Text editing with TipTap, mapped to the core rich text model (D44)
   - Left for later: toolbar controls for text color, paragraph alignment and style.
 - [x] Inspector panel auto-generated from each plugin's `propsSchema`
-- [ ] Slide panel: add, duplicate, delete, reorder (drag)
-  - Done: add, duplicate, delete, reorder with Alt+↑/↓. Left: drag reordering.
+- [x] Slide panel: add, duplicate, delete, reorder (drag, or Alt+↑/↓) (D45)
 - [ ] Theme picker + token-aware color/font pickers
 - [ ] Asset import (drag & drop images/fonts/files → content-hashed assets)
-- [ ] Clipboard (copy/paste within and between decks), keyboard shortcuts
-  - Done: shortcuts (undo/redo, delete, duplicate, select, reorder, slide navigation). Left:
-    clipboard.
+- [x] Clipboard (copy/paste within and between decks), keyboard shortcuts (D45)
+  - Images can't be pasted between decks until asset import lands.
 - [ ] Undo/redo for the `user` origin only; history panel shows agent transactions too
   - Done: undo/redo buttons and shortcuts (the server scopes them to `user`), undo toasts. Left:
     history panel.

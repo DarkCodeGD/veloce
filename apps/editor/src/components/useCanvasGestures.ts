@@ -17,7 +17,7 @@ import type { Drag, Feedback, Modifiers } from "./canvas-drags.js";
 /** Movement (screen px) before a press on a layer becomes a move: below it, it's a click. */
 export const DRAG_THRESHOLD = 3;
 
-export type GestureKind = "move" | "resize" | "rotate";
+export type GestureKind = "move" | "resize" | "rotate" | "marquee";
 
 interface Gesture {
   kind: GestureKind;

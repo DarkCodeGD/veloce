@@ -15,6 +15,7 @@ import {
   duplicateNodes,
   duplicateSlide,
   moveSlide,
+  moveSlideTo,
   reorderNode,
   replacePatch,
 } from "./commands.js";
@@ -150,6 +151,13 @@ describe("commands produce valid, undoable ops", () => {
     expect(deck.slides[1]?.root.id).not.toBe("root");
     deck = apply(deck, moveSlide(deck.slides, "s1", 2)?.ops ?? []);
     expect(deck.slides.at(-1)?.id).toBe("s1");
+    expect(moveSlide(deck.slides, "s1", 1)).toBeNull(); // already last
+    const toFront = moveSlideTo(deck.slides, "s1", -5); // clamped
+    expect(toFront?.label).toBe("Move slide 3 to position 1");
+    deck = apply(deck, toFront?.ops ?? []);
+    expect(deck.slides[0]?.id).toBe("s1");
+    expect(moveSlideTo(deck.slides, "s1", 0)).toBeNull();
+    deck = apply(deck, moveSlideTo(deck.slides, "s1", 2)?.ops ?? []);
     deck = apply(deck, deleteSlide(deck.slides.at(-1) as never).ops);
     expect(deck.slides).toHaveLength(2);
   });

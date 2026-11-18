@@ -529,3 +529,37 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
 6. **TipTap is a lazy chunk** (~122 KB gzip). It's prefetched as soon as a text layer is
    selected, so the main bundle grew only ~4 KB. **Why:** most sessions never type on the
    slide, and startup matters more than the first keystroke after a double-click.
+
+### D45: Marquee, spacing indicators, slide dragging and the clipboard (2026-11-19)
+
+1. **Marquee:** dragging on the empty canvas (or from a locked layer) selects every layer the
+   box touches, live. It catches top-level layers, or the deepest ones with Ctrl/Cmd, never
+   locked or hidden ones. Shift adds to the selection. It runs through the canvas gesture
+   engine (D43) as a drag whose command is always null. **Why touch, not contain:** that's
+   what Figma and Keynote do, so a quick sweep is enough.
+2. **Spacing indicators** (red, with a number): while moving or resizing an unrotated free
+   layer, the gap to the nearest neighbour that faces each side (same row or column), else
+   to the frame's content edge. With Alt held, the gaps between the selection and the
+   hovered layer: the four inner gaps when one contains the other, the horizontal and
+   vertical gaps when they're apart. With nothing else hovered, it measures to the
+   selection's parent (the slide edges at the top level). Pure maths in `model/spacing.ts`.
+3. **Slide dragging in the rail:** pointer events, not HTML5 drag-and-drop. **Why:** we need a
+   click/drag threshold, an insertion line, Esc to cancel and auto-scroll near the edges.
+   HTML5 DnD gives none of those reliably, and its drag image can't be styled. The rows are
+   measured once at the start (as on the canvas), and the slot comes from the same
+   `insertionIndex` as stack reordering. One `slide.move`, and the moved slide is selected.
+   Alt+↑/↓ stays the keyboard path.
+4. **Clipboard through the real `copy`/`cut`/`paste` events,** not key handlers. The payload is
+   the copied layers as JSON under `application/x-veloce+json`, plus a plain-text version.
+   **Why:** the system clipboard carries it between slides, decks, editor tabs and restarts,
+   and the browser's Edit menu works too. Text fields and the on-slide text editor keep
+   their own clipboard.
+   - **Where a paste lands:** nothing selected → the slide; one other frame selected →
+     inside it; otherwise → right after the selection.
+   - **What the paste looks like:** fresh IDs everywhere. In free frames the position is
+     kept, shifted 20 px while it's taken; in stacks and grids it's dropped.
+   - **Validation:** the payload is re-validated with `NodeSchema` before use.
+   - **Text from other apps** becomes a new text layer.
+   - **Images from another deck** are refused with a clear message, because core rejects
+     references to assets the deck doesn't have. Copying the asset files along belongs to
+     asset import.

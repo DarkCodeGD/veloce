@@ -4,13 +4,16 @@
  * Outlines come from the rendered DOM (auto-layout computes the pixels), so they're always
  * exactly where the layer is, rotation included. The overlay only takes pointer events on
  * its handles: clicks go to the slide, and the selection rules (model/selection.ts) decide
- * what they select. Dragging a selected layer moves it (components/canvas-drags.ts).
+ * what they select. Dragging a selected layer moves it (components/canvas-drags.ts);
+ * dragging on the empty canvas draws a marquee. Red spacing indicators show the gaps while
+ * moving/resizing, and with Alt held between the selection and the hovered layer.
  * Double-clicking a text layer types into it (components/TextEditSession.tsx).
  */
 import type { Deck, TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { assetUrl, registry } from "../editor-context.js";
+import { typing } from "../keyboard.js";
 import {
   type Box,
   boundingRect,
@@ -23,7 +26,8 @@ import {
 import { ancestorRotation } from "../model/manipulate.js";
 import { editableText, pick, pickTarget } from "../model/selection.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
-import { moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
+import { type Measure, measureBetween } from "../model/spacing.js";
+import { marqueeDrag, moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
 import { CanvasSpace } from "./canvas-space.js";
 import {
   type Caret,
@@ -167,6 +171,41 @@ export function EditorCanvas({
     if (selection.some((id) => editableText(index, id))) prefetchTextEditor().catch(() => {});
   }, [selection, index]);
 
+  // ── Alt + hover: measure from the selection to the hovered layer (or to its parent) ──
+  const [altHeld, setAltHeld] = useState(false);
+  const [altMeasures, setAltMeasures] = useState<Measure[]>([]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Alt" && !typing(e.target)) setAltHeld(e.type === "keydown");
+    };
+    const onBlur = () => setAltHeld(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+  const measured = selection.length === 1 ? selection[0] : undefined;
+  useLayoutEffect(() => {
+    const v = view.current;
+    const other =
+      hover && hover !== measured ? hover : measured && index.nodes.get(measured)?.parentId;
+    if (!altHeld || active || editing || !v || !measured || !other) {
+      setAltMeasures((m) => (m.length === 0 ? m : []));
+      return;
+    }
+    const space = new CanvasSpace(v.stage, v.scale);
+    const a = space.rect(measured);
+    const b =
+      other === index.rootId
+        ? { x: 0, y: 0, w: deck.stage.width, h: deck.stage.height }
+        : space.rect(other);
+    setAltMeasures(a && b ? measureBetween(a, b) : []);
+  }, [altHeld, active, editing, measured, hover, index, deck]);
+
   // ── Pointer → layer ─────────────────────────────────────────────────────────────
   const hitAt = (target: EventTarget | null): string | null => {
     const stage = view.current?.stage;
@@ -191,8 +230,17 @@ export function EditorCanvas({
       !e.shiftKey && target !== null && selection.length > 1 && selection.includes(target);
     const ids = keepGroup ? [...selection] : pick(index, hit, selection, { additive: e.shiftKey });
     if (!keepGroup) onSelect(ids);
-    if (!target || !ids.includes(target)) return;
     const start = { x: e.clientX, y: e.clientY };
+    if (!target) {
+      // The empty canvas (or a locked layer): draw a marquee. Shift adds to the selection.
+      const base = e.shiftKey ? ids : [];
+      begin(e, "marquee", () => {
+        const ctx = context();
+        return ctx ? marqueeDrag(ctx, start, base, onSelect) : null;
+      });
+      return;
+    }
+    if (!ids.includes(target)) return;
     begin(
       e,
       "move",
@@ -304,6 +352,15 @@ export function EditorCanvas({
             b={toOverlay({ x: feedback.line.x2, y: feedback.line.y2 })}
           />
         )}
+        {feedback?.marquee && <div className="marquee" style={rectStyle(feedback.marquee)} />}
+        {(feedback?.measures ?? altMeasures).map((m) => (
+          <MeasureLine
+            key={`${m.dir}${m.from}${m.to}`}
+            measure={m}
+            from={toOverlay(m.dir === "h" ? { x: m.from, y: m.at } : { x: m.at, y: m.from })}
+            to={toOverlay(m.dir === "h" ? { x: m.to, y: m.at } : { x: m.at, y: m.to })}
+          />
+        ))}
         {feedback?.badge && (
           <div
             className="drag-badge"
@@ -378,7 +435,31 @@ function InsertionLine({ a, b }: { a: Point; b: Point }) {
   );
 }
 
-const GESTURE_CLASS = { move: "is-moving", resize: "is-resizing", rotate: "is-rotating" } as const;
+/** A spacing indicator: a 1px red line with the distance in a pill at its middle. */
+function MeasureLine({ measure, from, to }: { measure: Measure; from: Point; to: Point }) {
+  const line =
+    measure.dir === "h"
+      ? { left: from.x, top: from.y, width: to.x - from.x, height: 1 }
+      : { left: from.x, top: from.y, width: 1, height: to.y - from.y };
+  return (
+    <>
+      <div className="measure" style={line} />
+      <div
+        className="measure-label"
+        style={{ left: (from.x + to.x) / 2, top: (from.y + to.y) / 2 }}
+      >
+        {measure.value}
+      </div>
+    </>
+  );
+}
+
+const GESTURE_CLASS = {
+  move: "is-moving",
+  resize: "is-resizing",
+  rotate: "is-rotating",
+  marquee: "is-selecting",
+} as const;
 
 const toCentre = (p: Point) => ({ cx: p.x, cy: p.y });
 

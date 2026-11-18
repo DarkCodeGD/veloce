@@ -301,6 +301,62 @@ describe.skipIf(problem !== null)("Phase 3: direct manipulation", { timeout: 60_
     expect(h.stored("boxA").position).toEqual({ x: 40, y: 40 });
   });
 
+  it("marquee-selects top-level layers, or deep ones with Ctrl, without sending anything", async () => {
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    const before = h.userTransactions();
+    const slide = await page.locator(".editor-canvas .slide-surface").boundingBox();
+    const list = await layer("list").boundingBox();
+    if (!slide || !list) throw new Error("no slide");
+    const corner = { x: slide.x - 20, y: slide.y - 20 }; // the empty canvas around the slide
+    // Across the List only: one top-level layer, shown live while dragging.
+    await grab(corner, { x: list.x + 50, y: list.y + 50 });
+    expect(await page.locator(".marquee").count()).toBe(1);
+    await page.mouse.up();
+    await expect.poll(() => page.locator(".inspector-head strong").textContent()).toBe("List");
+    expect(await page.locator(".marquee").count()).toBe(0);
+    // Across both top-level layers.
+    const board = await layer("board").boundingBox();
+    if (!board) throw new Error("no board");
+    await grab(corner, { x: board.x + 20, y: board.y + 20 });
+    await page.mouse.up();
+    await expect.poll(() => page.locator(".outline-selected").count()).toBe(2);
+    // Ctrl: the texts inside the List instead.
+    await page.keyboard.down("Control");
+    await grab(corner, { x: list.x + list.width - 10, y: list.y + list.height - 10 });
+    await page.mouse.up();
+    await page.keyboard.up("Control");
+    await expect.poll(() => page.locator(".outline-selected").count()).toBe(3);
+    expect(h.userTransactions()).toBe(before);
+    await page.keyboard.press("Escape");
+  });
+
+  it("shows spacing while moving, and with Alt between the selection and the hover", async () => {
+    await select("Box A");
+    const s = await scale();
+    const from = await centre("boxA");
+    await page.keyboard.down("Alt"); // no snapping: exact numbers
+    await grab(from, { x: from.x + 100, y: from.y + 50 });
+    const labels = () => page.locator(".measure-label").allTextContents();
+    // Gaps to Board's content edges on the left and top (nothing faces those sides).
+    expect(await labels()).toEqual(
+      expect.arrayContaining([String(40 + Math.round(100 / s)), String(40 + Math.round(50 / s))]),
+    );
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    await expect.poll(() => h.userTransactions()).toBeGreaterThan(0);
+    await h.synced();
+    await undo();
+
+    // Alt + hover Box B: the horizontal and vertical gaps between A (40,40 200×120) and B.
+    const b = await centre("boxB");
+    await page.mouse.move(b.x, b.y);
+    await page.keyboard.down("Alt");
+    await expect.poll(labels).toEqual(["160", "140"]);
+    await page.keyboard.up("Alt");
+    await expect.poll(labels).toEqual([]);
+  });
+
   it("logged no errors in the page", () => {
     expect(h.pageErrors).toEqual([]);
   });

@@ -17,6 +17,7 @@
   --live: #3ecf8e;
   --warn: #f5a524;
   --danger: #f2555a;
+  --measure: #f24822;
   --radius: 10px;
   --radius-sm: 6px;
   --left-width: 248px;
@@ -561,11 +562,32 @@ textarea::placeholder {
 /* Slide rail */
 
 .rail ol {
+  position: relative;
   list-style: none;
   margin: 0;
   padding: 12px 10px;
   display: grid;
   gap: 10px;
+}
+
+/* Dragging a slide: the dragged one fades, a line shows where it will go. */
+.rail ol.is-dragging {
+  cursor: grabbing;
+}
+
+.thumb-row.is-dragged {
+  opacity: 0.4;
+}
+
+.rail-insertion {
+  position: absolute;
+  left: 34px;
+  right: 10px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .thumb-row {
@@ -1493,6 +1515,31 @@ html.is-scrubbing * {
     opacity: 0;
     transform: translateY(8px);
   }
+}
+
+/* Marquee selection and spacing indicators (red, like the measuring tools designers know). */
+.marquee {
+  position: absolute;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.measure {
+  position: absolute;
+  background: var(--measure);
+}
+
+.measure-label {
+  position: absolute;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--measure);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
 }
 
 /* ── Typing on the slide (components/TextEditSession.tsx) ─────────────────────────── */

@@ -4,6 +4,7 @@ import { memo, useEffect, useRef } from "react";
 import { run } from "../actions.js";
 import { addSlide, deleteSlide, duplicateSlide } from "../model/commands.js";
 import { SlideCanvas } from "./SlideCanvas.js";
+import { useSlideDrag } from "./useSlideDrag.js";
 
 interface Props {
   deck: Deck;
@@ -14,7 +15,7 @@ interface Props {
   onSelect(slideId: string): void;
 }
 
-/** Slide thumbnails with add / duplicate / delete. Reorder: Alt+↑/↓ (no dragging needed). */
+/** Slide thumbnails with add / duplicate / delete. Reorder by dragging, or with Alt+↑/↓. */
 export const SlideRail = memo(function SlideRail({
   deck,
   deckId,
@@ -23,6 +24,8 @@ export const SlideRail = memo(function SlideRail({
   onSelect,
 }: Props) {
   const selectedRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const { drag, begin } = useSlideDrag(listRef, deck.slides, onSelect);
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-run whenever the selection moves
   useEffect(() => {
     const button = selectedRef.current;
@@ -41,14 +44,14 @@ export const SlideRail = memo(function SlideRail({
 
   return (
     <nav className="rail" aria-label="Slides">
-      <ol>
+      <ol ref={listRef} className={drag ? "is-dragging" : undefined}>
         {deck.slides.map((slide, i) => {
           const selected = slide.id === selectedId;
           const name = `Slide ${i + 1}${slide.name ? `: ${slide.name}` : ""}`;
           return (
             <li
               key={slide.id}
-              className={`thumb-row${selected ? " is-selected" : ""}${recent.has(slide.id) ? " is-recent" : ""}${slide.hidden ? " is-hidden" : ""}`}
+              className={`thumb-row${selected ? " is-selected" : ""}${recent.has(slide.id) ? " is-recent" : ""}${slide.hidden ? " is-hidden" : ""}${drag?.id === slide.id ? " is-dragged" : ""}`}
             >
               <button
                 ref={selected ? selectedRef : undefined}
@@ -57,6 +60,7 @@ export const SlideRail = memo(function SlideRail({
                 aria-current={selected ? "true" : undefined}
                 aria-label={name}
                 onClick={() => onSelect(slide.id)}
+                onPointerDown={(e) => begin(e, slide.id)}
               >
                 <span className="thumb-number">{i + 1}</span>
                 <SlideCanvas
@@ -99,6 +103,7 @@ export const SlideRail = memo(function SlideRail({
             </li>
           );
         })}
+        {drag && <li className="rail-insertion" aria-hidden="true" style={{ top: drag.lineY }} />}
       </ol>
       <div className="rail-footer">
         <button type="button" className="button button-ghost" onClick={create}>

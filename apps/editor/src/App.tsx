@@ -11,6 +11,7 @@ import { Toasts } from "./components/Toasts.js";
 import { Tooltips } from "./components/Tooltips.js";
 import { TopBar } from "./components/TopBar.js";
 import { useArrowNudge } from "./components/useArrowNudge.js";
+import { useClipboard } from "./components/useClipboard.js";
 import { client } from "./editor-context.js";
 import { typing } from "./keyboard.js";
 import {
@@ -62,6 +63,7 @@ export function App() {
   const current: Slide | null = slides[index] ?? null;
   const slideIndex = current ? indexSlide(current) : null;
   useArrowNudge(slideIndex, selection);
+  useClipboard(deck, slideIndex, selection, setSelection);
 
   // A different deck: start at its first slide. A different slide: nothing selected.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the deck changes

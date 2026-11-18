@@ -139,12 +139,19 @@ export function deleteSlide(slide: Slide): Command {
   };
 }
 
+/** Move a slide up (-1) or down (+1): the keyboard alternative to dragging it in the rail. */
 export function moveSlide(slides: readonly Slide[], id: string, delta: number): Command | null {
   const from = slides.findIndex((s) => s.id === id);
-  const to = Math.min(slides.length - 1, Math.max(0, from + delta));
+  return from === -1 ? null : moveSlideTo(slides, id, from + delta);
+}
+
+/** Put a slide at position `index` (0-based, clamped). Null when it's already there. */
+export function moveSlideTo(slides: readonly Slide[], id: string, index: number): Command | null {
+  const from = slides.findIndex((s) => s.id === id);
+  const to = Math.min(slides.length - 1, Math.max(0, index));
   if (from === -1 || to === from) return null;
   return {
-    label: `Move slide ${delta < 0 ? "up" : "down"}`,
+    label: `Move slide ${from + 1} to position ${to + 1}`,
     ops: [{ op: "slide.move", id, index: to }],
     select: [id],
   };

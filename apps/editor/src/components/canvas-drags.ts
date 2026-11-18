@@ -1,5 +1,5 @@
 /**
- * The three canvas drags (move, resize, rotate). Each is created when the gesture starts,
+ * The canvas drags (move, resize, rotate, marquee). Each is created when the gesture starts,
  * captures the layout as it was then (a CanvasSpace), and from there on is a pure function
  * of the pointer: `update(pointer, modifiers)` → the command to preview/commit, plus what to
  * draw on the canvas (guides, the insertion line, a size badge…). useCanvasGestures drives
@@ -26,9 +26,11 @@ import {
   resizeTo,
   rotateTo,
 } from "../model/manipulate.js";
+import { marqueeCandidates, marqueeHits, rectBetween } from "../model/marquee.js";
 import { dropTarget, type FrameSnapshot, insertionIndex, insertionLine } from "../model/reorder.js";
 import { type SlideIndex, topmost } from "../model/slide-index.js";
 import { type Guide, guidesFor, snapAxis, snapMove } from "../model/snapping.js";
+import { type Measure, spacingAround } from "../model/spacing.js";
 import { type CanvasSpace, subtree } from "./canvas-space.js";
 
 /** Snapping reach and the "beside a frame" edge band, in screen pixels (zoom-independent). */
@@ -55,6 +57,10 @@ export interface Feedback {
   ghost?: Box;
   /** A small readout next to the pointer: size, angle. */
   badge?: { text: string; at: Point };
+  /** Distances to the neighbours (spacing indicators). */
+  measures?: Measure[];
+  /** The marquee being dragged. */
+  marquee?: Rect;
 }
 
 export interface Drag {
@@ -101,6 +107,14 @@ function boxOf(ctx: Context, id: string): Box | null {
     rotation: (node.rotation ?? 0) + ancestorRotation(ctx.index, id),
   };
 }
+
+/** Gaps from `rect` to its siblings in a free `frame` (those not in `exclude`), or its edges. */
+const spacingIn = (frame: FrameSnapshot, rect: Rect, exclude: ReadonlySet<string>): Measure[] =>
+  spacingAround(
+    rect,
+    frame.children.filter((c) => !exclude.has(c.id)).map((c) => c.rect),
+    frame.content,
+  );
 
 // ── Move ────────────────────────────────────────────────────────────────────────────
 
@@ -150,7 +164,8 @@ export function moveDrag(ctx: Context, ids: readonly string[], start: Point): Dr
       const positions = new Map(
         starts.map((s) => [s.id, add(s.position, rotateVector(d, -s.turn))] as const),
       );
-      return { command: moveTo(index, positions), feedback: { guides } };
+      const measures = parent ? spacingIn(parent, offset(bounds, d), exclude) : [];
+      return { command: moveTo(index, positions), feedback: { guides, measures } };
     },
   };
 }
@@ -189,7 +204,8 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
           parentId: parent.id,
           position: add(position, rotateVector(d, -turn)),
         });
-        return { command, feedback: { guides } };
+        const measures = turn === 0 ? spacingIn(parent, offset(rect, d), self) : [];
+        return { command, feedback: { guides, measures } };
       }
 
       const ghost = { ...box, cx: box.cx + d.x, cy: box.cy + d.y };
@@ -287,6 +303,7 @@ export function resizeDrag(ctx: Context, id: string, handle: Handle, start: Poin
         feedback: {
           guides: snapped.x || snapped.y ? guidesFor(now, targets, snapped) : [],
           badge: { text: `${Math.round(w)} × ${Math.round(h)}`, at: p },
+          measures: parent ? spacingIn(parent, now, new Set([id])) : [],
         },
       };
     },
@@ -316,6 +333,45 @@ export function rotateDrag(ctx: Context, id: string, start: Point): Drag | null 
         command: rotateTo(index, id, degrees),
         feedback: { badge: { text: `${degrees}°`, at: space.toSlide(pointer) } },
       };
+    },
+  };
+}
+
+// ── Marquee ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Drag on the empty canvas to select every layer the box touches: top-level layers, or the
+ * deepest ones with Ctrl/Cmd (model/marquee.ts). The selection updates live; `base` is kept
+ * (Shift at the press adds to the selection). Selecting isn't an edit: no command, ever.
+ */
+export function marqueeDrag(
+  ctx: Context,
+  start: Point,
+  base: readonly string[],
+  select: (ids: string[]) => void,
+): Drag {
+  const { index, space } = ctx;
+  // Measured once, at the press (the layout doesn't change while selecting).
+  const measured = (deep: boolean) =>
+    marqueeCandidates(index, deep).flatMap((id) => {
+      const rect = space.rect(id);
+      return rect ? [{ id, rect }] : [];
+    });
+  const candidates = { top: measured(false), deep: measured(true) };
+  const p0 = space.toSlide(start);
+  let last = "";
+
+  return {
+    update(pointer, mods) {
+      const area = rectBetween(p0, space.toSlide(pointer));
+      const hits = marqueeHits(mods.mod ? candidates.deep : candidates.top, area);
+      const ids = [...base, ...hits.filter((id) => !base.includes(id))];
+      const key = ids.join("\n");
+      if (key !== last) {
+        last = key;
+        select(ids); // only when it changes: not a re-render per frame
+      }
+      return { command: null, feedback: { marquee: area } };
     },
   };
 }
