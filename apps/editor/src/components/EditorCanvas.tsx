@@ -1,43 +1,65 @@
 /**
- * The editable slide: the live render plus an overlay that outlines the hovered and selected
- * layers. Outlines come from the rendered DOM (auto-layout computes the pixels), so they're
- * always exactly where the layer is. The overlay never takes pointer events: clicks go to the
- * slide, and the selection rules (model/selection.ts) decide what they select.
+ * The editable slide: the live render plus an overlay with hover/selection outlines, resize
+ * and rotate handles, and drag feedback (snapping guides, insertion line, size badge).
+ * Outlines come from the rendered DOM (auto-layout computes the pixels), so they're always
+ * exactly where the layer is, rotation included. The overlay only takes pointer events on
+ * its handles: clicks go to the slide, and the selection rules (model/selection.ts) decide
+ * what they select. Dragging a selected layer moves it (components/canvas-drags.ts).
  */
 import type { Deck } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { assetUrl, registry } from "../editor-context.js";
-import type { PickOptions } from "../model/selection.js";
-import { indexSlide, nodeLabel } from "../model/slide-index.js";
+import {
+  type Box,
+  boundingRect,
+  HANDLES,
+  type Handle,
+  type Point,
+  type Rect,
+  resizeCursor,
+} from "../model/geometry.js";
+import { ancestorRotation } from "../model/manipulate.js";
+import { pick, pickTarget } from "../model/selection.js";
+import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
+import { moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
+import { CanvasSpace } from "./canvas-space.js";
+import { useCanvasGestures } from "./useCanvasGestures.js";
 
 interface Props {
+  /** What to show: the document, with any live preview applied. */
   deck: Deck;
   deckId: string;
   slideId: string;
+  /** The committed slide (selection rules and drags act on what's stored, not the preview). */
+  index: SlideIndex;
   selection: readonly string[];
   hover: string | null;
-  /** A click or double-click on the slide (`hitId` = innermost layer under the pointer). */
-  onPick(hitId: string | null, options: PickOptions): void;
+  onSelect(ids: string[]): void;
   /** The layer under the pointer, before the selection rules apply. */
   onHoverHit(hitId: string | null): void;
 }
 
-interface Box {
+/** A layer's box in overlay pixels: centre, own size, on-screen rotation. */
+interface OverlayBox extends Box {
   id: string;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
+}
+
+/** Where the slide sits in the overlay, to draw slide-pixel feedback. */
+interface StageFrame {
+  x: number;
+  y: number;
+  scale: number;
 }
 
 export function EditorCanvas({
   deck,
   deckId,
   slideId,
+  index,
   selection,
   hover,
-  onPick,
+  onSelect,
   onHoverHit,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -45,10 +67,12 @@ export function EditorCanvas({
   const view = useRef<SlideView | null>(null);
   const deckIdRef = useRef(deckId);
   deckIdRef.current = deckId;
-  const [boxes, setBoxes] = useState<{ hover: Box | null; selected: Box[] }>({
-    hover: null,
-    selected: [],
-  });
+  const { begin, active, feedback } = useCanvasGestures();
+  const [boxes, setBoxes] = useState<{
+    hover: OverlayBox | null;
+    selected: OverlayBox[];
+    stage: StageFrame;
+  }>({ hover: null, selected: [], stage: { x: 0, y: 0, scale: 1 } });
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -66,28 +90,36 @@ export function EditorCanvas({
   }, []);
 
   // ── Outline geometry ────────────────────────────────────────────────────────────
+  // Rotations come from the shown deck, so outlines turn with a rotate preview.
+  const shown = deck.slides.find((s) => s.id === slideId);
+  const shownIndex = shown ? indexSlide(shown) : null;
   const measure = useCallback(() => {
-    const stage = view.current?.stage;
+    const v = view.current;
     const wrapper = wrapperRef.current;
-    if (!stage || !wrapper) return;
+    if (!v || !wrapper) return;
     const origin = wrapper.getBoundingClientRect();
-    const boxOf = (id: string): Box | null => {
-      const el = stage.querySelector(`[${NODE_ID_ATTR}="${CSS.escape(id)}"]`);
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
+    const stageRect = v.stage.getBoundingClientRect();
+    const scale = v.scale || 1;
+    const boxOf = (id: string): OverlayBox | null => {
+      const el = v.stage.querySelector<HTMLElement>(`[${NODE_ID_ATTR}="${CSS.escape(id)}"]`);
+      const node = shownIndex?.nodes.get(id)?.node;
+      if (!el || !node || !shownIndex) return null;
+      const r = el.getBoundingClientRect(); // rotation turns a box around its centre
       return {
         id,
-        left: r.left - origin.left,
-        top: r.top - origin.top,
-        width: r.width,
-        height: r.height,
+        cx: r.left + r.width / 2 - origin.left,
+        cy: r.top + r.height / 2 - origin.top,
+        w: el.offsetWidth * scale,
+        h: el.offsetHeight * scale,
+        rotation: (node.rotation ?? 0) + ancestorRotation(shownIndex, id),
       };
     };
     setBoxes({
       hover: hover && !selection.includes(hover) ? boxOf(hover) : null,
       selected: selection.flatMap((id) => boxOf(id) ?? []),
+      stage: { x: stageRect.left - origin.left, y: stageRect.top - origin.top, scale },
     });
-  }, [hover, selection]);
+  }, [hover, selection, shownIndex]);
 
   useLayoutEffect(() => {
     view.current?.render(deck, slideId);
@@ -117,36 +149,133 @@ export function EditorCanvas({
     if (!(target instanceof Element) || !stage?.contains(target)) return null;
     return target.closest(`[${NODE_ID_ATTR}]`)?.getAttribute(NODE_ID_ATTR) ?? null;
   };
+  /** The layout as it is right now, for a drag that starts now. */
+  const context = () => {
+    const v = view.current;
+    return v ? { index, space: new CanvasSpace(v.stage, v.scale) } : null;
+  };
 
-  const index = deck.slides.find((s) => s.id === slideId);
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || e.detail > 1) return;
+    const hit = hitAt(e.target);
+    const target = pickTarget(index, hit, selection);
+    // Pressing a layer of a multi-selection keeps the group (to drag it); a click without
+    // dragging then selects just that layer, like Figma.
+    const keepGroup =
+      !e.shiftKey && target !== null && selection.length > 1 && selection.includes(target);
+    const ids = keepGroup ? [...selection] : pick(index, hit, selection, { additive: e.shiftKey });
+    if (!keepGroup) onSelect(ids);
+    if (!target || !ids.includes(target)) return;
+    const start = { x: e.clientX, y: e.clientY };
+    begin(
+      e,
+      "move",
+      () => {
+        const ctx = context();
+        return ctx ? moveDrag(ctx, ids, start) : null;
+      },
+      { capture: e.currentTarget, ...(keepGroup ? { onClick: () => onSelect([target]) } : {}) },
+    );
+  };
+
+  const onHandleDown = (e: React.PointerEvent, id: string, handle: Handle | "rotate") => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); // not a click on the slide
+    const start = { x: e.clientX, y: e.clientY };
+    begin(
+      e,
+      handle === "rotate" ? "rotate" : "resize",
+      () => {
+        const ctx = context();
+        if (!ctx) return null;
+        return handle === "rotate"
+          ? rotateDrag(ctx, id, start)
+          : resizeDrag(ctx, id, handle, start);
+      },
+      { threshold: 1, capture: wrapperRef.current ?? e.currentTarget },
+    );
+  };
+
   const labelFor = (id: string) => {
-    const node = index ? indexSlide(index).nodes.get(id)?.node : undefined;
+    const node = shownIndex?.nodes.get(id)?.node;
     return node ? nodeLabel(node) : "";
   };
   const primary = boxes.selected.length === 1 ? boxes.selected[0] : undefined;
+  const editable =
+    primary && primary.id !== index.rootId && !index.nodes.get(primary.id)?.node.locked;
+  const { stage } = boxes;
+  /** Slide pixels → overlay pixels. */
+  const toOverlay = (p: Point): Point => ({
+    x: stage.x + p.x * stage.scale,
+    y: stage.y + p.y * stage.scale,
+  });
+  const rectStyle = (r: Rect) => {
+    const tl = toOverlay(r);
+    return { left: tl.x, top: tl.y, width: r.w * stage.scale, height: r.h * stage.scale };
+  };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the canvas is a pointer surface; every action here also has a keyboard path (layers panel, shortcuts)
+    // biome-ignore lint/a11y/noStaticElementInteractions: the canvas is a pointer surface; every action here also has a keyboard path (arrow keys, layers panel, inspector)
     <div
       ref={wrapperRef}
-      className="editor-canvas"
-      onPointerDown={(e) => {
-        if (e.button !== 0 || e.detail > 1) return;
-        onPick(hitAt(e.target), { additive: e.shiftKey });
-      }}
-      onDoubleClick={(e) => onPick(hitAt(e.target), { deep: true })}
-      onPointerMove={(e) => onHoverHit(hitAt(e.target))}
+      className={`editor-canvas${active ? ` ${GESTURE_CLASS[active]}` : ""}`}
+      onPointerDown={onPointerDown}
+      onDoubleClick={(e) => onSelect(pick(index, hitAt(e.target), selection, { deep: true }))}
+      onPointerMove={(e) => onHoverHit(active ? null : hitAt(e.target))}
       onPointerLeave={() => onHoverHit(null)}
+      onDragStart={(e) => e.preventDefault()} // images: no native drag-and-drop
     >
       <div ref={viewportRef} className="canvas" />
       <div className="overlay" aria-hidden="true">
-        {boxes.hover && <div className="outline outline-hover" style={boxStyle(boxes.hover)} />}
+        {boxes.hover && !active && (
+          <div className="outline outline-hover" style={boxStyle(boxes.hover)} />
+        )}
+        {feedback?.target && <div className="drop-target" style={rectStyle(feedback.target)} />}
         {boxes.selected.map((box) => (
-          <div key={box.id} className="outline outline-selected" style={boxStyle(box)} />
+          <div key={box.id} className="outline outline-selected" style={boxStyle(box)}>
+            {box === primary && editable && active !== "move" && (
+              <Handles box={box} onHandleDown={(e, handle) => onHandleDown(e, box.id, handle)} />
+            )}
+          </div>
         ))}
-        {primary && (
-          <div className="outline-label" style={{ left: primary.left, top: primary.top }}>
+        {primary && !active && (
+          <div className="outline-label" style={labelStyle(primary)}>
             {labelFor(primary.id)}
+          </div>
+        )}
+        {feedback?.ghost && (
+          <div
+            className="outline outline-ghost"
+            style={boxStyle({
+              ...feedback.ghost,
+              ...toCentre(toOverlay({ x: feedback.ghost.cx, y: feedback.ghost.cy })),
+              w: feedback.ghost.w * stage.scale,
+              h: feedback.ghost.h * stage.scale,
+            })}
+          />
+        )}
+        {feedback?.guides?.map((g) => {
+          const a = toOverlay(g.axis === "x" ? { x: g.at, y: g.from } : { x: g.from, y: g.at });
+          const b = toOverlay(g.axis === "x" ? { x: g.at, y: g.to } : { x: g.to, y: g.at });
+          // A 1px line: vertical for an x guide, horizontal for a y guide.
+          const style =
+            g.axis === "x"
+              ? { left: a.x, top: a.y, width: 1, height: b.y - a.y }
+              : { left: a.x, top: a.y, width: b.x - a.x, height: 1 };
+          return <div key={`${g.axis}${g.at}`} className="guide" style={style} />;
+        })}
+        {feedback?.line && (
+          <InsertionLine
+            a={toOverlay({ x: feedback.line.x1, y: feedback.line.y1 })}
+            b={toOverlay({ x: feedback.line.x2, y: feedback.line.y2 })}
+          />
+        )}
+        {feedback?.badge && (
+          <div
+            className="drag-badge"
+            style={{ left: toOverlay(feedback.badge.at).x, top: toOverlay(feedback.badge.at).y }}
+          >
+            {feedback.badge.text}
           </div>
         )}
       </div>
@@ -154,4 +283,60 @@ export function EditorCanvas({
   );
 }
 
-const boxStyle = (b: Box) => ({ left: b.left, top: b.top, width: b.width, height: b.height });
+/** Resize handles (sides are edge strips, corners squares) and the rotate knob. */
+function Handles({
+  box,
+  onHandleDown,
+}: {
+  box: OverlayBox;
+  onHandleDown(e: React.PointerEvent, handle: Handle | "rotate"): void;
+}) {
+  // Tiny layers: side strips would cover the layer itself, so only corners remain.
+  const small = box.w < 24 || box.h < 24;
+  return (
+    <>
+      {HANDLES.filter((h) => !small || h.length === 2).map((h) => (
+        <div
+          key={h}
+          className={`handle handle-${h}`}
+          data-handle={h}
+          style={{ cursor: resizeCursor(h, box.rotation) }}
+          onPointerDown={(e) => onHandleDown(e, h)}
+        />
+      ))}
+      <div
+        className="rotate-knob"
+        data-handle="rotate"
+        onPointerDown={(e) => onHandleDown(e, "rotate")}
+      />
+    </>
+  );
+}
+
+function InsertionLine({ a, b }: { a: Point; b: Point }) {
+  const vertical = Math.abs(a.x - b.x) < 0.5;
+  const style = vertical
+    ? { left: a.x, top: a.y, width: 3, height: Math.max(0, b.y - a.y) }
+    : { left: a.x, top: a.y, width: Math.max(0, b.x - a.x), height: 3 };
+  return (
+    <div className={`insertion-line ${vertical ? "is-vertical" : "is-horizontal"}`} style={style} />
+  );
+}
+
+const GESTURE_CLASS = { move: "is-moving", resize: "is-resizing", rotate: "is-rotating" } as const;
+
+const toCentre = (p: Point) => ({ cx: p.x, cy: p.y });
+
+const boxStyle = (b: Box): React.CSSProperties => ({
+  left: b.cx - b.w / 2,
+  top: b.cy - b.h / 2,
+  width: b.w,
+  height: b.h,
+  transform: b.rotation ? `rotate(${b.rotation}deg)` : undefined,
+});
+
+/** The name tag sits above the layer's on-screen bounds (it never rotates: it's text). */
+const labelStyle = (b: Box): React.CSSProperties => {
+  const r = boundingRect(b);
+  return { left: r.x, top: r.y };
+};

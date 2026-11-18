@@ -8,66 +8,18 @@
  * Needs the built editor and headless Chromium; skipped locally without them (CI provides
  * both and sets VELOCE_REQUIRE_BROWSER=1).
  */
-import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { createBuiltinRegistry } from "@veloce/builtins";
-import type { Deck, Node } from "@veloce/core";
-import { type DeckChange, Workspace } from "@veloce/doc-server";
-import { startVeloceServer, type VeloceServer } from "@veloce/server";
-import { type Browser, chromium, type Page } from "playwright-core";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Page } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { browserProblem, type EditorHarness, startEditor } from "./editor-harness.js";
 
-const EDITOR_DIST = fileURLToPath(new URL("../../apps/editor/dist", import.meta.url));
-
-async function browserProblem(): Promise<string | null> {
-  if (!existsSync(join(EDITOR_DIST, "index.html"))) return "editor not built (pnpm build:editor)";
-  try {
-    await (await chromium.launch()).close();
-    return null;
-  } catch {
-    return "headless Chromium not installed";
-  }
-}
 const problem = await browserProblem();
-if (problem && process.env.VELOCE_REQUIRE_BROWSER)
-  throw new Error(`Browser tests required but ${problem}`);
-
-let dir: string;
-let app: VeloceServer;
-let workspace: Workspace;
-let browser: Browser;
+let h: EditorHarness;
 let page: Page;
-const changes: DeckChange[] = [];
-const pageErrors: string[] = [];
-/** The newest deck version the editor has received over its WebSocket. */
-let editorVersion = 0;
 
-/** Transactions the editor (origin `user`) has sent so far. */
-const userTransactions = () => changes.filter((c) => c.origin === "user").length;
-const latestDeck = (): Deck => {
-  const deck = changes.at(-1)?.deck;
-  if (!deck) throw new Error("no changes yet");
-  return deck;
-};
-function findNode(node: Node, id: string): Node | undefined {
-  if (node.id === id) return node;
-  if (node.kind !== "frame") return undefined;
-  for (const child of node.children) {
-    const found = findNode(child, id);
-    if (found) return found;
-  }
-  return undefined;
-}
-const stored = (id: string) => {
-  const node = findNode(latestDeck().slides[0]?.root as Node, id);
-  if (!node) throw new Error(`node ${id} not found`);
-  return node as Node & Record<string, unknown> & { props?: Record<string, unknown> };
-};
+const userTransactions = () => h.userTransactions();
+const stored = (id: string) => h.stored(id);
+const synced = () => h.synced();
 
 const canvasStyle = (id: string, property: string, child = false) =>
   page.evaluate(
@@ -98,19 +50,6 @@ async function startScrub(name: string, dx: number) {
   await page.mouse.down();
   await page.mouse.move(x + dx, y, { steps: Math.max(4, Math.ceil(Math.abs(dx) / 4)) });
   await page.waitForTimeout(80); // one animation frame for the preview
-}
-
-/**
- * Wait until the editor has received everything the server stored, and painted it. Waiting
- * on the server alone isn't enough: on a slow machine the editor can still show the old
- * value, and an interaction then acts on stale state (seen in CI).
- */
-async function synced() {
-  const latest = changes.at(-1)?.version ?? 0;
-  await expect.poll(() => editorVersion).toBeGreaterThanOrEqual(latest);
-  await page.evaluate(
-    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-  );
 }
 
 /** Let the next scrubs lock the pointer (refused by default; see the init script). */
@@ -146,26 +85,8 @@ const virtualCursorX = () =>
     return r.left + r.width / 2;
   });
 
-beforeAll(async () => {
-  if (problem) return;
-  dir = await mkdtemp(join(tmpdir(), "veloce-phase3-"));
-  const registry = createBuiltinRegistry();
-  workspace = await Workspace.open({ dir, context: registry.applyContext(), autosaveDelayMs: 10 });
-  workspace.subscribe((event) => {
-    if (event.type === "change") changes.push(event.change);
-  });
-  app = await startVeloceServer({
-    workspace,
-    registry,
-    editorDir: EDITOR_DIST,
-    port: 0,
-    log: () => {},
-    render: null,
-  });
-
-  // An agent builds the deck the "human" edits: a heading and a card holding body text.
-  const agent = new Client({ name: "Claude Code", version: "test" });
-  await agent.connect(new StreamableHTTPClientTransport(new URL(app.mcpUrl)));
+/** An agent builds the deck the "human" edits: a heading and a card holding body text. */
+async function build(agent: Client) {
   const text = (id: string, name: string, content: string, style: string) => ({
     id,
     name,
@@ -195,57 +116,34 @@ beforeAll(async () => {
       },
     },
   });
-  await agent.close();
+}
 
-  browser = await chromium.launch();
-  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await page.addInitScript(() => {
-    // Headless Chromium emulates pointer lock by snapping its synthetic cursor back after
-    // every move (+N, then -N), so real mouse moves can't drive a locked scrub. The lock is
-    // refused unless a test allows it, which exercises the fallback path everywhere else;
-    // the locked tests feed movement events directly.
-    const w = window as unknown as { __allowPointerLock?: boolean; __pointerId?: number };
-    const request = Element.prototype.requestPointerLock;
-    Element.prototype.requestPointerLock = function (this: Element, options) {
-      if (!w.__allowPointerLock) {
-        return Promise.reject(new DOMException("disabled in this test", "NotSupportedError"));
-      }
-      return request.call(this, options);
-    };
-    addEventListener("pointerdown", (e) => (w.__pointerId = e.pointerId), true);
-  });
-  page.on("websocket", (ws) =>
-    ws.on("framereceived", ({ payload }) => {
-      try {
-        const message = JSON.parse(String(payload)) as { type?: string; version?: number };
-        if (message.type === "change" || message.type === "snapshot") {
-          editorVersion = Math.max(editorVersion, message.version ?? 0);
+beforeAll(async () => {
+  if (problem) return;
+  h = await startEditor({
+    build,
+    ready: ".editor-canvas [data-node-id='card']",
+    initScript: () => {
+      // Headless Chromium emulates pointer lock by snapping its synthetic cursor back after
+      // every move (+N, then -N), so real mouse moves can't drive a locked scrub. The lock is
+      // refused unless a test allows it, which exercises the fallback path everywhere else;
+      // the locked tests feed movement events directly.
+      const w = window as unknown as { __allowPointerLock?: boolean; __pointerId?: number };
+      const request = Element.prototype.requestPointerLock;
+      Element.prototype.requestPointerLock = function (this: Element, options) {
+        if (!w.__allowPointerLock) {
+          return Promise.reject(new DOMException("disabled in this test", "NotSupportedError"));
         }
-      } catch {
-        // not JSON: ignore
-      }
-    }),
-  );
-  page.on("pageerror", (e) => pageErrors.push(String(e)));
-  page.on("console", (m) => m.type() === "error" && pageErrors.push(m.text()));
-  // Stress knob: VELOCE_TEST_CPU_THROTTLE=4 runs the page on a 4x slower CPU, roughly a slow
-  // CI runner, to flush out timing assumptions. (Past ~4x, headless Chromium's own pointer
-  // lock emulation stalls, even on a blank page.)
-  if (process.env.VELOCE_TEST_CPU_THROTTLE) {
-    const cdp = await page.context().newCDPSession(page);
-    const rate = Number(process.env.VELOCE_TEST_CPU_THROTTLE);
-    await cdp.send("Emulation.setCPUThrottlingRate", { rate });
-  }
-  await page.goto(app.url);
-  await page.locator(".editor-canvas [data-node-id='card']").waitFor();
+        return request.call(this, options);
+      };
+      addEventListener("pointerdown", (e) => (w.__pointerId = e.pointerId), true);
+    },
+  });
+  page = h.page;
 }, 60_000);
 
 afterAll(async () => {
-  if (problem) return;
-  await browser?.close();
-  await app?.close();
-  await workspace?.close();
-  await rm(dir, { recursive: true, force: true });
+  if (!problem) await h?.close();
 });
 
 describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 }, () => {
@@ -489,7 +387,7 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
   });
 
   it("logged no errors in the page", () => {
-    expect(pageErrors).toEqual([]);
+    expect(h.pageErrors).toEqual([]);
   });
 });
 

@@ -815,6 +815,182 @@ textarea::placeholder {
     0 0 0 3px rgb(13 14 18 / 0.5);
 }
 
+/* Direct manipulation (EditorCanvas): handles, drop feedback, snapping guides. */
+.editor-canvas.is-moving,
+.editor-canvas.is-rotating {
+  cursor: grabbing;
+}
+
+/* Resize: sides are invisible strips along the edges, corners are visible squares. Each
+   handle's hit area is larger than what's drawn. */
+.handle {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.handle-n,
+.handle-s {
+  left: 6px;
+  right: 6px;
+  height: 10px;
+}
+
+.handle-e,
+.handle-w {
+  top: 6px;
+  bottom: 6px;
+  width: 10px;
+}
+
+.handle-n {
+  top: -5px;
+}
+
+.handle-s {
+  bottom: -5px;
+}
+
+.handle-e {
+  right: -5px;
+}
+
+.handle-w {
+  left: -5px;
+}
+
+.handle-nw,
+.handle-ne,
+.handle-se,
+.handle-sw {
+  width: 16px;
+  height: 16px;
+  z-index: 1;
+}
+
+.handle-nw {
+  left: -8px;
+  top: -8px;
+}
+
+.handle-ne {
+  right: -8px;
+  top: -8px;
+}
+
+.handle-se {
+  right: -8px;
+  bottom: -8px;
+}
+
+.handle-sw {
+  left: -8px;
+  bottom: -8px;
+}
+
+.handle-nw::after,
+.handle-ne::after,
+.handle-se::after,
+.handle-sw::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: transform var(--fast) var(--ease);
+}
+
+.handle:hover::after {
+  transform: scale(1.25);
+}
+
+/* Rotate: a knob on a short stem below the layer (it turns with the layer). Below, not
+   above, so it never collides with the name tag on narrow layers. */
+.rotate-knob {
+  position: absolute;
+  left: 50%;
+  bottom: -30px;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.rotate-knob::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  width: 1px;
+  height: 15px;
+  background: var(--accent);
+}
+
+.rotate-knob::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: transform var(--fast) var(--ease);
+}
+
+.rotate-knob:hover::after {
+  transform: scale(1.25);
+}
+
+.outline-ghost {
+  outline: 1.5px dashed var(--accent-strong);
+  background: var(--accent-soft);
+  opacity: 0.8;
+}
+
+.drop-target {
+  position: absolute;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: rgb(139 123 255 / 0.06);
+  border-radius: 2px;
+}
+
+.insertion-line {
+  position: absolute;
+  background: var(--accent-strong);
+  border-radius: 2px;
+}
+
+.insertion-line.is-horizontal {
+  margin-top: -1.5px;
+}
+
+.insertion-line.is-vertical {
+  margin-left: -1.5px;
+}
+
+/* Snapping guides: the classic design-tool magenta, so they never read as a selection. */
+.guide {
+  position: absolute;
+  background: #ff4fa3;
+}
+
+.drag-badge {
+  position: absolute;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translate(14px, 14px);
+}
+
 .outline-label {
   position: absolute;
   max-width: 240px;

@@ -6,10 +6,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor (round 1, the editing foundation, done)
+- **Active phase:** Phase 3: Manual editor (round 2: direct manipulation done, text editing next)
 - **Last updated:** 2026-11-18
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (194 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (236 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -24,8 +24,12 @@
     tooltips with shortcuts, auto-growing text fields, and scrubbable number fields with live
     previews (one transaction per gesture, verified by `tests/integration/phase3-editor.test.ts`).
     Scrubbing is infinite (pointer lock + a wrapping virtual cursor, D42).
-  - **Next (round 2):** move/resize on the canvas, rich text editing, then marquee, drag
-    reordering, clipboard and the history panel.
+  - **Round 2, direct manipulation (D43):** drag to move (free frames: by position with
+    snapping guides; stacks/grids: live reorder; drop into other frames), resize and rotate
+    handles that follow rotated layers, arrow-key nudging. Every gesture is one transaction
+    (`tests/integration/phase3-canvas.test.ts`).
+  - **Next:** rich text editing on the canvas (TipTap), then marquee, spacing indicators,
+    slide drag reordering, clipboard and the history panel.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -87,7 +91,7 @@ new version → broadcast to all clients → `renderer` re-renders → measureme
 ## Stack
 
 TypeScript (strict) · pnpm workspaces · Vite · React (editor UI only) · Zod · Vitest · Playwright ·
-fflate (zip) · TipTap (rich text) · Moveable (transform handles) · GSAP (default animation driver; fallback driver: Motion, MIT. See D14) ·
+fflate (zip) · TipTap (rich text) · own transform handles (D43) · GSAP (default animation driver; fallback driver: Motion, MIT. See D14) ·
 `@modelcontextprotocol/sdk` (Streamable HTTP) · Electron + electron-builder + electron-updater ·
 plain Three.js inside the 3D plugin (plugins are framework-agnostic).
 
@@ -208,8 +212,9 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 - [ ] Selection (click, shift-click, marquee), hover outlines, layers panel
   - Done: click / shift-click / double-click drill-in, Esc/Enter/Ctrl+A, hover outlines, layers
     panel (rename, hide, lock). Left: marquee.
-- [ ] Move/resize/rotate (Moveable); snapping guides + spacing indicators
-- [ ] Auto-layout-aware drag (reorder within frame, drop into frames)
+- [ ] Move/resize/rotate; snapping guides + spacing indicators
+  - Done: move, resize, rotate, snapping guides, arrow nudging (D43). Left: spacing indicators.
+- [x] Auto-layout-aware drag (reorder within frame, drop into frames)
 - [ ] Text editing with TipTap, mapped to the core rich text model
 - [x] Inspector panel auto-generated from each plugin's `propsSchema`
 - [ ] Slide panel: add, duplicate, delete, reorder (drag)

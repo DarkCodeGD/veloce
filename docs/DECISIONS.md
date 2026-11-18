@@ -445,3 +445,42 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
    still showed the old state. `VELOCE_TEST_CPU_THROTTLE=4` runs the suite on a 4× slower
    CPU, which it passes. Past that, headless Chromium's own pointer-lock emulation stalls,
    even on a blank page (2 fps at 8×), so higher rates aren't meaningful.
+
+### D43: Direct manipulation on the canvas without Moveable (2026-11-18)
+
+1. **Own handles and geometry instead of Moveable.** Pure maths in `apps/editor/src/model/`
+   (`geometry.ts`: anchored/rotated resizing, rotation; `snapping.ts`; `reorder.ts`: insertion
+   slots and drop targets; `manipulate.ts`: the ops), a small DOM bridge
+   (`components/canvas-space.ts`) and three drag objects (`components/canvas-drags.ts`).
+   **Why:** Moveable drives CSS transforms on the target element, but our layers are placed
+   by the layout engine (golden rule 4) and every change must be a previewed op, not a DOM
+   mutation (D39, D41). Most of the work (reordering stacks, dropping into frames) is
+   structural, which Moveable doesn't do. Owning ~600 lines of pure, unit-tested geometry
+   beats adapting a large dependency. This supersedes "Moveable" in the stack list.
+2. **What a drag does depends on the parent frame.** In a free (absolute) frame it changes
+   `position`, snapping edges and centres to siblings and the frame's content box (6 screen
+   px, magenta guides). In a stack or grid it reorders, live. Over another frame it drops
+   into it (`node.move`; entering a free frame sets `position`, leaving one removes it). Near
+   the edge of a frame that sits in a row/column means "beside it". Ctrl/Cmd keeps the layer
+   in its frame; Alt turns snapping off; Shift locks the axis. **Why:** the default slide
+   root is a stack, so for most decks "move" is really "reorder" (Figma's auto-layout
+   behaviour, which designers already know).
+3. **Drop targets and slots use the layout frozen at drag start.** **Why:** the live preview
+   reflows the layout under the pointer. Hit-testing the live DOM oscillates (a hugging
+   stack shrinks when its child leaves, the pointer exits it, the child comes back…).
+4. **Resize keeps the opposite side fixed, also for rotated layers** (movement measured along
+   the layer's own axes). Sides change one dimension (a text keeps its "hug" height),
+   corners both; Shift keeps the ratio, Alt resizes around the centre. Sizes are whole
+   pixels, rounded _before_ anchoring so the anchor never drifts. The rotate knob sits below
+   the layer (Shift: 15° steps), so it never collides with the name tag.
+5. **Same contract as scrubbing (D41):** preview locally once per frame, ONE transaction on
+   release, Esc/blur cancels without a trace. Pointer capture starts only when a press
+   becomes a drag. **Why:** while captured, Chrome sends click/dblclick to the capturing
+   element, which broke double-click drill-in (caught by the browser test). The capture is
+   on the canvas, never on a handle (handles can unmount mid-drag).
+6. **Keyboard path (WCAG 2.5.7):** arrow keys move free layers by 1 px (Shift 10). Held keys
+   preview, and releasing the last one commits one transaction. Stack layers reorder with
+   Alt+↑/↓; sizes and rotation are in the inspector.
+7. **Tests:** pure modules are unit-tested; `tests/integration/phase3-canvas.test.ts` drives
+   every gesture in Chromium (one transaction each, exact stored values, undo). The browser
+   suites share `tests/integration/editor-harness.ts`.

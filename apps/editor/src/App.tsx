@@ -10,7 +10,9 @@ import { SlideRail } from "./components/SlideRail.js";
 import { Toasts } from "./components/Toasts.js";
 import { Tooltips } from "./components/Tooltips.js";
 import { TopBar } from "./components/TopBar.js";
+import { useArrowNudge } from "./components/useArrowNudge.js";
 import { client } from "./editor-context.js";
+import { typing } from "./keyboard.js";
 import {
   deleteNodes,
   deleteSlide,
@@ -19,7 +21,6 @@ import {
   reorderNode,
 } from "./model/commands.js";
 import {
-  pick,
   pickTarget,
   pruneSelection,
   selectFirstChild,
@@ -31,13 +32,6 @@ import { previewDeck, previewStore } from "./preview.js";
 
 const ACTIVITY_MS = 6000;
 type Panel = "slides" | "layers";
-
-/** True when the key press belongs to a text field, not to the editor. */
-const typing = (target: EventTarget | null) =>
-  target instanceof HTMLElement &&
-  (target.isContentEditable ||
-    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
-    target.getAttribute("role") === "combobox");
 
 export function App() {
   const state = useSyncExternalStore(client.subscribe, client.getState);
@@ -63,6 +57,7 @@ export function App() {
   );
   const current: Slide | null = slides[index] ?? null;
   const slideIndex = current ? indexSlide(current) : null;
+  useArrowNudge(slideIndex, selection);
 
   // A different deck: start at its first slide. A different slide: nothing selected.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the deck changes
@@ -243,9 +238,10 @@ export function App() {
                 deck={canvasDeck ?? deck}
                 deckId={deckId}
                 slideId={current.id}
+                index={slideIndex}
                 selection={selection}
                 hover={hover}
-                onPick={(hit, options) => setSelection((s) => pick(slideIndex, hit, s, options))}
+                onSelect={setSelection}
                 onHoverHit={setHoverHit}
               />
               <NotesEditor slide={current} />
