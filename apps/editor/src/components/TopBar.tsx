@@ -2,6 +2,8 @@ import type { DeckListing } from "@veloce/core";
 import { Redo2, Undo2 } from "lucide-react";
 import { redo, undo } from "../actions.js";
 import { originLabel } from "../editor-context.js";
+import { SHORTCUTS } from "../model/shortcuts.js";
+import { shortcutAttrs } from "../platform.js";
 import type { ConnectionStatus, LastChange } from "../sync-client.js";
 import { Select } from "./Select.js";
 
@@ -61,7 +63,8 @@ export function TopBar({
           type="button"
           className="icon-button"
           aria-label="Undo"
-          title="Undo (Ctrl+Z)"
+          data-tip="Undo"
+          {...shortcutAttrs(SHORTCUTS.undo)}
           onClick={undo}
         >
           <Undo2 size={16} />
@@ -70,7 +73,8 @@ export function TopBar({
           type="button"
           className="icon-button"
           aria-label="Redo"
-          title="Redo (Ctrl+Shift+Z)"
+          data-tip="Redo"
+          {...shortcutAttrs(SHORTCUTS.redo)}
           onClick={redo}
         >
           <Redo2 size={16} />
@@ -85,10 +89,13 @@ export function TopBar({
             <span className="activity-label">{activity.label}</span>
           </span>
         )}
-        <label className="follow">
+        <label className="follow" data-tip="Jump to the slide the AI is working on">
           <input
             type="checkbox"
+            role="switch"
+            className="switch"
             checked={follow}
+            aria-checked={follow}
             onChange={(e) => onFollowChange(e.target.checked)}
           />
           Follow AI

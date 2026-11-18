@@ -21,6 +21,8 @@ describe("inspector fields from plugin schemas", () => {
     });
     expect(text.verticalAlign?.label).toBe("Vertical align");
     expect(text.fontWeight).toMatchObject({ kind: "number", integer: true, min: 100, max: 900 });
+    // `.positive()` → the smallest allowed value sits just above zero, never zero itself.
+    expect(text.fontSize).toMatchObject({ kind: "number", integer: false, min: 0.01, max: 2000 });
     expect(text.italic).toMatchObject({ kind: "boolean" });
     expect(fields("shape").fill).toMatchObject({ kind: "paint" });
     expect(fields("shape").radius).toMatchObject({ kind: "length", group: "radius" });

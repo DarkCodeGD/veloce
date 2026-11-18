@@ -9,7 +9,7 @@ import { z } from "@veloce/plugin-api";
 export type FieldKind =
   | { kind: "enum"; options: string[] }
   | { kind: "boolean" }
-  | { kind: "number"; min?: number; max?: number; integer: boolean }
+  | { kind: "number"; min?: number; max?: number; integer: boolean; default?: number }
   | { kind: "token"; group: string }
   | { kind: "color" }
   /** A color, or a gradient/image (edited as a color here; gradients stay as they are). */
@@ -34,6 +34,7 @@ type JsonSchema = {
   maximum?: number;
   exclusiveMinimum?: number;
   maxLength?: number;
+  default?: unknown;
   properties?: Record<string, JsonSchema>;
 };
 
@@ -77,12 +78,17 @@ export function fieldKind(s: JsonSchema): FieldKind {
     return { kind: "text", multiline: (s.maxLength ?? 0) > 200 };
   if (s.type === "boolean") return { kind: "boolean" };
   if (s.type === "number" || s.type === "integer") {
-    const min = s.minimum ?? s.exclusiveMinimum;
+    const integer = s.type === "integer";
+    // `.positive()` is an exclusive minimum: the smallest allowed value is just above it.
+    const min =
+      s.minimum ??
+      (s.exclusiveMinimum === undefined ? undefined : s.exclusiveMinimum + (integer ? 1 : 0.01));
     return {
       kind: "number",
-      integer: s.type === "integer",
+      integer,
       ...(min !== undefined && { min }),
       ...(s.maximum !== undefined && { max: s.maximum }),
+      ...(typeof s.default === "number" && { default: s.default }),
     };
   }
   return { kind: "readonly" };

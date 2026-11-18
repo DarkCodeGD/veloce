@@ -73,7 +73,7 @@ export const SlideRail = memo(function SlideRail({
                   type="button"
                   className="icon-button"
                   aria-label={`Duplicate ${name}`}
-                  title="Duplicate slide"
+                  data-tip="Duplicate slide"
                   onClick={async () => {
                     const command = duplicateSlide(slide, i);
                     if (await run(command)) onSelect(command.select?.[0] ?? slide.id);
@@ -85,7 +85,7 @@ export const SlideRail = memo(function SlideRail({
                   type="button"
                   className="icon-button"
                   aria-label={`Delete ${name}`}
-                  title="Delete slide"
+                  data-tip="Delete slide"
                   disabled={deck.slides.length === 1}
                   onClick={async () => {
                     const next = deck.slides[i + 1] ?? deck.slides[i - 1];

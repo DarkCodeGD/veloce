@@ -8,6 +8,7 @@ import { Inspector } from "./components/Inspector.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { Toasts } from "./components/Toasts.js";
+import { Tooltips } from "./components/Tooltips.js";
 import { TopBar } from "./components/TopBar.js";
 import { client } from "./editor-context.js";
 import {
@@ -26,6 +27,7 @@ import {
   selectSiblings,
 } from "./model/selection.js";
 import { indexSlide } from "./model/slide-index.js";
+import { previewDeck, previewStore } from "./preview.js";
 
 const ACTIVITY_MS = 6000;
 type Panel = "slides" | "layers";
@@ -40,6 +42,12 @@ const typing = (target: EventTarget | null) =>
 export function App() {
   const state = useSyncExternalStore(client.subscribe, client.getState);
   const { deck, deckId, lastChange } = state;
+  // A scrub/nudge in progress, shown on the canvas only (the inspector reads the real deck).
+  const previewOps = useSyncExternalStore(previewStore.subscribe, previewStore.get);
+  const canvasDeck = useMemo(
+    () => (deck ? previewDeck(deck, previewOps) : null),
+    [deck, previewOps],
+  );
   const slides = deck?.slides ?? [];
   const [slideId, setSlideId] = useState<string | null>(null);
   const [selection, setSelection] = useState<string[]>([]);
@@ -232,7 +240,7 @@ export function App() {
             </div>
             <main className="stage-area">
               <EditorCanvas
-                deck={deck}
+                deck={canvasDeck ?? deck}
                 deckId={deckId}
                 slideId={current.id}
                 selection={selection}
@@ -249,6 +257,7 @@ export function App() {
         )}
       </div>
       <Toasts />
+      <Tooltips />
     </div>
   );
 }

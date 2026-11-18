@@ -202,11 +202,31 @@ textarea {
   transition: border-color var(--fast);
 }
 
+/* Textareas grow with their text (no OS resize grip); engines without field-sizing keep a
+   vertical grip instead. */
 textarea {
   height: auto;
+  min-height: calc(2lh + 14px);
+  max-height: 240px;
   padding: 6px 8px;
   line-height: 1.45;
-  resize: vertical;
+  field-sizing: content;
+  resize: none;
+}
+
+@supports not (field-sizing: content) {
+  textarea {
+    resize: vertical;
+  }
+}
+
+::selection {
+  background: rgb(139 123 255 / 0.4);
+}
+
+input,
+textarea {
+  caret-color: var(--accent-strong);
 }
 
 input:hover,
@@ -446,10 +466,6 @@ textarea::placeholder {
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-}
-
-.follow input {
-  accent-color: var(--accent);
 }
 
 .status {
@@ -946,11 +962,70 @@ textarea::placeholder {
   gap: 6px;
 }
 
+/* Toggle switch: a real checkbox (role="switch") drawn without the OS look. The thumb is a
+   background gradient, so it works in every engine (inputs can't have ::before in Firefox). */
 .switch {
-  width: 16px;
+  appearance: none;
+  flex: none;
+  width: 28px;
   height: 16px;
-  margin: 7px 0 0;
-  accent-color: var(--accent);
+  margin: 0;
+  border-radius: 999px;
+  background-color: #2e3340;
+  background-image: radial-gradient(
+    circle closest-side,
+    #c3c8d4 calc(100% - 3px),
+    transparent calc(100% - 2.5px)
+  );
+  background-position: left center;
+  background-repeat: no-repeat;
+  background-size: 16px 16px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  cursor: pointer;
+  transition:
+    background-position var(--medium) var(--ease),
+    background-color var(--medium);
+}
+
+.switch:hover {
+  background-color: #3a404f;
+}
+
+.switch:checked {
+  background-color: var(--accent);
+  background-image: radial-gradient(
+    circle closest-side,
+    #fff calc(100% - 3px),
+    transparent calc(100% - 2.5px)
+  );
+  background-position: right center;
+}
+
+.switch:checked:hover {
+  background-color: var(--accent-strong);
+}
+
+.field .switch {
+  margin-top: 7px;
+}
+
+/* Scrubbable number labels: drag sideways to change the value. */
+.field-label.is-scrubbable {
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  transition: color var(--fast);
+}
+
+.field-label.is-scrubbable:hover,
+.field-label.is-scrubbing {
+  color: var(--text);
+}
+
+html.is-scrubbing,
+html.is-scrubbing * {
+  cursor: ew-resize;
+  user-select: none;
 }
 
 .color {
@@ -976,6 +1051,11 @@ textarea::placeholder {
   height: 16px;
   border-radius: 4px;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15) inset;
+}
+
+/* The field being scrubbed. */
+.field:has(.is-scrubbing) input {
+  border-color: var(--accent);
 }
 
 .color-note {
@@ -1050,6 +1130,42 @@ textarea::placeholder {
   background: var(--accent);
   color: var(--on-accent);
   font-weight: 600;
+}
+
+/* Tooltips (components/Tooltips.tsx) */
+
+.tooltip {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 5px 8px;
+  border: 1px solid #3a3f4c;
+  border-radius: var(--radius-sm);
+  background: #262a33;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  animation: tooltip-in var(--fast) ease-out;
+}
+
+.tooltip-keys {
+  display: flex;
+  gap: 3px;
+}
+
+.tooltip kbd {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.08);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────────── */
@@ -1174,6 +1290,12 @@ textarea::placeholder {
   from {
     opacity: 0;
     transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
   }
 }
 

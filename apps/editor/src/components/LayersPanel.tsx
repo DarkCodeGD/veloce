@@ -112,7 +112,7 @@ export function LayersPanel({ slide, selection, onSelect, onHover }: Props) {
                 type="button"
                 className={`icon-button${node.locked ? " is-on" : ""}`}
                 aria-label={node.locked ? `Unlock ${label}` : `Lock ${label}`}
-                title={node.locked ? "Unlock" : "Lock"}
+                data-tip={node.locked ? "Unlock" : "Lock"}
                 onClick={() =>
                   void run(
                     updateNode(
@@ -129,7 +129,7 @@ export function LayersPanel({ slide, selection, onSelect, onHover }: Props) {
                 type="button"
                 className={`icon-button${node.hidden ? " is-on" : ""}`}
                 aria-label={node.hidden ? `Show ${label}` : `Hide ${label}`}
-                title={node.hidden ? "Show" : "Hide"}
+                data-tip={node.hidden ? "Show" : "Hide"}
                 onClick={() =>
                   void run(
                     updateNode(

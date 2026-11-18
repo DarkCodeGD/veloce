@@ -378,3 +378,34 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
    The standard `scrollbar-width`/`scrollbar-color` properties go only to engines without it.
    **Why:** Chromium ignores the webkit rules once the standard properties are set, and the
    standard ones can't hide the arrow buttons.
+
+### D41: Scrubbable numbers, live previews, tooltips and switches (2026-11-18)
+
+1. **Live previews are local** (`preview.ts`). While a number is scrubbed or nudged, its ops
+   are applied to a copy of the deck that only this tab's canvas renders; one transaction is
+   sent when the gesture ends (pointer up, key up, blur). **Why:** D39's "preview locally,
+   commit once": a drag stays one undo step and one message, and other clients never see
+   half-finished values. The preview is dropped when the transaction resolves; the server
+   sends `change` before `result`, so the value never flashes back.
+2. **The inspector reads the committed deck, never the preview**; fields show their in-flight
+   value themselves. **Why:** a field compares against its committed value to decide whether
+   anything changed and what Esc restores. Comparing against the preview would discard every
+   scrub.
+3. **Scrub feel:** one step per pixel, Shift 10×, Alt 1/10, a 3 px threshold so a label
+   click still focuses the field, clamping without a dead zone, and Esc to cancel. ↑/↓ nudge
+   with the same modifiers. Rounding applies to the change, not the value, so set precision
+   survives (60.5 → 61.5). The math is pure and tested (`model/scrub.ts`).
+4. **An unset number scrubs from what you see.** The order is the schema's `default`, then
+   the rendered CSS property of the same name (`fontSize` → `font-size`) if it fits the
+   field's bounds, then the minimum. **Why:** text sizes come from style tokens, so starting
+   from 0 would jump. Reading by CSS name keeps the editor free of plugin-specific code.
+   `exclusiveMinimum` (`.positive()`) now maps to a minimum just above the bound.
+5. **One global tooltip layer** (`data-tip`, `data-keys`) replaces `title`. It has a 500 ms
+   delay, instant neighbours, shows on keyboard focus, is dismissible and hoverable
+   (WCAG 1.4.13), and shows platform shortcut chips. **Why:** native tooltips are slow,
+   unstyled and mouse-only. One document listener is cheaper than a wrapper per button.
+6. **Switches are real checkboxes** (`role="switch"`) drawn with background gradients, which
+   work in every engine. Textareas grow with `field-sizing: content`; engines without it keep
+   a resize grip.
+7. **`tests/integration/phase3-editor.test.ts`** drives these controls in real Chromium and
+   counts the transactions the server receives.

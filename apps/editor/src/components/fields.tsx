@@ -6,7 +6,14 @@
 import type { Theme } from "@veloce/core";
 import { RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { parseNumber } from "../model/scrub.js";
 import { Select, type SelectOption } from "./Select.js";
+import { useNumberControl } from "./useNumberControl.js";
+
+type LabelProps = ReturnType<typeof useNumberControl>["labelProps"];
+
+/** Shown on a scrubbable label. */
+const SCRUB_TIP = "Drag to adjust · Shift ×10 · Alt fine · ↑↓ in the field";
 
 type Value = unknown;
 export type Commit = (value: Value | null) => void;
@@ -16,18 +23,28 @@ export function Field({
   htmlFor,
   isSet,
   onReset,
+  scrub,
+  scrubbing,
   children,
 }: {
   label: string;
   htmlFor?: string;
   isSet?: boolean;
   onReset?: () => void;
+  /** Makes the label a scrub handle for a number input. */
+  scrub?: LabelProps;
+  scrubbing?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="field">
       {htmlFor ? (
-        <label className="field-label" htmlFor={htmlFor}>
+        <label
+          className={`field-label${scrub ? " is-scrubbable" : ""}${scrubbing ? " is-scrubbing" : ""}`}
+          htmlFor={htmlFor}
+          data-tip={scrub ? SCRUB_TIP : undefined}
+          {...scrub}
+        >
           {label}
         </label>
       ) : (
@@ -39,7 +56,7 @@ export function Field({
           type="button"
           className="icon-button field-reset"
           aria-label={`Reset ${label} to default`}
-          title="Reset to default"
+          data-tip="Reset to default"
           onClick={onReset}
         >
           <RotateCcw size={12} />
@@ -115,8 +132,11 @@ export function NumberField({
   min,
   max,
   step,
+  integer,
   suffix,
+  fallback,
   onCommit,
+  onPreview,
 }: {
   label: string;
   value: number | undefined;
@@ -124,34 +144,40 @@ export function NumberField({
   min?: number;
   max?: number;
   step?: number;
+  integer?: boolean;
   suffix?: string;
+  /** Where scrubbing starts when unset. Default: the placeholder, if it's a number. */
+  fallback?: () => number | undefined;
   onCommit: Commit;
+  onPreview?: (value: number | null) => void;
 }) {
   const id = useId();
-  const draft = useDraft(value === undefined ? "" : String(round(value)), (text) => {
-    if (text.trim() === "") return onCommit(null);
-    const n = Number(text);
-    if (!Number.isFinite(n)) return;
-    onCommit(Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n)));
+  const control = useNumberControl({
+    value,
+    min,
+    max,
+    step,
+    integer,
+    fallback: fallback ?? (() => parseNumber(placeholder ?? "") ?? undefined),
+    onCommit,
+    onPreview,
   });
   return (
-    <Field label={label} htmlFor={id} isSet={value !== undefined} onReset={() => onCommit(null)}>
+    <Field
+      label={label}
+      htmlFor={id}
+      isSet={value !== undefined}
+      onReset={() => onCommit(null)}
+      scrub={control.labelProps}
+      scrubbing={control.scrubbing}
+    >
       <div className="input-with-suffix">
-        <input
-          id={id}
-          type="number"
-          inputMode="decimal"
-          placeholder={placeholder}
-          step={step}
-          {...draft}
-        />
+        <input id={id} placeholder={placeholder} {...control.inputProps} />
         {suffix && <span className="suffix">{suffix}</span>}
       </div>
     </Field>
   );
 }
-
-const round = (n: number) => Math.round(n * 100) / 100;
 
 export function SelectField({
   label,
@@ -209,8 +235,10 @@ export function ToggleField({
       <input
         id={id}
         type="checkbox"
+        role="switch"
         className="switch"
         checked={value === true}
+        aria-checked={value === true}
         onChange={(e) => onCommit(e.target.checked ? true : null)}
       />
     </Field>
@@ -258,23 +286,38 @@ export function LengthField({
   theme,
   group,
   onCommit,
+  onPreview,
+  current,
 }: {
   label: string;
   value: unknown;
   theme: Theme;
   group: string;
   onCommit: Commit;
+  onPreview?: (value: number | null) => void;
+  /** The rendered size in pixels, where "Custom…" starts. */
+  current?: () => number | undefined;
 }) {
   const id = useId();
   const isToken = typeof value === "string";
   const [custom, setCustom] = useState(typeof value === "number");
   useEffect(() => setCustom(typeof value === "number"), [value]);
-  const draft = useDraft(typeof value === "number" ? String(value) : "", (text) => {
-    const n = Number(text);
-    onCommit(text.trim() === "" ? null : Number.isFinite(n) && n >= 0 ? n : (value ?? null));
+  const control = useNumberControl({
+    value: typeof value === "number" ? value : undefined,
+    min: 0,
+    fallback: current,
+    onCommit,
+    onPreview,
   });
   return (
-    <Field label={label} htmlFor={id} isSet={value !== undefined} onReset={() => onCommit(null)}>
+    <Field
+      label={label}
+      htmlFor={id}
+      isSet={value !== undefined}
+      onReset={() => onCommit(null)}
+      scrub={custom ? control.labelProps : undefined}
+      scrubbing={control.scrubbing}
+    >
       <div className="length">
         <Select
           id={id}
@@ -292,7 +335,7 @@ export function LengthField({
         />
         {custom && (
           <div className="input-with-suffix">
-            <input aria-label={`${label} in pixels`} type="number" min={0} {...draft} />
+            <input aria-label={`${label} in pixels`} placeholder="0" {...control.inputProps} />
             <span className="suffix">px</span>
           </div>
         )}
@@ -358,7 +401,7 @@ export function ColorField({
                 style={{ background: hex }}
                 aria-label={`${label}: ${name}`}
                 aria-pressed={value === token}
-                title={`${name} · ${hex}`}
+                data-tip={`${name} · ${hex}`}
                 onClick={() => onCommit(token)}
               />
             );
@@ -382,22 +425,33 @@ export function SizingField({
   value,
   current,
   onCommit,
+  onPreview,
 }: {
   label: string;
   value: unknown;
   /** The rendered size, used when switching to "Fixed". */
   current: number | undefined;
   onCommit: Commit;
+  onPreview?: (value: number | null) => void;
 }) {
   const id = useId();
   const mode =
     typeof value === "number" ? "fixed" : value === "fill" ? "fill" : value === "hug" ? "hug" : "";
-  const draft = useDraft(typeof value === "number" ? String(Math.round(value)) : "", (text) => {
-    const n = Number(text);
-    if (Number.isFinite(n) && n > 0) onCommit(n);
+  const control = useNumberControl({
+    value: typeof value === "number" ? value : undefined,
+    min: 1,
+    integer: true,
+    fallback: () => current,
+    onCommit,
+    onPreview,
   });
   return (
-    <Field label={label} htmlFor={id}>
+    <Field
+      label={label}
+      htmlFor={id}
+      scrub={mode === "fixed" ? control.labelProps : undefined}
+      scrubbing={control.scrubbing}
+    >
       <div className="length">
         <Select
           id={id}
@@ -410,7 +464,7 @@ export function SizingField({
         />
         {mode === "fixed" && (
           <div className="input-with-suffix">
-            <input aria-label={`${label} in pixels`} type="number" min={1} {...draft} />
+            <input aria-label={`${label} in pixels`} {...control.inputProps} />
             <span className="suffix">px</span>
           </div>
         )}

@@ -8,9 +8,19 @@ import { NODE_ID_ATTR } from "@veloce/renderer";
 import { ArrowDown, ArrowRight, Copy, LayoutGrid, Move, Rows3, Trash } from "lucide-react";
 import { run } from "../actions.js";
 import { registry } from "../editor-context.js";
-import { deleteNodes, duplicateNodes, replacePatch, updateNode } from "../model/commands.js";
+import {
+  type Command,
+  deleteNodes,
+  duplicateNodes,
+  replacePatch,
+  updateNode,
+} from "../model/commands.js";
 import { propFields } from "../model/schema-fields.js";
+import { parseNumber } from "../model/scrub.js";
+import { SHORTCUTS } from "../model/shortcuts.js";
 import { indexSlide, nodeLabel } from "../model/slide-index.js";
+import { shortcutAttrs } from "../platform.js";
+import { setPreview } from "../preview.js";
 import {
   ColorField,
   type Commit,
@@ -92,7 +102,8 @@ function LayerActions({
       <button
         type="button"
         className="button"
-        title="Duplicate (Ctrl+D)"
+        data-tip="Duplicate"
+        {...shortcutAttrs(SHORTCUTS.duplicate)}
         onClick={async () => {
           const command = duplicateNodes(index, ids);
           if (await run(command)) onSelect(command?.select ?? []);
@@ -103,7 +114,8 @@ function LayerActions({
       <button
         type="button"
         className="button button-danger"
-        title="Delete (Del)"
+        data-tip="Delete"
+        {...shortcutAttrs(SHORTCUTS.delete)}
         onClick={async () => {
           if (await run(deleteNodes(index, ids), { undoToast: true })) onSelect([]);
         }}
@@ -143,12 +155,50 @@ function SlideSection({ deck, slide }: { deck: Deck; slide: Slide }) {
   );
 }
 
+/**
+ * Handlers for fields that scrub or nudge: each value is previewed on the canvas only, then
+ * one transaction commits the result and the preview is dropped once the server applied it
+ * (the server sends `change` before `result`, so the value never flashes back).
+ */
+function live(toCommand: (value: unknown) => Command | null) {
+  return {
+    onPreview: (value: number | null) =>
+      setPreview(value === null ? null : (toCommand(value)?.ops ?? null)),
+    onCommit: (value: unknown) => void run(toCommand(value)).finally(() => setPreview(null)),
+  };
+}
+
+const canvasElement = (id: string) =>
+  document.querySelector<HTMLElement>(`.editor-canvas [${NODE_ID_ATTR}="${CSS.escape(id)}"]`);
+
 /** The rendered size of a node on the main canvas, in slide pixels. */
 function renderedSize(id: string): { width: number; height: number } | undefined {
-  const el = document.querySelector<HTMLElement>(
-    `.editor-canvas [${NODE_ID_ATTR}="${CSS.escape(id)}"]`,
-  );
+  const el = canvasElement(id);
   return el ? { width: el.offsetWidth, height: el.offsetHeight } : undefined;
+}
+
+/**
+ * What an unset numeric property currently renders as, so scrubbing starts from the value
+ * you see (e.g. a font size that comes from the text style token). Generic on purpose: it
+ * reads the CSS property of the same name (`fontSize` → `font-size`) from the frame itself,
+ * or from an element's plugin root, and ignores results outside the field's bounds (a
+ * unitless `lineHeight` computes to pixels).
+ */
+function renderedNumber(
+  id: string,
+  property: string,
+  target: "self" | "plugin",
+  bounds: { min?: number; max?: number } = {},
+): number | undefined {
+  const node = canvasElement(id);
+  const el = target === "plugin" ? (node?.firstElementChild ?? node) : node;
+  if (!el) return undefined;
+  const css = property.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+  const value = parseNumber(getComputedStyle(el).getPropertyValue(css).split(" ")[0] ?? "");
+  if (value === null) return undefined;
+  if (value < (bounds.min ?? Number.NEGATIVE_INFINITY)) return undefined;
+  if (value > (bounds.max ?? Number.POSITIVE_INFINITY)) return undefined;
+  return value;
 }
 
 function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout | null }) {
@@ -156,6 +206,16 @@ function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout
     (key: string, label: string): Commit =>
     (value) =>
       void run(updateNode(node.id, { [key]: value }, label));
+  const setLive = (key: string, label: string) =>
+    live((value) => updateNode(node.id, { [key]: value }, label));
+  const move = (axis: "x" | "y") =>
+    live((value) =>
+      updateNode(
+        node.id,
+        { position: { x: node.position?.x ?? 0, y: node.position?.y ?? 0, [axis]: value ?? 0 } },
+        "Move layer",
+      ),
+    );
   const size = renderedSize(node.id);
   return (
     <Section title="Layer">
@@ -169,13 +229,13 @@ function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout
         label="Width"
         value={node.width}
         current={size?.width}
-        onCommit={set("width", "Change width")}
+        {...setLive("width", "Change width")}
       />
       <SizingField
         label="Height"
         value={node.height}
         current={size?.height}
-        onCommit={set("height", "Change height")}
+        {...setLive("height", "Change height")}
       />
       {parentLayout?.mode === "absolute" && (
         <>
@@ -184,30 +244,14 @@ function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout
             value={node.position?.x}
             placeholder="0"
             suffix="px"
-            onCommit={(x) =>
-              void run(
-                updateNode(
-                  node.id,
-                  { position: { x: x ?? 0, y: node.position?.y ?? 0 } },
-                  "Move layer",
-                ),
-              )
-            }
+            {...move("x")}
           />
           <NumberField
             label="Y"
             value={node.position?.y}
             placeholder="0"
             suffix="px"
-            onCommit={(y) =>
-              void run(
-                updateNode(
-                  node.id,
-                  { position: { x: node.position?.x ?? 0, y: y ?? 0 } },
-                  "Move layer",
-                ),
-              )
-            }
+            {...move("y")}
           />
         </>
       )}
@@ -218,15 +262,13 @@ function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout
         min={0}
         max={100}
         suffix="%"
-        onCommit={(v) =>
-          void run(
-            updateNode(
-              node.id,
-              { opacity: v === null || v === 100 ? null : (v as number) / 100 },
-              "Change opacity",
-            ),
-          )
-        }
+        {...live((v) =>
+          updateNode(
+            node.id,
+            { opacity: v === null || v === 100 ? null : (v as number) / 100 },
+            "Change opacity",
+          ),
+        )}
       />
       <NumberField
         label="Rotation"
@@ -235,7 +277,7 @@ function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout
         min={-360}
         max={360}
         suffix="°"
-        onCommit={set("rotation", "Rotate layer")}
+        {...setLive("rotation", "Rotate layer")}
       />
       <ToggleField label="Hidden" value={node.hidden} onCommit={set("hidden", "Toggle hidden")} />
       <ToggleField label="Locked" value={node.locked} onCommit={set("locked", "Toggle locked")} />
@@ -278,6 +320,13 @@ function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
     (key: string, label: string): Commit =>
     (value) =>
       void run(updateNode(node.id, { style: { [key]: value } }, label));
+  const liveLayout = (key: string, label: string) =>
+    live((value) => updateNode(node.id, { layout: { [key]: value } }, label));
+  const liveStyle = (key: string, label: string) =>
+    live((value) => updateNode(node.id, { style: { [key]: value } }, label));
+  /** Where "Custom…" starts: the frame's rendered CSS value. */
+  const rendered = (property: string) => () =>
+    renderedNumber(node.id, property, "self", { min: 0 });
   const padding = typeof layout.padding === "object" ? undefined : layout.padding;
 
   return (
@@ -333,16 +382,14 @@ function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
               value={layout.columns}
               min={1}
               max={24}
-              step={1}
-              onCommit={(v) =>
-                void run(
-                  updateNode(
-                    node.id,
-                    { layout: { columns: Math.round((v as number | null) ?? 2) } },
-                    "Change columns",
-                  ),
-                )
-              }
+              integer
+              {...live((v) =>
+                updateNode(
+                  node.id,
+                  { layout: { columns: Math.round((v as number | null) ?? 2) } },
+                  "Change columns",
+                ),
+              )}
             />
             <SelectField
               label="Align"
@@ -359,7 +406,8 @@ function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
             value={layout.gap}
             theme={deck.theme}
             group="space"
-            onCommit={setLayout("gap", "Change gap")}
+            current={rendered("rowGap")}
+            {...liveLayout("gap", "Change gap")}
           />
         )}
         {typeof layout.padding === "object" ? (
@@ -370,7 +418,8 @@ function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
             value={padding}
             theme={deck.theme}
             group="space"
-            onCommit={setLayout("padding", "Change padding")}
+            current={rendered("paddingTop")}
+            {...liveLayout("padding", "Change padding")}
           />
         )}
       </Section>
@@ -386,7 +435,8 @@ function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
           value={typeof node.style?.radius === "object" ? undefined : node.style?.radius}
           theme={deck.theme}
           group="radius"
-          onCommit={setStyle("radius", "Change radius")}
+          current={rendered("borderTopLeftRadius")}
+          {...liveStyle("radius", "Change radius")}
         />
         <ToggleField
           label="Clip content"
@@ -414,15 +464,9 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
     <Section title={definition.title}>
       {propFields(definition).map((field) => {
         const value = props[field.key];
-        const commit: Commit = (v) =>
-          void run(
-            updateNode(
-              node.id,
-              { props: { [field.key]: v } },
-              `Change ${field.label.toLowerCase()}`,
-            ),
-          );
-        const common = { label: field.label, onCommit: commit };
+        const toCommand = (v: unknown) =>
+          updateNode(node.id, { props: { [field.key]: v } }, `Change ${field.label.toLowerCase()}`);
+        const common = { label: field.label, onCommit: (v: unknown) => void run(toCommand(v)) };
         switch (field.kind) {
           case "enum":
             return (
@@ -445,7 +489,12 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
                 placeholder="Default"
                 min={field.min}
                 max={field.max}
-                step={field.integer ? 1 : undefined}
+                integer={field.integer}
+                fallback={() =>
+                  field.default ??
+                  renderedNumber(node.id, field.key, "plugin", { min: field.min, max: field.max })
+                }
+                {...live(toCommand)}
               />
             );
           case "token":
@@ -469,6 +518,8 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
                 value={value}
                 theme={deck.theme}
                 group={field.group}
+                current={() => renderedNumber(node.id, field.key, "plugin", { min: 0 })}
+                {...live(toCommand)}
               />
             );
           case "text":
