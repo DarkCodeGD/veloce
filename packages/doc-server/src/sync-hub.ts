@@ -48,8 +48,8 @@ export class SyncHub {
       if (event.type === "decks") {
         safeSend({ type: "decks", decks: event.decks, activeDeckId: event.activeDeckId });
       } else if (event.change.deckId === deckId) {
-        const { deckId: id, version, origin: from, label, ops } = event.change;
-        safeSend({ type: "change", deckId: id, version, origin: from, label, ops });
+        const { deckId: id, version, origin: from, label, ops, at } = event.change;
+        safeSend({ type: "change", deckId: id, version, origin: from, label, ops, at });
       }
     });
 
@@ -100,7 +100,13 @@ export class SyncHub {
             // Take the snapshot and start following in the same tick: no change can slip between.
             deckId = deck.id;
             workspace.setActive(deck.id);
-            safeSend({ type: "snapshot", deckId: deck.id, version: deck.version, deck: deck.deck });
+            safeSend({
+              type: "snapshot",
+              deckId: deck.id,
+              version: deck.version,
+              deck: deck.deck,
+              history: deck.history,
+            });
             return;
           case "transaction": {
             const result = deck.apply({ origin, label: message.label, ops: message.ops });

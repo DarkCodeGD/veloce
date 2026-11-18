@@ -559,6 +559,139 @@ textarea::placeholder {
   text-align: center;
 }
 
+/* History panel */
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Read by screen readers, not shown. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.history-filter {
+  min-width: 0;
+  border: 0;
+  display: flex;
+  gap: 2px;
+  margin: 10px 10px 4px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.history-filter button {
+  flex: 1;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.history-filter button:hover {
+  color: var(--text);
+}
+
+.history-filter button[aria-pressed="true"] {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.history-list,
+.history-group ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-list {
+  flex: 1;
+  padding: 4px 0 8px;
+}
+
+.history-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history-author.is-agent {
+  color: var(--live);
+}
+
+.history-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 14px 6px 33px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.history-entry:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.history-entry.is-current {
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.history-entry:disabled {
+  cursor: default;
+}
+
+.history-label {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.history-chip {
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--panel-raised);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.history-hint {
+  margin: 0;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* Slide rail */
 
 .rail ol {

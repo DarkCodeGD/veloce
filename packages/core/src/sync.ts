@@ -63,7 +63,14 @@ export type ServerMessage =
     }
   /** The deck list or the active deck changed (e.g. an agent created or opened a deck). */
   | { type: "decks"; decks: DeckListing[]; activeDeckId: string | null }
-  | { type: "snapshot"; deckId: string; version: number; deck: Deck }
+  | {
+      type: "snapshot";
+      deckId: string;
+      version: number;
+      deck: Deck;
+      /** Recent changes, oldest first (this server session only), for the history panel. */
+      history: HistoryEntry[];
+    }
   | {
       type: "change";
       deckId: string;
@@ -71,6 +78,8 @@ export type ServerMessage =
       origin: Origin;
       label: string;
       ops: Op[];
+      /** When the server applied it (ms since the epoch). */
+      at: number;
     }
   | { type: "result"; requestId: string; ok: true; version: number }
   | { type: "result"; requestId: string; ok: false; error: ErrorInfo }
@@ -78,6 +87,17 @@ export type ServerMessage =
   | { type: "error"; message: string };
 
 export type ChangeMessage = Extract<ServerMessage, { type: "change" }>;
+
+/** One committed change, as the history panel lists it. */
+export interface HistoryEntry {
+  version: number;
+  origin: Origin;
+  label: string;
+  /** Slides this change added or modified (removed slides aren't listed). */
+  slideIds: string[];
+  /** When the server applied it (ms since the epoch). */
+  at: number;
+}
 
 export interface LocalReplica {
   deck: Deck;

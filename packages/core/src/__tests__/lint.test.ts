@@ -273,6 +273,7 @@ describe("sync", () => {
       origin: "agent:test" as const,
       label: "add",
       ops,
+      at: 0,
     };
     const replica = applyChange({ deck, version: 0 }, change);
     expect(replica?.deck).toEqual(server.deck);

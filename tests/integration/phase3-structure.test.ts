@@ -179,6 +179,43 @@ describe.skipIf(problem !== null)("Phase 3: deck structure", { timeout: 60_000 }
     await undo();
   });
 
+  it("lists everyone's changes in the History tab, including the agent's from before it opened", async () => {
+    await thumb(0).click(); // the History tab replaces the rail
+    await page.getByRole("tab", { name: "History" }).click();
+    // The panel's styles don't leak into the top bar (it once stacked Undo/Redo vertically).
+    const bar = page.locator(".topbar");
+    const undoBox = await bar.getByRole("button", { name: "Undo", exact: true }).boundingBox();
+    const redoBox = await bar.getByRole("button", { name: "Redo", exact: true }).boundingBox();
+    expect(redoBox?.y).toBe(undoBox?.y);
+    const authors = () => page.locator(".history-author").allTextContents();
+    // The agent built the deck before this tab connected: it's in the history anyway.
+    expect(await authors()).toContain("Claude Code");
+    const labels = () => page.locator(".history-label").allTextContents();
+
+    // A new change of yours appears on top, live.
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(async () => (await labels())[0]).toBe("Move slide 1 to position 2");
+    expect((await authors())[0]).toBe("You");
+    await undo();
+    await expect.poll(async () => (await labels())[0]).toBe("Undo: Move slide 1 to position 2");
+
+    // Filters.
+    await page.getByRole("button", { name: "AI", exact: true }).click();
+    expect(new Set(await authors())).toEqual(new Set(["Claude Code"]));
+    await page.getByRole("button", { name: "You", exact: true }).click();
+    expect(new Set(await authors())).toEqual(new Set(["You"]));
+    await page.getByRole("button", { name: "All", exact: true }).click();
+
+    // Clicking a change goes to the slide it touched.
+    const third = page
+      .locator(".history-entry")
+      .filter({ has: page.locator(".history-chip", { hasText: /^Slide 3$/ }) })
+      .last();
+    await third.click();
+    await page.getByRole("tab", { name: "Slides" }).click();
+    await expect.poll(current).toBe("3");
+  });
+
   it("logged no errors in the page", () => {
     expect(h.pageErrors).toEqual([]);
   });

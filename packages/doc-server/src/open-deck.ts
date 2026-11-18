@@ -6,6 +6,7 @@ import {
   type ApplyContext,
   type Deck,
   DeckDocument,
+  type HistoryEntry,
   type Op,
   type Origin,
   sha256Hex,
@@ -20,7 +21,14 @@ export interface DeckChange {
   label: string;
   ops: Op[];
   deck: Deck;
+  /** Slides this change added or modified. */
+  slideIds: string[];
+  /** When it was applied (ms since the epoch). */
+  at: number;
 }
+
+/** How many changes the history keeps per open deck (older ones drop off). */
+export const HISTORY_LIMIT = 500;
 
 export interface OpenDeckOptions {
   deck: Deck;
@@ -45,6 +53,8 @@ export class OpenDeck {
   readonly #slideEditors = new Map<string, Origin>();
   /** The deck as of the last emitted change, to find which slides a change touched. */
   #emitted: Deck;
+  /** Recent changes for the history panel, oldest first (this session only, not saved). */
+  readonly #history: HistoryEntry[] = [];
 
   constructor(options: OpenDeckOptions) {
     this.id = options.deck.id;
@@ -98,6 +108,11 @@ export class OpenDeck {
     return result && this.#emit(result);
   }
 
+  /** Recent changes, oldest first (at most HISTORY_LIMIT, since the deck was opened). */
+  get history(): HistoryEntry[] {
+    return [...this.#history];
+  }
+
   canUndo(origin: Origin): boolean {
     return this.#doc.canUndo(origin);
   }
@@ -139,12 +154,19 @@ export class OpenDeck {
     const { origin, label, ops } = result.transaction;
     // Structural sharing: a slide object is new exactly when this change touched it.
     const before = new Map(this.#emitted.slides.map((s) => [s.id, s]));
+    const slideIds: string[] = [];
     for (const slide of result.deck.slides) {
-      if (before.get(slide.id) !== slide) this.#slideEditors.set(slide.id, origin);
+      if (before.get(slide.id) !== slide) {
+        this.#slideEditors.set(slide.id, origin);
+        slideIds.push(slide.id);
+      }
       before.delete(slide.id);
     }
     for (const removed of before.keys()) this.#slideEditors.delete(removed);
     this.#emitted = result.deck;
+    const at = this.#modifiedAt.getTime();
+    this.#history.push({ version: this.version, origin, label, slideIds, at });
+    if (this.#history.length > HISTORY_LIMIT) this.#history.shift();
     const change: DeckChange = {
       deckId: this.id,
       version: this.version,
@@ -152,6 +174,8 @@ export class OpenDeck {
       label,
       ops,
       deck: result.deck,
+      slideIds,
+      at,
     };
     for (const listener of this.#listeners) listener(change);
     return result;

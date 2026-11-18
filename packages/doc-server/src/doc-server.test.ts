@@ -11,6 +11,7 @@ import {
 } from "@veloce/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { atomicWriteFile, slugify } from "./fs.js";
+import { HISTORY_LIMIT } from "./open-deck.js";
 import { CachedRenderService, type RenderService } from "./render.js";
 import { SyncHub } from "./sync-hub.js";
 import { Workspace } from "./workspace.js";
@@ -215,6 +216,56 @@ describe("SyncHub", () => {
     expect(b.inbox).toHaveLength(before);
     expect(a.last("decks")?.decks[0]?.title).toBe("Renamed");
     a.conn.close();
+    await ws.close();
+  });
+
+  it("keeps a bounded history for late joiners, stamped with time and touched slides", async () => {
+    const ws = await open();
+    const deck = await ws.create({ title: "History" });
+    const t0 = Date.now();
+    deck.apply({
+      origin: "agent:claude-code",
+      label: "Add title",
+      ops: [{ op: "slide.insert", slide: titleSlide() }],
+    });
+    deck.apply({
+      origin: "user",
+      label: "Edit title",
+      ops: [{ op: "node.update", id: "title", set: { props: { content: "Hi" } } }],
+    });
+    deck.apply({
+      origin: "user",
+      label: "Rename",
+      ops: [{ op: "deck.updateMeta", set: { title: "R" } }],
+    });
+
+    // A tab that opens now still sees what happened before it connected.
+    const late = client(new SyncHub(ws));
+    await late.send({ type: "open", deckId: deck.id });
+    const history = late.last("snapshot")?.history ?? [];
+    expect(history.map((e) => [e.version, e.origin, e.label, e.slideIds])).toEqual([
+      [1, "agent:claude-code", "Add title", ["s1"]],
+      [2, "user", "Edit title", ["s1"]],
+      [3, "user", "Rename", []], // deck-level: no slide
+    ]);
+    expect(history.every((e) => e.at >= t0 && e.at <= Date.now())).toBe(true);
+
+    // Live changes carry the same timestamp; undo shows up as its own entry.
+    deck.undo("user");
+    expect(late.last("change")).toMatchObject({ version: 4, label: "Undo: Rename" });
+    expect(late.last("change")?.at).toBe(deck.history.at(-1)?.at);
+
+    // Bounded: the oldest entries drop off.
+    for (let i = 0; i < HISTORY_LIMIT; i++) {
+      deck.apply({
+        origin: "user",
+        label: `n${i}`,
+        ops: [{ op: "deck.updateMeta", set: { title: `t${i}` } }],
+      });
+    }
+    expect(deck.history).toHaveLength(HISTORY_LIMIT);
+    expect(deck.history[0]?.label).toBe("n0"); // the 4 earlier entries dropped off
+    late.conn.close();
     await ws.close();
   });
 });

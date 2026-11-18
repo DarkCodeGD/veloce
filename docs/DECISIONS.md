@@ -563,3 +563,25 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
    - **Images from another deck** are refused with a clear message, because core rejects
      references to assets the deck doesn't have. Copying the asset files along belongs to
      asset import.
+
+### D46: A history panel fed by a server-side log (2026-11-19)
+
+1. **The doc-server keeps the history, not the editor.** Each open deck keeps a bounded log
+   (`HISTORY_LIMIT` = 500) of `{ version, origin, label, slideIds, at }`. It's sent in the
+   `snapshot`, and every `change` message now carries the server's timestamp `at`. **Why:**
+   the AI usually builds a deck _before_ anyone opens the editor (and tabs reload), so a
+   client-only log would start empty exactly when it's most interesting. Adding fields keeps
+   the protocol compatible (`SYNC_PROTOCOL_VERSION` stays 1; the client tolerates an older
+   server without `history`).
+2. **Session-only, not saved** in the `.veloce` file. **Why:** undo stacks are per session
+   too, and saving history is a file-format decision (size, privacy of agent activity) for
+   later. When the server restarts, the history starts fresh.
+3. **The panel** is a third left-panel tab. It lists changes newest first, grouped into runs
+   by author (You / the agent's name from its MCP client). It shows the slides each change
+   touched (click to go there), how long ago, and an All / You / AI filter. **Undo stays per
+   origin (golden rule #7):** the panel shows the AI's changes, but Ctrl+Z only ever takes
+   back yours, and the panel's footer says so.
+4. **One name helper:** `originName` in `model/history.ts` replaces the top bar's own copy.
+   The panel's root class is `.history-panel`: `.history` was already the top bar's
+   undo/redo group, and the clash stacked those buttons vertically. A browser test now
+   checks that layout.

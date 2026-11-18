@@ -1,9 +1,10 @@
 import type { Slide } from "@veloce/core";
-import { Layers, PanelsTopLeft } from "lucide-react";
+import { History, Layers, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { redo, run, undo } from "./actions.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
+import { HistoryPanel } from "./components/HistoryPanel.js";
 import { Inspector } from "./components/Inspector.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { SlideRail } from "./components/SlideRail.js";
@@ -33,7 +34,7 @@ import { indexSlide } from "./model/slide-index.js";
 import { previewDeck, previewStore } from "./preview.js";
 
 const ACTIVITY_MS = 6000;
-type Panel = "slides" | "layers";
+type Panel = "slides" | "layers" | "history";
 
 export function App() {
   const state = useSyncExternalStore(client.subscribe, client.getState);
@@ -233,6 +234,14 @@ export function App() {
                 >
                   <Layers size={14} /> Layers
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={panel === "history"}
+                  onClick={() => setPanel("history")}
+                >
+                  <History size={14} /> History
+                </button>
               </div>
               <div className="tab-panel" role="tabpanel">
                 {panel === "slides" ? (
@@ -243,12 +252,19 @@ export function App() {
                     recent={recent}
                     onSelect={setSlideId}
                   />
-                ) : (
+                ) : panel === "layers" ? (
                   <LayersPanel
                     slide={current}
                     selection={selection}
                     onSelect={select}
                     onHover={setLayerHover}
+                  />
+                ) : (
+                  <HistoryPanel
+                    history={state.history}
+                    slides={slides}
+                    currentSlideId={current.id}
+                    onGoToSlide={setSlideId}
                   />
                 )}
               </div>

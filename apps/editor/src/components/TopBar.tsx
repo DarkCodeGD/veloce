@@ -1,7 +1,7 @@
 import type { DeckListing } from "@veloce/core";
 import { Redo2, Undo2 } from "lucide-react";
 import { redo, undo } from "../actions.js";
-import { originLabel } from "../editor-context.js";
+import { originName } from "../model/history.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { shortcutAttrs } from "../platform.js";
 import type { ConnectionStatus, LastChange } from "../sync-client.js";
@@ -85,7 +85,7 @@ export function TopBar({
         {activity && (
           <span className="activity" key={activity.at} role="status">
             <span className="activity-dot" aria-hidden="true" />
-            <strong>{originLabel(activity.origin)}</strong>
+            <strong>{originName(activity.origin)}</strong>
             <span className="activity-label">{activity.label}</span>
           </span>
         )}

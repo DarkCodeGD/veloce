@@ -6,10 +6,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor (round 3 done; left: history panel, theme/color pickers, asset import)
+- **Active phase:** Phase 3: Manual editor (left: theme/color pickers, asset import)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (278 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (283 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -35,9 +35,12 @@
     dragging slides in the rail, and copy/cut/paste through the system clipboard (between
     slides and decks; text from other apps becomes a text layer).
     `tests/integration/phase3-structure.test.ts` covers the rail and the clipboard.
-  - **Next:** the history panel, then the theme picker with token-aware color/font pickers,
-    then asset import (which also lets images be pasted between decks). Text
-    color/alignment/style controls in the text toolbar.
+  - **History panel (D46):** every change by you and the AI, grouped by author, with the
+    slides it touched; the server keeps the log, so it includes what the AI did before the
+    editor opened.
+  - **Next:** the theme picker with token-aware color/font pickers, then asset import
+    (which also lets images be pasted between decks). Text color/alignment/style controls
+    in the text toolbar.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -228,9 +231,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 - [ ] Asset import (drag & drop images/fonts/files → content-hashed assets)
 - [x] Clipboard (copy/paste within and between decks), keyboard shortcuts (D45)
   - Images can't be pasted between decks until asset import lands.
-- [ ] Undo/redo for the `user` origin only; history panel shows agent transactions too
-  - Done: undo/redo buttons and shortcuts (the server scopes them to `user`), undo toasts. Left:
-    history panel.
+- [x] Undo/redo for the `user` origin only; history panel shows agent transactions too (D46)
 
 **Done when:** a full deck can be built by hand; human and agent edit concurrently without
 conflicts; Ctrl+Z never undoes the agent's work.

@@ -15,6 +15,7 @@ import {
   type Deck,
   type DeckListing,
   type ErrorInfo,
+  type HistoryEntry,
   type Op,
   type Origin,
   randomId,
@@ -46,7 +47,12 @@ export interface SyncState {
   deck: Deck | null;
   version: number;
   lastChange: LastChange | null;
+  /** The open deck's recent changes, oldest first (the history panel). */
+  history: HistoryEntry[];
 }
+
+/** Matches the server's limit (doc-server HISTORY_LIMIT). */
+const HISTORY_LIMIT = 500;
 
 const INITIAL: SyncState = {
   status: "connecting",
@@ -56,6 +62,7 @@ const INITIAL: SyncState = {
   deck: null,
   version: 0,
   lastChange: null,
+  history: [],
 };
 
 export class SyncClient {
@@ -174,7 +181,12 @@ export class SyncClient {
           this.open(message.activeDeckId);
         return;
       case "snapshot":
-        this.#set({ deckId: message.deckId, deck: message.deck, version: message.version });
+        this.#set({
+          deckId: message.deckId,
+          deck: message.deck,
+          version: message.version,
+          history: message.history ?? [], // older servers don't send it
+        });
         return;
       case "change": {
         if (message.deckId !== state.deckId || !state.deck) return;
@@ -184,15 +196,18 @@ export class SyncClient {
           return;
         }
         const before = new Set(state.deck.slides);
+        const entry: HistoryEntry = {
+          version: next.version,
+          origin: message.origin,
+          label: message.label,
+          slideIds: next.deck.slides.filter((s) => !before.has(s)).map((s) => s.id),
+          at: message.at ?? Date.now(),
+        };
         this.#set({
           deck: next.deck,
           version: next.version,
-          lastChange: {
-            origin: message.origin,
-            label: message.label,
-            slideIds: next.deck.slides.filter((s) => !before.has(s)).map((s) => s.id),
-            at: Date.now(),
-          },
+          lastChange: entry,
+          history: [...state.history, entry].slice(-HISTORY_LIMIT),
         });
         return;
       }
