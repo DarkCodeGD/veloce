@@ -331,6 +331,38 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
     },
   );
 
+  it.skipIf(!visual)("wrapped text in any alignment never reads as overflowing", async () => {
+    // Regression: the space at each soft wrap hangs past the line end; it isn't content.
+    const lines = [
+      "Coffee carts burn diesel, make noise and can't park where the customers actually are.",
+      "Silent, zero-emission and allowed in parks, campuses and indoor events across the city.",
+      "We roast, brew and serve specialty coffee from a cart powered entirely by rooftop solar.",
+    ];
+    const children = (["left", "center", "right"] as const).flatMap((align, i) =>
+      [380, 460, 540].map((width, j) => ({
+        id: `wrap-${align}-${width}`,
+        type: "text",
+        width,
+        props: { content: lines[(i + j) % 3], align, style: "$text.body" },
+      })),
+    );
+    const result = await call("upsert_slide", {
+      slide: {
+        id: "wrapping",
+        layout: { mode: "grid", columns: 3, gap: "$space.sm", padding: "$space.md" },
+        children,
+      },
+    });
+    expect(result.text).not.toMatch(/overflow ·/);
+    // Real overflow is still caught: wrapped lines in a box too short for them.
+    // (Long words never spill sideways: text uses overflow-wrap: break-word.)
+    const tight = await call("apply_ops", {
+      label: "Squeeze",
+      ops: [{ op: "node.update", id: "wrap-left-380", set: { height: 40 } }],
+    });
+    expect(tight.text).toMatch(/overflow · slide wrapping · wrap-left-380: .*too tall/);
+  });
+
   it("refuses requests from other sites (DNS rebinding, cross-site requests, WebSocket hijacking)", async () => {
     const host = new URL(app.url).host;
     expect(await rawStatus(`${app.url}/api/health`, { host })).toBe(200);

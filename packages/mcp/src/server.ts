@@ -25,7 +25,7 @@ import type { RenderService, Workspace } from "@veloce/doc-server";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { INSTRUCTIONS } from "./docs.js";
 import { deckSummary } from "./summary.js";
-import { callTool, TOOLS, type ToolContext, toolInputSchema } from "./tools.js";
+import { AgentSession, callTool, TOOLS, type ToolContext, toolInputSchema } from "./tools.js";
 
 export interface VeloceMcpOptions {
   workspace: Workspace;
@@ -73,6 +73,7 @@ export class VeloceMcp {
       instructions: INSTRUCTIONS,
     });
     let origin: AgentOrigin | null = null;
+    const session = new AgentSession();
     const context = (): ToolContext => {
       origin ??= agentOrigin(server.getClientVersion()?.name);
       return {
@@ -80,6 +81,7 @@ export class VeloceMcp {
         registry,
         render,
         origin,
+        session,
         ...(renderUnavailable && { renderUnavailable }),
       };
     };

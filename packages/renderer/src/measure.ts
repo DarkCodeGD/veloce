@@ -74,6 +74,9 @@ function childRects(el: HTMLElement): DOMRect[] {
   );
 }
 
+/** Words measured per element; beyond this, text is far past any lint word limit anyway. */
+const MAX_WORDS = 2000;
+
 /** Edges of something drawn, in viewport pixels. */
 interface Extent {
   left: number;
@@ -86,7 +89,8 @@ interface Extent {
  * Extents of everything an element draws. Vertical extents come from block-level boxes only:
  * text ranges and inline boxes cover the font's full ascent+descent, which is taller than the
  * line box whenever line-height < ~1.2 (normal for headings), and would read as overflow.
- * They still count horizontally (e.g. a long unbreakable word).
+ * Words still count horizontally (e.g. a long unbreakable word), but whitespace never does:
+ * the space at a soft wrap "hangs" past the line end and would read as a few px too wide.
  */
 function contentRects(el: HTMLElement, style: (el: Element) => CSSStyleDeclaration): Extent[] {
   const box = el.getBoundingClientRect();
@@ -98,18 +102,23 @@ function contentRects(el: HTMLElement, style: (el: Element) => CSSStyleDeclarati
   });
   const rects: Extent[] = [];
   for (const child of el.querySelectorAll("*")) {
+    // Inline boxes include hanging spaces; their text is measured word by word below.
+    if (style(child).display === "inline") continue;
     const r = child.getBoundingClientRect();
-    if (r.width <= 0 && r.height <= 0) continue;
-    rects.push(style(child).display === "inline" ? horizontalOnly(r) : r);
+    if (r.width > 0 || r.height > 0) rects.push(r);
   }
   const doc = el.ownerDocument;
   const walker = doc.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
   const range = doc.createRange();
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if (!n.nodeValue?.trim()) continue;
-    range.selectNodeContents(n);
-    const r = range.getBoundingClientRect();
-    if (r.width > 0 || r.height > 0) rects.push(horizontalOnly(r));
+  let words = 0;
+  for (let n = walker.nextNode(); n && words < MAX_WORDS; n = walker.nextNode()) {
+    for (const word of n.nodeValue?.matchAll(/\S+/g) ?? []) {
+      if (++words > MAX_WORDS) break;
+      range.setStart(n, word.index);
+      range.setEnd(n, word.index + word[0].length);
+      const r = range.getBoundingClientRect();
+      if (r.width > 0 || r.height > 0) rects.push(horizontalOnly(r));
+    }
   }
   return rects;
 }

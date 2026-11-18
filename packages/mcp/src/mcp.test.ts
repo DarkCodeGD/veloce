@@ -203,6 +203,23 @@ describe("building a deck", () => {
     expect(refused.text).toMatch(/last edited by the user[\s\S]*How to fix: .*apply_ops/);
     expect(open.deck.slides[0]?.root.children[0]).toMatchObject({ props: { content: "mine" } });
 
+    // A new session (e.g. after a server restart) can't rebuild the earlier session's slides.
+    await client.close();
+    await workspace.close();
+    await connect();
+    const later = await call("upsert_slide", {
+      slide: { id: "s1", children: [{ type: "text", props: { content: "v3" } }] },
+    });
+    expect(later.text).toMatch(/existed before this session/);
+    // It can still add new slides, and rebuild those.
+    await call("upsert_slide", {
+      slide: { id: "s2", children: [{ type: "text", props: { content: "a" } }] },
+    });
+    const own = await call("upsert_slide", {
+      slide: { id: "s2", children: [{ type: "text", props: { content: "b" } }] },
+    });
+    expect(own.isError).toBe(false);
+
     // Explicit overwrite (the user asked for a redo) still works.
     const forced = await call("upsert_slide", {
       overwrite: true,

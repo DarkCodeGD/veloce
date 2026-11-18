@@ -134,6 +134,20 @@ describe("css helpers", () => {
         url,
       ),
     ).toBe("linear-gradient(90deg, #000 0%, var(--v-color-accent) 100%)");
+    // Radial gradients fit the box: offset 1 is the edge of an ellipse filling it (a glow fades
+    // out inside the shape instead of being cut off at its outline).
+    expect(
+      cssPaint(
+        {
+          type: "radial-gradient",
+          stops: [
+            { offset: 0, color: "#fff" },
+            { offset: 1, color: "transparent" },
+          ],
+        },
+        url,
+      ),
+    ).toBe("radial-gradient(ellipse farthest-side at 50% 50%, #fff 0%, transparent 100%)");
     expect(
       cssPaint({ type: "image", asset: `asset:${"ab".repeat(32)}`, fit: "contain" }, url),
     ).toBe('url("blob:abab") center / contain no-repeat');

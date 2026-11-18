@@ -6,7 +6,7 @@
 
 ## Current status
 
-- **Active phase:** Phase 2: See it + let the AI in (first real-agent trial done; fixes landed)
+- **Active phase:** Phase 2: See it + let the AI in (two real-agent trials done; hardened)
 - **Last updated:** 2026-11-18
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
   are done. `pnpm check` is green (153 tests, including real-Chromium lint and preview tests).
@@ -14,8 +14,9 @@
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
   - **First real Claude Code run:** a 5-slide deck. Its five hiccups are fixed and tested (D37).
-  - **Next:** a second trial on a fresh session, to confirm the fixes and catch anything new.
-    Then Phase 3.
+  - **Second trial:** found the restart overwrite gap, false overflow on wrapped text, radial
+    gradient edges and icon glyphs. All fixed or documented (D38).
+  - **Next:** Phase 3, the manual editor.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -231,7 +232,9 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
 - [ ] `rive`: state machine inputs as props, seekable via clock
 - [ ] `code` (Shiki): syntax highlight, line highlight steps
 - [ ] `math` (KaTeX)
-- [ ] `icon` (Lucide/Iconify)
+- [ ] `icon` (Lucide/Iconify). Motivation from an agent transcript: agents used `↕` and other
+      symbol characters as icons, and they render in a fallback font (Inter only covers text). Until
+      this lands, the design docs tell agents not to use them.
 - [ ] `video`: seek-synced to the clock
 - [ ] `diagram` (Mermaid)
 - [ ] `three`: declarative scene (models, lights, camera, presets) + WebGL context manager (budget < 16 live contexts)

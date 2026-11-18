@@ -42,7 +42,9 @@ export function cssPaint(paint: Paint, assetUrl: AssetUrlResolver): string {
       return `linear-gradient(${paint.angle ?? 180}deg, ${gradientStops(paint.stops)})`;
     case "radial-gradient": {
       const { x, y } = paint.center ?? { x: 0.5, y: 0.5 };
-      return `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${gradientStops(paint.stops)})`;
+      // farthest-side: offset 1 reaches the box edges, so a centered gradient ends exactly at
+      // an ellipse shape's outline (CSS's default, farthest-corner, ends outside it).
+      return `radial-gradient(ellipse farthest-side at ${x * 100}% ${y * 100}%, ${gradientStops(paint.stops)})`;
     }
     case "image": {
       const url = cssUrl(assetUrl(paint.asset.slice("asset:".length)));

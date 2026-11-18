@@ -39,6 +39,25 @@ export interface ToolContext {
   /** Why `render` is null, shown to agents. */
   renderUnavailable?: string;
   origin: AgentOrigin;
+  /** State of this MCP session (one agent connection). */
+  session: AgentSession;
+}
+
+/**
+ * What one agent connection has done. Agents may only rebuild slides they created in this
+ * session: everything else (the user's slides, earlier sessions', other agents') is protected,
+ * across server restarts too, because the set starts empty for every connection.
+ */
+export class AgentSession {
+  readonly #created = new Set<string>();
+
+  created(deckId: string, slideId: string): boolean {
+    return this.#created.has(`${deckId}/${slideId}`);
+  }
+
+  markCreated(deckId: string, slideIds: Iterable<string>): void {
+    for (const id of slideIds) this.#created.add(`${deckId}/${id}`);
+  }
 }
 
 export type ToolContent =
@@ -161,6 +180,11 @@ async function commit(
     const at = result.error.opIndex !== undefined ? `ops[${result.error.opIndex}]` : undefined;
     throw new ToolError({ ...result.error, ...(at && !result.error.path && { path: at }) });
   }
+  const existed = new Set(before.slides.map((s) => s.id));
+  ctx.session.markCreated(
+    open.id,
+    result.deck.slides.filter((s) => !existed.has(s.id)).map((s) => s.id),
+  );
   return { before, after: result.deck };
 }
 
@@ -236,12 +260,20 @@ const upsertSlide = defineTool({
     const open = await currentDeck(ctx);
     const normalized = normalizeSlide(input);
     const existing = findSlide(open.deck, normalized.id);
-    const editor = existing && open.lastEditor(normalized.id);
-    if (editor && editor !== ctx.origin && !overwrite) {
-      throw new ToolError({
-        message: `Slide ${normalized.id} was last edited by ${editor === "user" ? "the user" : editor}; replacing it would discard their changes.`,
-        hint: "Change specific nodes with apply_ops (node.update / node.insert / node.remove by ID). Pass overwrite: true only if the user asked you to redo this slide.",
-      });
+    if (existing && !overwrite) {
+      const editor = open.lastEditor(normalized.id);
+      const who =
+        editor && editor !== ctx.origin
+          ? `was last edited by ${editor === "user" ? "the user" : editor}`
+          : !ctx.session.created(open.id, normalized.id)
+            ? "existed before this session (the user's work or an earlier session's)"
+            : null;
+      if (who) {
+        throw new ToolError({
+          message: `Slide ${normalized.id} ${who}; replacing it would discard that work.`,
+          hint: "Change specific nodes with apply_ops (node.update / node.insert / node.remove by ID), or add a new slide with a new ID. Pass overwrite: true only if the user asked you to redo this slide.",
+        });
+      }
     }
     // Replacing keeps the slide's root frame ID, so references to the slide frame stay valid.
     const slide = existing
@@ -265,6 +297,7 @@ const upsertSlide = defineTool({
         ];
     const label = `${existing ? "Replace" : "Add"} slide ${slide.name ? `"${slide.name}"` : slide.id}`;
     const { after } = await commit(ctx, open, label, ops);
+    ctx.session.markCreated(open.id, [slide.id]); // rebuilt by this session: its own now
     const position = after.slides.findIndex((s) => s.id === slide.id);
     const saved = after.slides[position];
     return text(

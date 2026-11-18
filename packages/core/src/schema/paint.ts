@@ -21,6 +21,10 @@ export const LinearGradientSchema = z.strictObject({
   stops: z.array(GradientStopSchema).min(2).max(16),
 });
 
+/**
+ * Elliptical, fitted to the box: from `center` (offset 0) out to the farthest box side
+ * (offset 1). Centered, offset 1 is exactly the edge of an ellipse shape filling the box.
+ */
 export const RadialGradientSchema = z.strictObject({
   type: z.literal("radial-gradient"),
   /** Center as fractions of the box (0–1). Default: the middle. */

@@ -9,6 +9,7 @@ export * from "./input.js";
 export { agentOrigin, VeloceMcp, type VeloceMcpOptions } from "./server.js";
 export { deckSummary, formatLint, slideOutline } from "./summary.js";
 export {
+  AgentSession,
   callTool,
   TOOLS,
   type ToolContext,

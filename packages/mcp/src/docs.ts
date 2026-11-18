@@ -9,7 +9,7 @@ import type { PluginRegistry } from "@veloce/plugin-api";
 export const INSTRUCTIONS = `Veloce builds presentation decks. The user watches the deck update live in the Veloce editor.
 
 Workflow:
-1. get_deck_summary to see the current deck (or create_deck for a new one, choosing a theme).
+1. get_deck_summary to see the current deck. If it already has slides and the user asks for a new presentation, create_deck (choosing a theme) instead of changing theirs.
 2. Build each slide with upsert_slide: describe structure (frames with stack/grid layout), not pixel positions. The engine lays it out.
 3. Read the lint issues returned with every change and fix them (overflow, contrast, overlaps).
 4. render_preview a slide to check it visually when it matters. Fix, then move on.
@@ -18,7 +18,7 @@ Rules:
 - Use theme tokens ("$color.primary", "$text.h1", "$space.lg"), not raw colors and font sizes.
 - One idea per slide, short text, strong hierarchy. Detail goes in speaker notes.
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
-- Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours.
+- Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 
 Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("element/text").`;
 
@@ -65,6 +65,7 @@ const DESIGN = `# Design rules
 - **Whitespace:** keep the slide padding; prefer $space tokens for gaps. Don't fill every pixel.
 - **Consistency:** same layout for slides of the same kind; same title position across content slides.
 - **Color:** text on $color.background or $color.surface uses $color.text/$color.muted; text on $color.primary uses $color.on-primary. Accent colors for emphasis only.
+- **Icons:** there is no icon element yet. Don't use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font. Use shapes, numbers or short words instead.
 - **Numbers:** show a big number ($text.display, $color.primary) with a short caption instead of a sentence.
 - **Check your work:** fix every lint error; run render_preview on slides with images, many elements or custom layouts.`;
 

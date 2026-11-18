@@ -306,3 +306,27 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
 5. **New `empty-space` rule (info).** It fires when more than 40% of the slide height is empty
    above or below all elements. **Why:** agents that skip previews can't see unbalanced slides.
    The rule only measures elements, because fill frames span the slide anyway.
+
+### D38: Hardening from the second agent transcript (2026-11-18)
+
+1. **Agents may only rebuild slides their own MCP session created.** `upsert_slide` refuses to
+   replace any other slide (the user's, an earlier session's, another agent's, or anything that
+   existed before a server restart) unless the agent passes `overwrite: true`. This tightens
+   D37 #4. The ownership set lives in `AgentSession`, one per MCP connection, so it starts empty
+   after a restart. The instructions also tell agents to `create_deck` for a new presentation
+   instead of reworking the user's deck. **Why:** D37's last-editor check is in memory, and
+   every Claude Code session shares the origin `agent:claude-code`. After a restart, a new
+   session could silently replace the user's slides, and the undo history would be gone.
+2. **Text is measured word by word horizontally.** Whitespace never counts as content.
+   **Why:** at a soft wrap the line's trailing space hangs past the box, which produced false
+   3–9px "too wide" errors on wrapped text in every alignment. Agents were rewriting good copy to
+   silence them. This extends D31.
+3. **Radial gradients are `ellipse farthest-side`.** Offset 1 reaches the box sides, so a centered
+   gradient ends exactly on an ellipse shape's outline. **Why:** with CSS's default
+   (farthest-corner), glows were cut off with a hard edge. `closest-side` was rejected because it
+   collapses to nothing when the center is on a corner. This changes how existing radial fills
+   render, which is acceptable before the file format is frozen.
+4. **No icon glyphs until the `icon` plugin lands (Phase 5).** The design docs tell agents not to
+   use symbol characters as icons. **Why:** the bundled fonts cover text only, so symbols fall
+   back to a mismatched system font. Bundling symbol fonts would be the wrong fix; icons should
+   be vector elements.
