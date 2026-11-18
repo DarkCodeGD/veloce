@@ -6,11 +6,11 @@
 
 ## Current status
 
-- **Active phase:** Phase 1 — Foundation (not started)
+- **Active phase:** Phase 2: See it + let the AI in (not started)
 - **Last updated:** 2026-11-18
-- **Notes:** Phase 0 done: monorepo wired, `pnpm check` green (lint + typecheck + 28 tests).
-  Packages contain placeholder `packageName`/`dependsOn` exports + smoke tests; replace them as
-  each package gets real code. Nothing committed yet (user commits on request). Next: core schema.
+- **Notes:** Phase 1 done: `pnpm check` green (lint + typecheck + 117 tests, no build needed).
+  `renderer`, `doc-server`, `mcp`, `server`, `editor`, `desktop` are still placeholders.
+  Next: renderer (deck → DOM with the plugin registry), then doc-server, then MCP.
 
 ---
 
@@ -83,46 +83,56 @@ plain Three.js inside the 3D plugin (plugins are framework-agnostic).
 
 **Done when:** `pnpm install && pnpm build && pnpm test` passes on an empty-but-wired monorepo. ✅
 
-## Phase 1 — Foundation (`core`, `format`, `plugin-api`)
+## Phase 1 — Foundation (`core`, `format`, `plugin-api`) ✅ (2026-11-18)
 
-**Schema (`core`)**
+**Schema (`core`)**: `packages/core/src/schema/`
 
-- [ ] IDs: stable string IDs (nanoid), never array indexes
-- [ ] `Deck`: id, formatVersion, meta (title, author, dates), themeRef/theme, slides[], assets registry, plugin requirements
-- [ ] `Slide`: id, name, background, root `Frame`, speaker notes, timeline (stub until Phase 4)
-- [ ] `Frame` (auto-layout): direction, gap, padding, align, justify, wrap, or `absolute` mode
-- [ ] `Element`: id, `type` (plugin type id), `props` (validated by plugin's schema), sizing (`fixed` | `hug` | `fill`), position (only when parent is absolute), rotation, opacity, locked, hidden, name
-- [ ] Rich text model (paragraphs → runs with marks), compatible with TipTap JSON
-- [ ] Theme tokens: colors, type scale, font families, spacing, radii, shadows; props may reference tokens (`$color.primary`)
-- [ ] Stage: fixed 1920×1080 logical units (aspect ratio configurable later)
+- [x] IDs: stable strings; callers may choose readable IDs, builders generate `nd_…`/`sl_…`; slides and nodes share one namespace (D17)
+- [x] `Deck`: id, formatVersion, meta (title, description, authors, language), stage, theme, slides[], assets registry. Plugin requirements are derived at save time (`registry.lockFor`), not stored
+- [x] `Slide`: id, name, background, notes, hidden, root frame. (Timeline is added in Phase 4 as an optional field; no stub)
+- [x] `Frame` auto-layout: `stack` (direction, gap, padding, align, justify, wrap), `grid` (columns, gap, rowGap), `absolute`; frame style (fill, stroke, radius, shadow, clip)
+- [x] `Element`: id, `type`, `props`, width/height (`number | "hug" | "fill"`), position, rotation, opacity, locked, hidden, name
+- [x] Rich text model (paragraphs → runs with marks, lists, links). Own model; the TipTap mapping comes in Phase 3
+- [x] Theme tokens: colors, fonts, text styles, space, radius, shadow; refs like `$color.primary`; `themeToCssVariables`
+- [x] Stage: 1920×1080 default, configurable per deck
 
-**Ops & transactions (`core`)**
+**Ops & transactions (`core`)**: `ops/`, `transaction.ts`, `document.ts`
 
-- [ ] Op set: `slide.add/remove/move`, `node.insert/remove/move`, `node.update` (partial props), `deck.setTheme`, `deck.updateMeta`, `asset.add/remove`
-- [ ] Each op returns its inverse; `apply(deck, ops)` is pure and validates the result
-- [ ] Transactions: `{ id, origin, label, ops }`, applied atomically (all or nothing)
-- [ ] Undo/redo stacks per origin; "undo last agent transaction"
-- [ ] Actionable errors: invalid id → message lists valid ids / nearest matches
+- [x] 12 ops: `slide.insert/remove/move/update`, `node.insert/remove/move/update`, `deck.updateMeta`, `deck.setTheme`, `asset.add/remove`
+- [x] Pure `applyOp` with exact inverse; immutable path copying (untouched subtrees shared)
+- [x] Updates use JSON Merge Patch + discriminator rule; prototype-pollution keys dropped (D18)
+- [x] Transactions `{ id, origin, label, ops }`: validated, atomic
+- [x] `DeckDocument`: per-origin undo/redo, conflicting undo fails cleanly and is dropped, history cap (D19)
+- [x] Actionable errors: codes, paths, "Did you mean…" (closest only), slide/node mix-up hints
 
 **File format (`format`)**
 
-- [ ] `.veloce` = zip: `manifest.json`, `document.json`, `theme.json`, `plugins.lock.json`, `assets/<sha256>.<ext>`, `fallbacks/`, `preview.png`
-- [ ] Read/write in both Node and browser (fflate)
-- [ ] `formatVersion` + migration registry (`migrate(doc, from, to)`), tested from v1
-- [ ] Assets content-hashed & deduplicated; no base64 inside `document.json`
+- [x] `.veloce` zip: manifest (first, stored), document, theme, plugins.lock, `assets/<sha256>.<ext>`, `fallbacks/<id>.png`, preview
+- [x] Works in Node and browser (fflate + Web Crypto, no Node/DOM APIs)
+- [x] `formatVersion` + migration registry (`migrateDocument`), TOO_NEW error for files from newer versions
+- [x] Content-addressed assets, hash-verified on read and write; never base64 in JSON
+- [x] Hardened reader: path traversal, entry/size caps (declared + actual), unknown entries skipped (D21)
+- [x] Writer refuses invalid decks / mismatched assets; reproducible output for a fixed timestamp
 
 **Plugin contract (`plugin-api`)**
 
-- [ ] `VelocePlugin`: `manifest` (id, version, elementTypes, deterministic, permissions), `propsSchema`, `aiDocs`, `mount(el, props, ctx) → Instance`
-- [ ] `Instance`: `update(props)`, `seek(t)`, `renderStatic() → Blob`, `measure?()`, `dispose()`
-- [ ] Plugin registry (register, lookup, list with schemas)
-- [ ] Conformance test kit: mount/update/seek/dispose, no leaked DOM/listeners/WebGL contexts, static render works
-- [ ] Built-in plugins `text`, `shape`, `image` implemented via the contract
+- [x] `ElementDefinition`: type, title, description, `propsSchema` (zod), `defaultProps`, `defaultSize`, `deterministic`, `aiDocs`, `mount()` (D22)
+- [x] `ElementInstance`: `update`, `seek(seconds)`, `dispose` (idempotent), optional `renderStatic`
+- [x] `PluginRegistry`: register (manifest + namespacing checks), `validateElement` → core, `describe()` with JSON Schema, `lockFor(deck)`
+- [x] CSS helpers: tokens → `var(--v-…)`, paints, borders, shadows
+- [x] Conformance kit: lifecycle, container ownership, determinism, leaks (listeners incl. window/AbortSignal/once, timers, rAF, DOM). WebGL-context tracking is added with the `three` plugin (Phase 5)
+- [x] Built-in plugins `@veloce/plugin-text` (XSS-safe, semantic lists), `@veloce/plugin-shape`, `@veloce/plugin-image` (assets only, alt required)
 
 **Done when:** a test builds a deck purely through transactions, saves `.veloce`, loads it back
 identically, and per-origin undo/redo works. Built-in plugins pass the conformance kit.
+✅ `tests/integration/phase1.test.ts`
 
 ## Phase 2 — See it + let the AI in (`renderer`, `doc-server`, `mcp`, view-only `editor`)
+
+> Notes from Phase 1:
+> - Load SVG assets only via `<img>` (scripts in SVG must never run).
+> - The MCP server (Node) needs plugin schemas + `aiDocs` but not `mount()` (DOM). If importing plugins into Node gets awkward, split each plugin into a DOM-free definition module and a render module.
+> - Allow `apps/*` to depend on `@veloce/plugin-*` in `scripts/architecture.test.ts` when wiring them.
 
 **Renderer**
 

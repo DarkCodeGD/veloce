@@ -42,3 +42,5 @@ dependency licenses matter (check a library's license before adding it).
 - `pnpm format` auto-fixes formatting (Biome also formats Markdown).
 - New package/dependency between packages → update `scripts/architecture.test.ts` + DECISIONS.md.
 - Respect pnpm's minimum-release-age policy: never add `minimumReleaseAgeExclude`; pin an older version.
+- Plugins live in `plugins/<name>` as `@veloce/plugin-<name>`; every plugin test runs `checkElementConformance`.
+- `tests/integration/` holds per-phase acceptance tests (the roadmap's "Done when").

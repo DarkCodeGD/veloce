@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/plugin-image",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Built-in image element: content-addressed images with fit, focus point and alt text.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/plugin-api": "workspace:*"
+  }
+}

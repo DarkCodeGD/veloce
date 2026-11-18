@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/plugin-text",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Built-in text element: headings, paragraphs, lists and rich text styled by theme tokens.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/plugin-api": "workspace:*"
+  }
+}

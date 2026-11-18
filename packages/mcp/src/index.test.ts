@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { dependsOn, packageName } from "./index.js";
+import { packageName } from "./index.js";
 
-describe("@veloce/mcp (workspace wiring)", () => {
-  it("exports its package name", () => {
+describe("@veloce/mcp (placeholder)", () => {
+  it("builds and exports its name", () => {
     expect(packageName).toBe("@veloce/mcp");
-  });
-
-  it("resolves its workspace dependencies", () => {
-    expect(dependsOn).toEqual(["@veloce/core", "@veloce/doc-server"]);
   });
 });

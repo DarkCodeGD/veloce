@@ -1,11 +1,12 @@
 /**
- * @veloce/plugin-api: Plugin contract, registry and conformance test kit. Built-in elements use this same API.
+ * @veloce/plugin-api: the contract every element plugin (built-in or third-party) implements,
+ * the registry that validates elements against it, CSS helpers, and the conformance kit.
  *
- * Phase 0 placeholder. Real implementation lands per docs/ROADMAP.md.
+ * Plugins should import `z` from here (not from "zod" directly) so the whole app shares a
+ * single zod instance and JSON Schema generation works across plugins.
  */
-import { packageName as core } from "@veloce/core";
-
-export const packageName = "@veloce/plugin-api";
-
-/** Workspace packages this package depends on (checked by the smoke test). */
-export const dependsOn: readonly string[] = [core];
+export { z } from "zod";
+export * from "./conformance.js";
+export * from "./css.js";
+export * from "./registry.js";
+export * from "./types.js";

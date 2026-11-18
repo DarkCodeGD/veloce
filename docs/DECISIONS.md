@@ -107,3 +107,66 @@ patent grant that MIT lacks. Compatible with GSAP's no-charge license being a no
 - **Architecture guard:** `scripts/architecture.test.ts` holds the allowed dependency graph.
 - **Supply-chain:** pnpm's minimum-release-age policy stays on. Don't add `minimumReleaseAgeExclude`
   entries. If a just-published version is blocked, pin the previous release instead.
+
+### D17: Caller-chosen IDs in one namespace per deck (2026-11-18)
+
+IDs are any 1–64 char `[A-Za-z0-9_-]` string, unique across all slides **and** nodes of a deck.
+Builders generate prefixed IDs (`sl_…`, `nd_…`); agents may pick readable ones (`"title"`).
+**Why:** an agent can insert a node and reference it later in the same batch without a round
+trip, and an ID always means exactly one thing (errors can say "that's a slide, not a node").
+
+### D18: "Absent means default" + JSON Merge Patch for updates (2026-11-18)
+
+Optional fields are omitted rather than stored with default values, and documents never contain
+`null`. Updates use RFC 7386 merge patch (`null` deletes). Extension: if a patch changes a tagged
+object's variant (layout `mode`, paint `type` with core-known values), the object is replaced, not
+merged. Keys `__proto__`/`constructor`/`prototype` are dropped. **Why:** compact JSON is cheaper
+for agents to read, merge patch is a standard agents already know, and the discriminator rule
+lets `{ layout: { mode: "grid", columns: 3 } }` work in one call.
+
+### D19: Undo applies inverse ops as a new change (2026-11-18)
+
+Each origin has its own undo/redo stacks of inverse ops. Undo applies them on top of the current
+deck. If another participant's later edit makes that impossible, the undo fails with a readable
+reason and the entry is dropped (no history rewriting, no OT/CRDT). Inverse updates only revert the
+fields that changed. **Why:** simplest model that's correct for human + agent co-editing on a
+server-owned document; per-field inverses keep others' edits to the same node intact.
+
+### D20: Content-addressed assets, referenced as `"asset:<sha256>"` (2026-11-18)
+
+Asset ID = SHA-256 of the bytes. Anything referencing an asset uses the `asset:` prefix, so core
+finds references inside plugin props without knowing plugin schemas (used for "can't remove an asset
+in use" and file validation). No remote URLs in documents. **Why:** dedupe, integrity checks, and
+self-contained decks that work offline and never contact third-party servers when opened.
+
+### D21: Treat every .veloce file as hostile (2026-11-18)
+
+The reader blocks unsafe paths, caps entry count / per-entry / total size (checked against both the
+zip's declared sizes and the actual bytes), ignores unknown entries, re-hashes every asset, migrates,
+then fully validates. The writer refuses anything it couldn't read back. **Why:** a FOSS app opens
+files from strangers; zip bombs, path traversal and corrupted assets must fail safely and clearly.
+
+### D22: Plugin contract details (2026-11-18)
+
+- The renderer owns the container element; plugins only add children (checked by the kit).
+- `seek(time)` takes **seconds** on the slide timeline. `dispose()` must be idempotent.
+- `renderStatic()` is optional: DOM/canvas capture covers most elements.
+- Third-party element types are namespaced (`acme.sparkles`); bare names are for `veloce.*` plugins.
+- Plugins import `z` from `@veloce/plugin-api` so the app shares one zod instance.
+- Schemas must convert to JSON Schema (kit checks it): use regex strings, not `z.custom`.
+
+**Why:** clear ownership prevents renderer/plugin fights; namespacing prevents collisions; the
+conformance kit turns "don't leak" from advice into an automatic check.
+
+### D23: Zero-dependency crypto via Web Crypto (2026-11-18)
+
+IDs (`getRandomValues`, unbiased) and SHA-256 (`crypto.subtle`) use `globalThis.crypto`, typed
+locally so `core` stays free of DOM/Node typings. **Why:** fewer dependencies = smaller
+supply-chain surface; Web Crypto is available in Node 22 and every browser.
+
+### D24: Tests always run against source (2026-11-18)
+
+Vitest resolves the `@veloce/source` export condition in both browser-like (`resolve.conditions`)
+and Node (`ssr.resolve.conditions`) environments. **Why:** found in Phase 1. With only the first
+set, cross-package tests in Node silently used stale `dist/` builds. `pnpm test` must pass with
+no `dist/` folders at all.

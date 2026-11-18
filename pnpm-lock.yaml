@@ -181,12 +181,33 @@ importers:
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      '@veloce/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@veloce/format':
+        specifier: workspace:*
+        version: link:packages/format
+      '@veloce/plugin-api':
+        specifier: workspace:*
+        version: link:packages/plugin-api
+      '@veloce/plugin-image':
+        specifier: workspace:*
+        version: link:plugins/image
+      '@veloce/plugin-shape':
+        specifier: workspace:*
+        version: link:plugins/shape
+      '@veloce/plugin-text':
+        specifier: workspace:*
+        version: link:plugins/text
+      happy-dom:
+        specifier: 21.0.4
+        version: 21.0.4
       typescript:
         specifier: 7.0.2
         version: 7.0.2
       vitest:
         specifier: 5.1.0
-        version: 5.1.0(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5))
+        version: 5.1.0(@types/node@22.20.5)(happy-dom@21.0.4)(vite@8.3.8(@types/node@22.20.5))
 
   apps/desktop:
     dependencies:
@@ -218,7 +239,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mcp
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/doc-server:
     dependencies:
@@ -234,6 +259,12 @@ importers:
       '@veloce/core':
         specifier: workspace:*
         version: link:../core
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/mcp:
     dependencies:
@@ -249,6 +280,9 @@ importers:
       '@veloce/core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/renderer:
     dependencies:
@@ -258,6 +292,33 @@ importers:
       '@veloce/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+
+  plugins/image:
+    dependencies:
+      '@veloce/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@veloce/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+
+  plugins/shape:
+    dependencies:
+      '@veloce/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@veloce/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+
+  plugins/text:
+    dependencies:
+      '@veloce/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@veloce/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
 
 packages:
 
@@ -478,6 +539,12 @@ packages:
   '@types/node@22.20.5':
     resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
     engines: {node: '>=16.20.0'}
@@ -616,6 +683,10 @@ packages:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
 
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
+
   chai@6.3.0:
     resolution: {integrity: sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==}
     engines: {node: '>=18'}
@@ -623,6 +694,10 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  entities@7.0.1:
+    resolution: {integrity: sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==}
+    engines: {node: '>=0.12'}
 
   es-module-lexer@2.3.2:
     resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
@@ -643,10 +718,17 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
+    engines: {node: '>=20.0.0'}
 
   lightningcss-android-arm64@1.33.0:
     resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
@@ -864,10 +946,29 @@ packages:
       jsdom:
         optional: true
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   why-is-node-running@3.2.1:
     resolution: {integrity: sha512-Tb2FUhB4vUsGQlfSquQLYkApkuPAFQXGFzxWKHHumVz2dK+X1RUm/HnID4+TfIGYJ1kTcwOaCk/buYCEJr6YjQ==}
     engines: {node: '>=20.11'}
     hasBin: true
+
+  ws@8.23.0:
+    resolution: {integrity: sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -1020,6 +1121,12 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 22.20.5
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
 
@@ -1093,9 +1200,15 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 22.20.5
+
   chai@6.3.0: {}
 
   detect-libc@2.1.2: {}
+
+  entities@7.0.1: {}
 
   es-module-lexer@2.3.2: {}
 
@@ -1109,8 +1222,23 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fflate@0.8.3: {}
+
   fsevents@2.3.3:
     optional: true
+
+  happy-dom@21.0.4:
+    dependencies:
+      '@types/node': 22.20.5
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.2
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.23.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   lightningcss-android-arm64@1.33.0:
     optional: true
@@ -1253,7 +1381,7 @@ snapshots:
       '@types/node': 22.20.5
       fsevents: 2.3.3
 
-  vitest@5.1.0(@types/node@22.20.5)(vite@8.3.8(@types/node@22.20.5)):
+  vitest@5.1.0(@types/node@22.20.5)(happy-dom@21.0.4)(vite@8.3.8(@types/node@22.20.5)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.1.0(vite@8.3.8(@types/node@22.20.5))
@@ -1271,7 +1399,14 @@ snapshots:
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 22.20.5
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
 
+  whatwg-mimetype@3.0.0: {}
+
   why-is-node-running@3.2.1: {}
+
+  ws@8.23.0: {}
+
+  zod@4.6.7: {}

@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/plugin-shape",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Built-in shape element: rectangles and ellipses with fills, gradients and strokes.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/plugin-api": "workspace:*"
+  }
+}

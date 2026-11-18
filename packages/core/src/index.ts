@@ -1,9 +1,22 @@
 /**
- * @veloce/core: Deck schema, ops, transactions, per-origin undo, theme tokens and lint rules. Pure TypeScript: no DOM, no Node APIs.
+ * @veloce/core: the document model and the rules for changing it.
  *
- * Phase 0 placeholder. Real implementation lands per docs/ROADMAP.md.
+ * Pure TypeScript: no DOM, no Node APIs (enforced by this package's compiler settings).
+ * Used by the editor, the doc-server, the MCP server and every plugin.
  */
-export const packageName = "@veloce/core";
-
-/** Workspace packages this package depends on (checked by the smoke test). */
-export const dependsOn: readonly string[] = [];
+export * from "./assets.js";
+export * from "./builders.js";
+export * from "./checks.js";
+export * from "./default-theme.js";
+export * from "./document.js";
+export * from "./errors.js";
+export * from "./ids.js";
+export * from "./json.js";
+export * from "./ops/apply.js";
+export * from "./ops/schema.js";
+export * from "./schema/index.js";
+export * from "./suggest.js";
+export * from "./tokens.js";
+export * from "./transaction.js";
+export * from "./tree.js";
+export * from "./validate.js";

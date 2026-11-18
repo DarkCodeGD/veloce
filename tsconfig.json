@@ -27,6 +27,15 @@
     },
     {
       "path": "./apps/desktop"
+    },
+    {
+      "path": "./plugins/text"
+    },
+    {
+      "path": "./plugins/shape"
+    },
+    {
+      "path": "./plugins/image"
     }
   ]
 }

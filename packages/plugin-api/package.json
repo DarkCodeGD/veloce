@@ -16,6 +16,7 @@
     "dist"
   ],
   "dependencies": {
-    "@veloce/core": "workspace:*"
+    "@veloce/core": "workspace:*",
+    "zod": "4.6.7"
   }
 }
