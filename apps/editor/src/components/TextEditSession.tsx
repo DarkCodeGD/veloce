@@ -226,13 +226,17 @@ function TextToolbar({ editor, anchor }: { editor: Editor; anchor: Point }) {
   };
   const applyLink = () => {
     const text = link?.trim() ?? "";
+    const href = text ? normalizeLink(text) : null;
+    // Validate before building the chain: TipTap's `focus()` schedules the editor's focus as
+    // soon as it's chained, even if the chain never runs. Building it first made a refused
+    // link hand the focus back to the editor a frame later, so the corrected address was
+    // typed over the selected text.
+    if (text && !href) return setInvalid(true);
     const chain = editor.chain().focus(undefined, { scrollIntoView: false });
-    if (!text) {
+    if (!href) {
       chain.extendMarkRange("link").unsetLink().run();
       return closeLink();
     }
-    const href = normalizeLink(text);
-    if (!href) return setInvalid(true);
     if (editor.state.selection.empty && !editor.isActive("link")) {
       // Nothing selected: insert the address itself as the link text.
       chain.insertContent({ type: "text", text, marks: [{ type: "link", attrs: { href } }] }).run();

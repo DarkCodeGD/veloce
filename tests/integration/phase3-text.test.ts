@@ -229,6 +229,14 @@ describe.skipIf(problem !== null)("Phase 3: typing on the slide", { timeout: 60_
     await field.fill("javascript:alert(1)");
     await field.press("Enter");
     expect(await field.getAttribute("aria-invalid")).toBe("true");
+    // A refused address keeps the focus in the field, frames later too (it used to jump back
+    // to the editor a frame later, so the corrected address replaced the selected text).
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe(
+      "Link address",
+    );
     await field.fill("veloce.dev");
     await field.press("Enter");
     await expect.poll(editorFocused).toBe(true);
