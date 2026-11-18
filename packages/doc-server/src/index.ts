@@ -6,6 +6,7 @@
  * - `SyncHub`: the sync protocol for editor clients, independent of the transport.
  * - `RenderService`: contract for headless measuring/screenshots (implemented by the apps).
  */
+export * from "./asset-import.js";
 export * from "./fs.js";
 export * from "./open-deck.js";
 export * from "./render.js";

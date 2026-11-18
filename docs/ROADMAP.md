@@ -6,10 +6,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor (left: asset import)
+- **Active phase:** Phase 3 complete; next is Phase 4: Motion
 - **Last updated:** 2026-11-19
-- **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (297 tests, including real-Chromium lint, preview and editor tests).
+- **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
+  are done. `pnpm check` is green (328 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -42,8 +42,13 @@
     warnings, font pickers over six bundled fonts (two new themes, Paper and Studio, use
     them), font previews in dropdowns, and "snap to the nearest theme color".
     `tests/integration/phase3-theme.test.ts` covers it.
-  - **Next:** asset import (drag and drop images and fonts; also lets images be pasted between
-    decks). Text color/alignment/style controls in the text toolbar.
+  - **Assets (D48):** drop or paste images and fonts onto the canvas, "Replace…" an image in
+    the inspector, "Add font file…" in the theme, and images that travel with layers pasted
+    between decks. Agents get `add_asset`. The server sniffs every file. Fonts are named
+    from their own `name` table and offered in the theme's font pickers.
+    `tests/integration/phase3-assets.test.ts` covers it.
+  - **Next:** Phase 4 (Motion). Left over from Phase 3: text color/alignment/style controls
+    in the text toolbar.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -231,9 +236,8 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 - [x] Inspector panel auto-generated from each plugin's `propsSchema`
 - [x] Slide panel: add, duplicate, delete, reorder (drag, or Alt+↑/↓) (D45)
 - [x] Theme picker + token-aware color/font pickers (D47)
-- [ ] Asset import (drag & drop images/fonts/files → content-hashed assets)
-- [x] Clipboard (copy/paste within and between decks), keyboard shortcuts (D45)
-  - Images can't be pasted between decks until asset import lands.
+- [x] Asset import (drag & drop or paste images/fonts → content-hashed assets; MCP `add_asset`) (D48)
+- [x] Clipboard (copy/paste within and between decks, images included), keyboard shortcuts (D45, D48)
 - [x] Undo/redo for the `user` origin only; history panel shows agent transactions too (D46)
 
 **Done when:** a full deck can be built by hand; human and agent edit concurrently without

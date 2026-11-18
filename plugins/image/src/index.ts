@@ -19,7 +19,7 @@ export type ImageProps = z.infer<typeof ImagePropsSchema>;
 
 const AI_DOCS = `# image
 
-Photos, logos, screenshots and illustrations. The image must be a deck asset. Add the file first, then reference it as \`"asset:<sha256>"\`.
+Photos, logos, screenshots and illustrations. The image must be a deck asset: add the file with add_asset (a local path or base64), then use the \`"asset:<sha256>"\` it returns. Remote URLs aren't supported.
 
 **Props**
 - \`asset\` (required): \`"asset:<sha256>"\`

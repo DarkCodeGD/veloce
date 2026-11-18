@@ -4,7 +4,7 @@
  *   /render.html the headless render page (used by the render worker)
  *   /ws          live sync for editor tabs (WebSocket)
  *   /mcp         the MCP endpoint for AI agents (Streamable HTTP)
- *   /api/...     health, deck assets
+ *   /api/...     health, deck assets (GET), asset upload (POST /api/decks/:id/assets)
  *
  * Security (it's a local server, but any website the user visits can try to reach it):
  * - Binds to loopback only by default.
@@ -19,7 +19,7 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import type { ServerMessage } from "@veloce/core";
+import { MAX_ASSET_BYTES, type ServerMessage } from "@veloce/core";
 import { type RenderService, SyncHub, type Workspace } from "@veloce/doc-server";
 import { VeloceMcp } from "@veloce/mcp";
 import type { PluginRegistry } from "@veloce/plugin-api";
@@ -76,6 +76,12 @@ const PAGE_CSP = [
 ].join("; ");
 
 const ASSET_ROUTE = /^\/api\/decks\/([A-Za-z0-9_-]{1,64})\/assets\/([0-9a-f]{64})$/;
+const UPLOAD_ROUTE = /^\/api\/decks\/([A-Za-z0-9_-]{1,64})\/assets$/;
+/**
+ * Uploads must carry this header. A cross-site page can't send a custom header without a CORS
+ * preflight, which this server never grants: defense in depth on top of the Origin check.
+ */
+export const UPLOAD_HEADER = "x-veloce-upload";
 
 export async function startVeloceServer(options: VeloceServerOptions): Promise<VeloceServer> {
   const host = options.host ?? "127.0.0.1";
@@ -113,6 +119,8 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
     }
     const asset = ASSET_ROUTE.exec(path);
     if (asset && req.method === "GET") return serveAsset(res, asset[1] ?? "", asset[2] ?? "");
+    const upload = UPLOAD_ROUTE.exec(path);
+    if (upload && req.method === "POST") return receiveAsset(req, res, upload[1] ?? "");
     if (path.startsWith("/api/")) return sendText(res, 404, "Not found");
     if (req.method !== "GET" && req.method !== "HEAD")
       return sendText(res, 405, "Method not allowed");
@@ -145,6 +153,33 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
       "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
     });
     res.end(bytes);
+  }
+
+  /**
+   * POST /api/decks/:id/assets, the raw file as the body (file name in `x-veloce-filename`,
+   * URI-encoded). The server works out what the file is; the reply is `{ id, info }` for an
+   * `asset.add` op, or `{ error }` saying what's wrong. Stores the bytes only: the document
+   * changes when the client applies `asset.add` in a transaction, like every other change.
+   */
+  async function receiveAsset(req: IncomingMessage, res: ServerResponse, deckId: string) {
+    if (req.headers[UPLOAD_HEADER] !== "1") {
+      return sendJson(res, 403, { error: `Uploads need the "${UPLOAD_HEADER}: 1" header` });
+    }
+    if (!options.workspace.has(deckId)) return sendJson(res, 404, { error: "No such deck" });
+    // Too big: say so, then drop the connection instead of reading the rest.
+    const refuseTooBig = () => {
+      res.once("finish", () => req.destroy());
+      sendJson(res, 413, { error: `Files can be at most ${MAX_ASSET_BYTES / 1024 ** 2} MiB` });
+    };
+    if (Number(req.headers["content-length"] ?? 0) > MAX_ASSET_BYTES) return refuseTooBig();
+    const body = await readBody(req, MAX_ASSET_BYTES);
+    if (!body) return refuseTooBig();
+    const encodedName = req.headers["x-veloce-filename"];
+    const fileName = typeof encodedName === "string" ? safeDecode(encodedName) : null;
+    const deck = await options.workspace.get(deckId);
+    const result = await deck.importAsset(body, fileName ?? undefined);
+    if (!result.ok) return sendJson(res, 415, { error: result.message });
+    sendJson(res, 201, { id: result.id, info: result.info });
   }
 
   async function serveStatic(res: ServerResponse, path: string): Promise<void> {
@@ -263,6 +298,26 @@ function sendText(res: ServerResponse, status: number, text: string): void {
     "x-content-type-options": "nosniff",
   });
   res.end(text);
+}
+
+/** The request body, or null once it goes over `limit` bytes (reading stops there). */
+function readBody(req: IncomingMessage, limit: number): Promise<Uint8Array | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const onData = (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > limit) {
+        req.off("data", onData);
+        req.pause();
+        return resolve(null);
+      }
+      chunks.push(chunk);
+    };
+    req.on("data", onData);
+    req.on("end", () => resolve(size > limit ? null : new Uint8Array(Buffer.concat(chunks))));
+    req.on("error", reject);
+  });
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

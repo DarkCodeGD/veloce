@@ -13,8 +13,9 @@ import { Tooltips } from "./components/Tooltips.js";
 import { TopBar } from "./components/TopBar.js";
 import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
-import { client } from "./editor-context.js";
-import { typing, undoPassesThrough } from "./keyboard.js";
+import { syncDeckFonts } from "./deck-fonts.js";
+import { assetUrl, client } from "./editor-context.js";
+import { deckKeysPassThrough, typing } from "./keyboard.js";
 import {
   deleteNodes,
   deleteSlide,
@@ -69,6 +70,12 @@ export function App() {
   // A different deck: start at its first slide. A different slide: nothing selected.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the deck changes
   useEffect(() => setSlideId(null), [deckId]);
+
+  // The deck's own fonts (dropped in, or added by an agent), for every view in this tab.
+  const assets = deck?.assets;
+  useEffect(() => {
+    if (assets && deckId) void syncDeckFonts({ assets }, (id) => assetUrl(deckId, id));
+  }, [assets, deckId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the slide changes
   useEffect(() => setSelection([]), [current?.id]);
   // Layers can disappear under us (an agent, an undo): drop them from the selection.
@@ -109,7 +116,7 @@ export function App() {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       const history = mod && (key === "z" || key === "y");
-      if (typing(e.target) && !(history && undoPassesThrough(e.target))) return;
+      if (typing(e.target) && !(history && deckKeysPassThrough(e.target))) return;
       const handled = () => e.preventDefault();
       /** Claim the key press for the editor and run `action`. */
       const act = (action: () => void) => {

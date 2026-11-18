@@ -11,8 +11,14 @@
  * Pasted layers get fresh IDs. In a free (absolute) frame they keep their position, shifted
  * by 20 px while it's taken (pasting twice doesn't stack copies invisibly); in a stack or
  * grid, `position` is dropped (it only means something in a free frame).
+ *
+ * Images travel too: the payload names the deck it came from and the files the layers use.
+ * Pasting into another deck copies those files over first (`sourceAssets`), then the paste
+ * registers them with `asset.add` in the same transaction as the layers.
  */
 import {
+  type AssetInfo,
+  AssetInfoSchema,
   collectAssetRefs,
   element,
   type Node,
@@ -21,6 +27,7 @@ import {
   TextContentSchema,
   toPlainText,
 } from "@veloce/core";
+import { assetAddOps, type Imported } from "./asset-insert.js";
 import { type Command, cloneWithNewIds } from "./commands.js";
 import { nodeLabel, type SlideIndex, topmost } from "./slide-index.js";
 
@@ -31,7 +38,11 @@ const MAX_TEXT = 100_000;
 export interface ClipboardPayload {
   veloce: 1;
   nodes: Node[];
+  /** Where the layers came from, and the files they use (to copy into another deck). */
+  source?: { deckId: string; assets: Record<string, AssetInfo> };
 }
+
+const DECK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 const plural = (n: number, one: string) => (n === 1 ? one : `${n} ${one}s`);
 /** The selection's top-level layers (not the slide's root), in document order. */
@@ -48,13 +59,22 @@ function selectedLayers(index: SlideIndex, selection: readonly string[]): string
 export function copyNodes(
   index: SlideIndex,
   selection: readonly string[],
+  /** The deck being copied from: its ID and asset registry. */
+  from?: { deckId: string; assets: Readonly<Record<string, AssetInfo>> },
 ): ClipboardPayload | null {
   const ids = selectedLayers(index, selection);
   const nodes = ids.flatMap((id) => {
     const node = index.nodes.get(id)?.node;
     return node ? [structuredClone(node)] : [];
   });
-  return nodes.length > 0 ? { veloce: 1, nodes } : null;
+  if (nodes.length === 0) return null;
+  if (!from) return { veloce: 1, nodes };
+  const assets: Record<string, AssetInfo> = {};
+  for (const id of collectAssetRefs(nodes)) {
+    const info = from.assets[id];
+    if (info) assets[id] = info;
+  }
+  return { veloce: 1, nodes, source: { deckId: from.deckId, assets } };
 }
 
 export function cutNodes(index: SlideIndex, selection: readonly string[]): Command | null {
@@ -74,16 +94,38 @@ export const serializePayload = (payload: ClipboardPayload) => JSON.stringify(pa
 export function parsePayload(text: string): ClipboardPayload | null {
   if (!text) return null;
   try {
-    const value = JSON.parse(text) as { veloce?: unknown; nodes?: unknown };
+    const value = JSON.parse(text) as { veloce?: unknown; nodes?: unknown; source?: unknown };
     if (value.veloce !== 1 || !Array.isArray(value.nodes)) return null;
     const nodes = value.nodes.flatMap((n) => {
       const parsed = NodeSchema.safeParse(n);
       return parsed.success ? [parsed.data] : [];
     });
-    return nodes.length > 0 ? { veloce: 1, nodes } : null;
+    if (nodes.length === 0) return null;
+    const source = parseSource(value.source);
+    return { veloce: 1, nodes, ...(source && { source }) };
   } catch {
     return null;
   }
+}
+
+/** The payload's source, if it's well-formed (it comes from the clipboard: anyone's data). */
+function parseSource(value: unknown): ClipboardPayload["source"] | undefined {
+  const { deckId, assets } = (value ?? {}) as { deckId?: unknown; assets?: unknown };
+  if (typeof deckId !== "string" || !DECK_ID.test(deckId)) return undefined;
+  if (typeof assets !== "object" || assets === null) return undefined;
+  const valid: Record<string, AssetInfo> = {};
+  for (const [id, info] of Object.entries(assets)) {
+    const parsed = AssetInfoSchema.safeParse(info);
+    if (/^[0-9a-f]{64}$/.test(id) && parsed.success) valid[id] = parsed.data;
+  }
+  return { deckId, assets: valid };
+}
+
+/** Files the layers use that the deck doesn't have, and whether they can be copied over. */
+export function missingAssets(payload: ClipboardPayload, deckAssets: ReadonlySet<string>) {
+  const missing = [...collectAssetRefs(payload.nodes)].filter((id) => !deckAssets.has(id));
+  const copyable = missing.filter((id) => payload.source?.assets[id] !== undefined);
+  return { missing, copyable, fromDeck: payload.source?.deckId };
 }
 
 /** The copied layers as text, for pasting into other apps: their text content, in order. */
@@ -124,25 +166,34 @@ export function pasteNodes(
   index: SlideIndex,
   payload: ClipboardPayload,
   selection: readonly string[],
-  /** Asset IDs this deck has (layers using other assets can't land here yet). */
+  /** Asset IDs this deck has. */
   assets: ReadonlySet<string>,
+  /** Files just copied over from the source deck: registered in this same transaction. */
+  copied: readonly Imported[] = [],
 ): PasteResult {
-  const missing = [...collectAssetRefs(payload.nodes)].filter((id) => !assets.has(id));
+  const available = new Set([...assets, ...copied.map((c) => c.id)]);
+  const missing = [...collectAssetRefs(payload.nodes)].filter((id) => !available.has(id));
   if (missing.length > 0) {
     return {
       ok: false,
-      message: "These layers use images from another deck, which can't be pasted here yet",
+      message:
+        "These layers use images that aren't available here (their deck isn't open in Veloce)",
     };
   }
   const target = pasteTarget(index, selection, new Set(payload.nodes.map((n) => n.id)));
   const copies = payload.nodes.map((n) => cloneWithNewIds(n));
   place(index, target.parentId, copies);
-  const ops: Op[] = copies.map((node, i) => ({
-    op: "node.insert",
-    parentId: target.parentId,
-    node,
-    ...(target.index === undefined ? {} : { index: target.index + i }),
-  }));
+  const ops: Op[] = [
+    ...assetAddOps(copied, assets),
+    ...copies.map(
+      (node, i): Op => ({
+        op: "node.insert",
+        parentId: target.parentId,
+        node,
+        ...(target.index === undefined ? {} : { index: target.index + i }),
+      }),
+    ),
+  ];
   const only = copies.length === 1 ? copies[0] : undefined;
   return {
     ok: true,

@@ -27,7 +27,7 @@ describe("inspector fields from plugin schemas", () => {
     expect(fields("shape").fill).toMatchObject({ kind: "paint" });
     expect(fields("shape").radius).toMatchObject({ kind: "length", group: "radius" });
     expect(fields("image").alt).toMatchObject({ kind: "text" });
-    expect(fields("image").asset).toMatchObject({ kind: "readonly" });
+    expect(fields("image").asset).toMatchObject({ kind: "asset" });
     expect(labelFor("lineHeight")).toBe("Line height");
   });
 });

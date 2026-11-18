@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -277,6 +277,53 @@ describe("building a deck", () => {
 });
 
 describe("themes, docs, previews and decks", () => {
+  it("adds images and fonts from files or base64, as one undoable transaction", async () => {
+    await connect();
+    await call("create_deck", { title: "Assets" });
+    const gif = Uint8Array.from([...new TextEncoder().encode("GIF89a"), 8, 0, 4, 0, 0, 0]);
+    const path = join(dir, "dot.gif");
+    await writeFile(path, gif);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"/>';
+    const added = await call("add_asset", {
+      files: [
+        { path },
+        { data: Buffer.from(svg).toString("base64"), name: "logo.svg" },
+        { path }, // the same file twice is one asset
+      ],
+    });
+    expect(added.isError).toBe(false);
+    expect(added.text).toMatch(/dot\.gif: "asset:[0-9a-f]{64}" \(image\/gif, 8×4\)/);
+    expect(added.text).toMatch(/logo\.svg: "asset:[0-9a-f]{64}" \(image\/svg\+xml, 20×10\)/);
+    const deck = (await workspace.get(workspace.activeDeckId ?? "")).deck;
+    expect(Object.values(deck.assets).map((a) => a.name)).toEqual(
+      expect.arrayContaining(["dot.gif", "logo.svg"]),
+    );
+    expect(Object.keys(deck.assets)).toHaveLength(2);
+    // One transaction: one undo takes both back.
+    await call("undo_agent_changes", { steps: 1 });
+    expect((await workspace.get(workspace.activeDeckId ?? "")).deck.assets).toEqual({});
+
+    // A font: its family goes into the theme docs, with a ready-to-use font stack.
+    const emptyTtf = Buffer.from([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).toString("base64");
+    const font = await call("add_asset", {
+      files: [{ data: emptyTtf, name: "Brand Sans-Bold.ttf" }],
+    });
+    expect(font.text).toMatch(/font family "Brand Sans"/);
+    const docs = await call("get_docs", { topic: "theme" });
+    expect(docs.text).toContain(
+      'This deck\'s own fonts (added with add_asset): Brand Sans (`"Brand Sans", system-ui, sans-serif`)',
+    );
+
+    // Errors say how to fix the call.
+    const relative = await call("add_asset", { files: [{ path: "dot.gif" }] });
+    expect(relative.isError).toBe(true);
+    expect(relative.text).toMatch(/isn't an absolute path[\s\S]*How to fix: Give the full path/);
+    const notes = join(dir, "notes.txt");
+    await writeFile(notes, "secret notes");
+    const junk = await call("add_asset", { files: [{ path: notes }] });
+    expect(junk.text).toMatch(/notes\.txt: Unsupported file type[\s\S]*At: files\[0\]/);
+  });
+
   it("applies built-in themes and brand overrides", async () => {
     await connect();
     await call("create_deck", { title: "Brand" });

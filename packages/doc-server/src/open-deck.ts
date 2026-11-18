@@ -4,6 +4,7 @@
  */
 import {
   type ApplyContext,
+  type AssetInfo,
   type Deck,
   DeckDocument,
   type HistoryEntry,
@@ -13,6 +14,12 @@ import {
   type TransactionResult,
 } from "@veloce/core";
 import type { DeckBundle } from "@veloce/format";
+import { inspectAsset } from "./asset-import.js";
+
+/** An imported file: its asset ID and what the server found it to be. */
+export type ImportResult =
+  | { ok: true; id: string; info: AssetInfo }
+  | { ok: false; message: string };
 
 export interface DeckChange {
   deckId: string;
@@ -47,6 +54,8 @@ export class OpenDeck {
   readonly #doc: DeckDocument;
   /** Bytes of every asset seen this session, including removed ones (undo may bring them back). */
   readonly #assets: Map<string, Uint8Array>;
+  /** What `importAsset` found each file to be: `asset.add` must agree (the server decides). */
+  readonly #inspected = new Map<string, AssetInfo>();
   readonly #listeners = new Set<(change: DeckChange) => void>();
   #modifiedAt = new Date();
   /** Who changed each slide last (this session only), so agents don't clobber human work. */
@@ -84,17 +93,8 @@ export class OpenDeck {
 
   /** Apply a transaction (`{ origin, label, ops }`, validated here). */
   apply(input: unknown): TransactionResult {
-    const missing = this.#missingAssetUpload(input);
-    if (missing) {
-      return {
-        ok: false,
-        error: {
-          code: "NOT_FOUND",
-          message: `asset.add: the bytes for asset ${missing} haven't been uploaded to this deck`,
-          hint: "Upload the file first; its SHA-256 is the asset ID.",
-        },
-      };
-    }
+    const refused = this.#checkAssetAdds(input);
+    if (refused) return { ok: false, error: refused };
     return this.#emit(this.#doc.apply(input));
   }
 
@@ -121,7 +121,20 @@ export class OpenDeck {
     return this.#doc.undoLabels(origin);
   }
 
-  /** Store asset bytes (content-addressed). Returns the asset ID to use in an `asset.add` op. */
+  /**
+   * Import a file (an upload from the editor, or an agent's `add_asset`): the server works
+   * out what it is from the bytes, stores them (content-addressed) and returns the ID and info
+   * to put in an `asset.add` op. Nothing changes in the document until that op is applied.
+   */
+  async importAsset(bytes: Uint8Array, fileName?: string): Promise<ImportResult> {
+    const inspected = inspectAsset(bytes, fileName);
+    if (!inspected.ok) return inspected;
+    const id = await this.storeAsset(bytes);
+    this.#inspected.set(id, inspected.info);
+    return { ok: true, id, info: inspected.info };
+  }
+
+  /** Store trusted asset bytes as they are (content-addressed); returns the asset ID. */
   async storeAsset(bytes: Uint8Array): Promise<string> {
     const id = await sha256Hex(bytes);
     if (!this.#assets.has(id)) this.#assets.set(id, bytes);
@@ -181,13 +194,33 @@ export class OpenDeck {
     return result;
   }
 
-  /** Cheap pre-check on raw input: `asset.add` needs the bytes on the server first. */
-  #missingAssetUpload(input: unknown): string | null {
+  /**
+   * Cheap pre-check on raw input: `asset.add` needs the bytes on the server first, and for an
+   * imported file, its type and size must be what the server found (a client can't register
+   * a PNG as a font, or an SVG as a PNG).
+   */
+  #checkAssetAdds(input: unknown) {
     const ops = (input as { ops?: unknown } | null)?.ops;
     if (!Array.isArray(ops)) return null;
     for (const op of ops) {
-      const { op: kind, id } = (op ?? {}) as { op?: unknown; id?: unknown };
-      if (kind === "asset.add" && typeof id === "string" && !this.#assets.has(id)) return id;
+      const { op: kind, id, asset } = (op ?? {}) as { op?: unknown; id?: unknown; asset?: unknown };
+      if (kind !== "asset.add" || typeof id !== "string") continue;
+      if (!this.#assets.has(id)) {
+        return {
+          code: "NOT_FOUND" as const,
+          message: `asset.add: the bytes for asset ${id} haven't been uploaded to this deck`,
+          hint: "Upload the file first; its SHA-256 is the asset ID.",
+        };
+      }
+      const known = this.#inspected.get(id);
+      const claimed = (asset ?? {}) as Partial<AssetInfo>;
+      if (known && (claimed.mime !== known.mime || claimed.bytes !== known.bytes)) {
+        return {
+          code: "INVALID" as const,
+          message: `asset.add: asset ${id} is ${known.mime} (${known.bytes} bytes), not ${String(claimed.mime)} (${String(claimed.bytes)} bytes)`,
+          hint: "Use the asset info the upload returned.",
+        };
+      }
     }
     return null;
   }

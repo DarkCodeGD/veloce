@@ -18,7 +18,9 @@ export type FieldKind =
   | { kind: "length"; group: string }
   | { kind: "text"; multiline: boolean }
   | { kind: "richText" }
-  /** Not editable in the inspector yet (assets, nested objects): shown read-only. */
+  /** A deck asset (`"asset:<sha256>"`): shown with a preview, replaced by picking a file. */
+  | { kind: "asset" }
+  /** Not editable in the inspector yet (nested objects): shown read-only. */
   | { kind: "readonly" };
 
 export type FieldSpec = FieldKind & { key: string; label: string };
@@ -73,6 +75,7 @@ export function fieldKind(s: JsonSchema): FieldKind {
   }
   const group = tokenGroup(s);
   if (group) return { kind: "token", group };
+  if (s.type === "string" && s.pattern?.startsWith("^asset:")) return { kind: "asset" };
   if (s.type === "string" && s.enum) return { kind: "enum", options: s.enum.map(String) };
   if (s.type === "string" && !s.pattern)
     return { kind: "text", multiline: (s.maxLength ?? 0) > 200 };

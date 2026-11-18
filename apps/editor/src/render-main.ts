@@ -6,6 +6,7 @@
 import { createBuiltinRegistry } from "@veloce/builtins";
 import type { Deck, SlideMeasurement } from "@veloce/core";
 import { SlideRenderer } from "@veloce/renderer";
+import { syncDeckFonts } from "./deck-fonts.js";
 import { loadFonts } from "./fonts.js";
 
 let deckId = "";
@@ -15,9 +16,10 @@ const stage = document.createElement("div");
 host.append(stage);
 document.body.append(host);
 
+const assetUrl = (id: string) => `/api/decks/${encodeURIComponent(deckId)}/assets/${id}`;
 const renderer = new SlideRenderer(stage, {
   registry: createBuiltinRegistry(),
-  assetUrl: (id) => `/api/decks/${encodeURIComponent(deckId)}/assets/${id}`,
+  assetUrl,
   onPluginError: (error, info) =>
     console.error(`Plugin error in ${info.nodeId} (${info.phase})`, error),
 });
@@ -26,6 +28,7 @@ const fonts = loadFonts();
 async function draw(deck: Deck, id: string, slideId: string, scale: number): Promise<void> {
   await fonts;
   deckId = id;
+  await syncDeckFonts(deck, assetUrl); // the deck's own fonts, before anything is measured
   host.style.transform = scale === 1 ? "" : `scale(${scale})`;
   renderer.render(deck, slideId);
   await renderer.ready();

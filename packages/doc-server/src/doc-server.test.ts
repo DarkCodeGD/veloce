@@ -109,6 +109,38 @@ describe("Workspace", () => {
     await again.close();
   });
 
+  it("imports files as the server sees them, and holds asset.add to that", async () => {
+    const ws = await open();
+    const deck = await ws.create({ title: "Import" });
+    const gif = Uint8Array.from([...new TextEncoder().encode("GIF89a"), 3, 0, 2, 0, 0, 0]);
+    const imported = await deck.importAsset(gif, "C:\\pics\\dot.gif");
+    if (!imported.ok) throw new Error(imported.message);
+    expect(imported.info).toEqual({
+      mime: "image/gif",
+      bytes: gif.length,
+      name: "dot.gif",
+      width: 3,
+      height: 2,
+    });
+    expect(deck.deck.assets).toEqual({}); // nothing changes until asset.add
+    const add = (asset: object) =>
+      deck.apply({
+        origin: "user",
+        label: "add",
+        ops: [{ op: "asset.add", id: imported.id, asset }],
+      });
+    // Claiming another type (or size) than what was uploaded is refused.
+    const lie = add({ ...imported.info, mime: "font/woff2" });
+    expect(lie.ok).toBe(false);
+    if (!lie.ok) expect(lie.error.message).toMatch(/is image\/gif \(12 bytes\), not font\/woff2/);
+    expect(add(imported.info).ok).toBe(true);
+    expect(deck.deck.assets[imported.id]?.width).toBe(3);
+    // Junk isn't stored at all.
+    const junk = await deck.importAsset(new TextEncoder().encode("#!/bin/sh"));
+    expect(junk).toEqual({ ok: false, message: expect.stringContaining("Unsupported file type") });
+    await ws.close();
+  });
+
   it("gives copied files their own deck ID and skips broken files", async () => {
     const ws = await open();
     const deck = await ws.create({ title: "Original" });

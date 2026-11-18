@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   copyNodes,
   cutNodes,
+  missingAssets,
   parsePayload,
   pasteNodes,
   pasteTarget,
@@ -129,10 +130,57 @@ describe("clipboard", () => {
     expect(cutNodes(indexOf(deck), [])).toBeNull();
   });
 
-  it("refuses layers whose images this deck doesn't have", () => {
-    const image: Node = element("image", { src: `asset:${"a".repeat(64)}` }, { id: "img" });
-    const result = pasteNodes(indexOf(makeDeck()), { veloce: 1, nodes: [image] }, [], noAssets);
-    expect(result.ok).toBe(false);
+  it("carries images between decks: the files go along and register with the paste", () => {
+    const id = "a".repeat(64);
+    const info = { mime: "image/png", bytes: 3, width: 2, height: 2, name: "a.png" };
+    const image: Node = element("image", { asset: `asset:${id}`, alt: "" }, { id: "img" });
+    const source: Deck = {
+      ...createDeck({
+        title: "src",
+        slides: [createSlide({ id: "s1", rootId: "root", children: [image] })],
+      }),
+      assets: { [id]: info, ["b".repeat(64)]: { mime: "image/png", bytes: 1 } },
+    };
+    const payload = copyNodes(indexOf(source), ["img"], {
+      deckId: "deck_src",
+      assets: source.assets,
+    });
+    // Only the files the copied layers use travel, and they survive the clipboard round trip.
+    expect(payload?.source).toEqual({ deckId: "deck_src", assets: { [id]: info } });
+    const parsed = parsePayload(serializePayload(payload as never));
+    expect(parsed?.source).toEqual(payload?.source);
+    if (!parsed) throw new Error("no payload");
+
+    const target = makeDeck();
+    expect(missingAssets(parsed, noAssets)).toEqual({
+      missing: [id],
+      copyable: [id],
+      fromDeck: "deck_src",
+    });
+    // Without the files copied over, the paste is refused (nothing half-pasted).
+    const refused = pasteNodes(indexOf(target), parsed, [], noAssets);
+    expect(refused).toEqual({
+      ok: false,
+      message: expect.stringContaining("aren't available here"),
+    });
+    // With them: asset.add and the layer in one transaction.
+    const result = pasteNodes(indexOf(target), parsed, [], noAssets, [{ id, info }]);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.command.ops.map((o) => o.op)).toEqual(["asset.add", "node.insert"]);
+    const after = apply(target, result.command);
+    expect(after.assets[id]).toEqual(info);
+    // Pasting again: the deck has the file now, so no second asset.add.
+    const again = pasteNodes(indexOf(after), parsed, [], new Set(Object.keys(after.assets)));
+    expect(again.ok && again.command.ops.map((o) => o.op)).toEqual(["node.insert"]);
+  });
+
+  it("ignores a malformed source in clipboard data from elsewhere", () => {
+    const text = JSON.stringify({
+      veloce: 1,
+      nodes: [element("text", { content: "x" })],
+      source: { deckId: "../../etc", assets: { nothex: { mime: "image/png", bytes: 1 } } },
+    });
+    expect(parsePayload(text)?.source).toBeUndefined();
   });
 
   it("pastes text from other apps as a text layer", () => {

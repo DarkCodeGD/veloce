@@ -8,6 +8,7 @@ import { NODE_ID_ATTR } from "@veloce/renderer";
 import { ArrowDown, ArrowRight, Copy, LayoutGrid, Move, Rows3, Trash } from "lucide-react";
 import { run } from "../actions.js";
 import { registry } from "../editor-context.js";
+import { replaceAsset } from "../model/asset-insert.js";
 import {
   type Command,
   deleteNodes,
@@ -21,6 +22,7 @@ import { SHORTCUTS } from "../model/shortcuts.js";
 import { indexSlide, nodeLabel } from "../model/slide-index.js";
 import { shortcutAttrs } from "../platform.js";
 import { setPreview } from "../preview.js";
+import { AssetField } from "./AssetField.js";
 import {
   ColorField,
   type Commit,
@@ -51,7 +53,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
     body = (
       <>
         <SlideSection deck={deck} slide={slide} />
-        <ThemeSection theme={deck.theme} />
+        <ThemeSection deck={deck} />
       </>
     );
   } else if (nodes.length > 1) {
@@ -550,6 +552,16 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
                 {field.label}: formatted text. Double-click it on the slide (or press Enter) to edit
                 it there.
               </p>
+            );
+          case "asset":
+            return (
+              <AssetField
+                key={field.key}
+                label={field.label}
+                value={value}
+                deck={deck}
+                onReplace={(next) => void run(replaceAsset(deck, node.id, field.key, value, next))}
+              />
             );
           case "readonly":
             return (

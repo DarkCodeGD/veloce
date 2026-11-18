@@ -104,3 +104,14 @@ export function subtree(index: SlideIndex, id: string): Set<string> {
   visit(id);
   return ids;
 }
+
+/**
+ * The main canvas's slide, measured now: for actions that don't start on the canvas (a paste)
+ * but still need layer boxes. The scale is read off the stage itself (on-screen width over its
+ * own width), so this needs nothing from the canvas component. Null when no slide is shown.
+ */
+export function mainCanvasSpace(): CanvasSpace | null {
+  const stage = document.querySelector<HTMLElement>(".editor-canvas .slide-surface");
+  if (!stage || stage.offsetWidth === 0) return null;
+  return new CanvasSpace(stage, stage.getBoundingClientRect().width / stage.offsetWidth);
+}

@@ -3,7 +3,15 @@
  * fetched on demand with `get_docs`. Theme and element docs are generated from the live theme
  * and plugin registry, so they can't drift from what the engine actually accepts.
  */
-import { BUILTIN_THEMES, BUNDLED_FONTS, type Deck, LINT_RULES, type Theme } from "@veloce/core";
+import {
+  BUILTIN_THEMES,
+  BUNDLED_FONTS,
+  type Deck,
+  deckFontFamilies,
+  fontStackFor,
+  LINT_RULES,
+  type Theme,
+} from "@veloce/core";
 import type { PluginRegistry } from "@veloce/plugin-api";
 
 export const INSTRUCTIONS = `Veloce builds presentation decks. The user watches the deck update live in the Veloce editor.
@@ -96,7 +104,17 @@ export function paletteLine(theme: Theme): string {
   return `Palette (${theme.name}): background ${c.background}, surface ${c.surface}, text ${c.text}, muted ${c.muted}, primary ${c.primary} (text on primary fills: $color.on-primary ${c["on-primary"]}), secondary ${c.secondary}, accent ${c.accent}.`;
 }
 
-function themeDocs(current: Theme | null): string {
+/** The fonts this deck carries (added with add_asset), ready for its theme. */
+function deckFontsLine(deck: Deck): string {
+  const families = deckFontFamilies(deck);
+  if (families.length === 0) return "";
+  return `This deck's own fonts (added with add_asset): ${families
+    .map((f) => `${f} (\`${fontStackFor(f)}\`)`)
+    .join(", ")}.\n\n`;
+}
+
+function themeDocs(deck: Deck | null): string {
+  const current = deck?.theme ?? null;
   if (current === null) {
     return `# Theme
 
@@ -143,8 +161,8 @@ ${list(current.shadow, "shadow", () => "shadow")}
 ## Fonts
 ${list(current.fonts, "font", (v: string) => v)}
 
-Bundled with Veloce (they look the same on every machine; other fonts only render where
-installed). Set them with set_theme, e.g. \`{ "theme": { "fonts": { "heading": "Fraunces, Georgia, serif" } } }\`:
+${deck ? deckFontsLine(deck) : ""}Bundled with Veloce (they look the same on every machine; other fonts only render where
+installed, unless the font file is added to the deck with add_asset). Set them with set_theme, e.g. \`{ "theme": { "fonts": { "heading": "Fraunces, Georgia, serif" } } }\`:
 ${BUNDLED_FONTS.map((f) => `- ${f.family} (\`${f.stack}\`): ${f.note}`).join("\n")}`;
 }
 
@@ -173,7 +191,7 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
     case "ops":
       return OPS;
     case "theme":
-      return themeDocs(deck?.theme ?? null);
+      return themeDocs(deck);
     case "lint":
       return `# Lint rules\n\n${Object.entries(LINT_RULES)
         .map(([rule, what]) => `- \`${rule}\`: ${what}`)

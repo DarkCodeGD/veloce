@@ -36,6 +36,7 @@ import {
   TextEditSession,
 } from "./TextEditSession.js";
 import { useCanvasGestures } from "./useCanvasGestures.js";
+import { useFileDrop } from "./useFileDrop.js";
 
 interface Props {
   /** What to show: the document, with any live preview applied. */
@@ -91,6 +92,7 @@ export function EditorCanvas({
   const indexRef = useRef(index);
   indexRef.current = index;
   const { begin, active, feedback } = useCanvasGestures();
+  const dropping = useFileDrop(wrapperRef, { deck, index, selection, onSelect });
   const [boxes, setBoxes] = useState<{
     hover: OverlayBox | null;
     selected: OverlayBox[];
@@ -152,6 +154,12 @@ export function EditorCanvas({
     void document.fonts.ready.then(measure);
     return () => cancelAnimationFrame(frame);
   }, [deck, slideId, measure]);
+
+  // A font that finishes loading later (a deck font just added) reflows text: re-measure.
+  useEffect(() => {
+    document.fonts.addEventListener("loadingdone", measure);
+    return () => document.fonts.removeEventListener("loadingdone", measure);
+  }, [measure]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -383,6 +391,11 @@ export function EditorCanvas({
           exists={() => editableText(indexRef.current, editing.id)}
           onExit={() => onEditText(null)}
         />
+      )}
+      {dropping && (
+        <div className="drop-overlay" aria-hidden="true">
+          <span>Drop images or fonts</span>
+        </div>
       )}
     </div>
   );

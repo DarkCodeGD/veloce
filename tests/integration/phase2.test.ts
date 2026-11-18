@@ -376,6 +376,63 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
     expect(traversal.status).toBe(400);
   });
 
+  it("imports uploaded files over HTTP, refusing cross-site, junk and oversized uploads", async () => {
+    const deckId = workspace.activeDeckId ?? "";
+    const url = `${app.url}/api/decks/${deckId}/assets`;
+    const gif = Uint8Array.from([...new TextEncoder().encode("GIF89a"), 4, 0, 2, 0, 0, 0]);
+    const upload = (body: Uint8Array<ArrayBuffer>, headers: Record<string, string> = {}) =>
+      fetch(url, {
+        method: "POST",
+        body,
+        headers: { "x-veloce-upload": "1", "x-veloce-filename": "dot%20%E2%9C%93.gif", ...headers },
+      });
+
+    const ok = await upload(gif);
+    expect(ok.status).toBe(201);
+    const { id, info } = (await ok.json()) as { id: string; info: Record<string, unknown> };
+    expect(info).toEqual({ mime: "image/gif", bytes: 12, name: "dot ✓.gif", width: 4, height: 2 });
+    expect(id).toMatch(/^[0-9a-f]{64}$/);
+
+    // Cross-site pages are refused twice over: by Origin, and by the custom header they can't send.
+    expect((await upload(gif, { origin: "https://evil.example" })).status).toBe(403);
+    const noHeader = await fetch(url, { method: "POST", body: gif });
+    expect(noHeader.status).toBe(403);
+    expect(((await noHeader.json()) as { error: string }).error).toMatch(/x-veloce-upload/);
+    // Junk is refused with what's accepted; nothing is stored.
+    const junk = await upload(new TextEncoder().encode("<html>hi</html>"));
+    expect(junk.status).toBe(415);
+    expect(((await junk.json()) as { error: string }).error).toMatch(/PNG, JPEG/);
+    expect(
+      (
+        await fetch(`${app.url}/api/decks/nope/assets`, {
+          method: "POST",
+          headers: { "x-veloce-upload": "1" },
+          body: gif,
+        })
+      ).status,
+    ).toBe(404);
+    // Oversized: refused from the declared length, before reading the body.
+    const status = await new Promise<number>((resolve, reject) => {
+      const u = new URL(url);
+      const req = request(
+        {
+          method: "POST",
+          host: u.hostname,
+          port: u.port,
+          path: u.pathname,
+          headers: { "x-veloce-upload": "1", "content-length": String(60 * 1024 ** 2) },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on("error", reject);
+      req.flushHeaders();
+    });
+    expect(status).toBe(413);
+  });
+
   it("undo only reverts the agent's own work, and everything survives a restart", async () => {
     const before = (await workspace.get(workspace.activeDeckId ?? "")).deck;
     await call("upsert_slide", {

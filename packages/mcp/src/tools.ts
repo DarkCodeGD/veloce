@@ -7,14 +7,20 @@
  * Agents act through the same transactions as humans (golden rule #1), with origin
  * `agent:<client name>`, so their changes have their own undo history.
  */
+import { readFile, stat } from "node:fs/promises";
+import { basename, isAbsolute } from "node:path";
 import {
   type AgentOrigin,
+  type AssetInfo,
+  assetKind,
   BUILTIN_THEMES,
   type Deck,
   findBuiltinTheme,
   findSlide,
+  fontStackFor,
   formatIssues,
   lintDeck,
+  MAX_ASSET_BYTES,
   type Node,
   notFoundHint,
   type Op,
@@ -446,6 +452,94 @@ const setTheme = defineTool({
   },
 });
 
+const AssetFileInput = z.union([
+  z.strictObject({
+    path: z.string().min(1).describe("Absolute path of a local file"),
+  }),
+  z.strictObject({
+    data: z.string().min(1).describe("The file's bytes, base64-encoded"),
+    name: z.string().max(255).describe('File name, e.g. "logo.svg"'),
+  }),
+]);
+
+/** Bytes and a file name from one `add_asset` entry; throws a fixable error. */
+async function readAssetInput(input: z.infer<typeof AssetFileInput>, at: string) {
+  const fail = (message: string, hint: string): never => {
+    throw new ToolError({ message, hint, path: at });
+  };
+  if ("data" in input) {
+    const bytes = Buffer.from(input.data, "base64");
+    if (bytes.length === 0)
+      fail("The data is empty or not base64", "Send the file's bytes base64-encoded.");
+    return { bytes: new Uint8Array(bytes), name: input.name };
+  }
+  if (!isAbsolute(input.path)) {
+    fail(`"${input.path}" isn't an absolute path`, "Give the full path, e.g. /home/me/logo.png.");
+  }
+  const info = await stat(input.path).catch(() => null);
+  if (!info?.isFile())
+    fail(`No file at ${input.path}`, "Check the path, or send the bytes as data.");
+  if ((info?.size ?? 0) > MAX_ASSET_BYTES) {
+    fail(
+      `${input.path} is over ${MAX_ASSET_BYTES / 1024 ** 2} MiB`,
+      "Use a smaller or compressed file.",
+    );
+  }
+  return { bytes: new Uint8Array(await readFile(input.path)), name: basename(input.path) };
+}
+
+/** One line per added file: the reference to use, and how. */
+function describeAsset(id: string, info: AssetInfo): string {
+  const ref = `"asset:${id}"`;
+  const label = info.name ? `${info.name}: ` : "";
+  if (assetKind(info.mime) === "font") {
+    if (!info.font) return `${label}${ref} (${info.mime}; its family name couldn't be read).`;
+    const { family, weight, style } = info.font;
+    const w = Array.isArray(weight)
+      ? `weights ${weight[0]}–${weight[1]}`
+      : `weight ${weight ?? 400}`;
+    return `${label}font family "${family}" (${w}${style === "italic" ? ", italic" : ""}). Use it in the theme: set_theme({ "theme": { "fonts": { "heading": ${JSON.stringify(fontStackFor(family))} } } }).`;
+  }
+  const size = info.width && info.height ? `, ${info.width}×${info.height}` : "";
+  return `${label}${ref} (${info.mime}${size}). Use it as an image: { "type": "image", "props": { "asset": ${ref}, "alt": "…" } }, or as a frame background: "style": { "fill": { "type": "image", "asset": ${ref} } }.`;
+}
+
+const addAsset = defineTool({
+  name: "add_asset",
+  title: "Add images or fonts",
+  description: `Add image files (PNG, JPEG, GIF, WebP, AVIF, SVG) or fonts (TTF, OTF, WOFF, WOFF2) to the current deck, up to ${MAX_ASSET_BYTES / 1024 ** 2} MiB each. Give a local file path, or base64 data with a file name. Returns the "asset:<id>" reference for each image, and the family name for each font. Remote URLs aren't fetched: decks stay self-contained.`,
+  input: z.strictObject({ files: z.array(AssetFileInput).min(1).max(20) }),
+  async run({ files }, ctx) {
+    const open = await currentDeck(ctx);
+    const added: Array<{ id: string; info: AssetInfo }> = [];
+    for (const [i, file] of files.entries()) {
+      const { bytes, name } = await readAssetInput(file, `files[${i}]`);
+      const result = await open.importAsset(bytes, name);
+      if (!result.ok) {
+        throw new ToolError({
+          message: `${name ?? `files[${i}]`}: ${result.message}`,
+          path: `files[${i}]`,
+          hint: "Convert it to a supported format, or leave it out.",
+        });
+      }
+      added.push(result);
+    }
+    const fresh = added.filter(
+      (a, i) => !open.deck.assets[a.id] && added.findIndex((b) => b.id === a.id) === i,
+    );
+    if (fresh.length > 0) {
+      const what = fresh.length === 1 ? (fresh[0]?.info.name ?? "1 file") : `${fresh.length} files`;
+      await commit(
+        ctx,
+        open,
+        `Add ${what}`,
+        fresh.map(({ id, info }) => ({ op: "asset.add", id, asset: info })),
+      );
+    }
+    return text(...added.map(({ id, info }) => describeAsset(id, info)));
+  },
+});
+
 const lint = defineTool({
   name: "lint",
   title: "Lint deck",
@@ -613,6 +707,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   applyOps,
   listElementTypes,
   setTheme,
+  addAsset,
   lint,
   renderPreview,
   undoAgentChanges,

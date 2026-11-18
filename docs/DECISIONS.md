@@ -625,7 +625,8 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
 7. **Undo passes through dropdowns.** The shortcut guard treated our `Select` trigger
    (`role="combobox"`) like a text field, so Ctrl+Z did nothing right after picking from any
    inspector dropdown until focus moved. Undo/redo now pass through non-text comboboxes
-   (`undoPassesThrough`); every other shortcut is still blocked there.
+   (`deckKeysPassThrough`; D48 extends it to copy and paste); every other shortcut is still
+   blocked there.
    `tests/integration/phase3-theme.test.ts` covers it.
 8. **Inspector spacing rhythm:** sections are divided by a rule with 18–20px of padding, rows
    inside are 10px apart, and a titled `Group` inside a section ("Colors", "Fonts") adds 12px
@@ -637,3 +638,74 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
    ("Deck title – Veloce"), as in Figma, Keynote and other professional tools. **Why:** a
    gradient logo plus name in the toolbar read as toy-like, and the document should lead.
    App identity belongs to the OS chrome (window title, dock/taskbar icon, About dialog).
+
+## D48 — Asset import: the server decides what a file is; one transaction per import
+
+**Status:** Accepted (2026-11-19)
+
+Images and fonts get into a deck by dropping them on the canvas, pasting (a screenshot or
+copied files), "Replace…" on an image, "Add font file…" in the theme, copying layers from
+another deck, or the agent's new `add_asset` MCP tool.
+
+1. **Upload, then one transaction.** Clients `POST /api/decks/:id/assets` with the raw bytes.
+   The doc-server inspects them, stores the content-hashed file and replies `{ id, info }`.
+   Nothing is in the document yet. The client then commits `asset.add` together with the
+   layers that use it (or the theme change, or the swapped image prop) as **one**
+   transaction, so a drop is a single undo step. That's the same `asset.add` op the agent
+   uses (golden rule #1). Unreferenced uploads are just bytes in the store, never in the
+   saved `.veloce` (the writer only packs registered assets).
+   **Why:** the server stays the only writer of bytes, and the document stays ops-only;
+   upload progress and failure never leave a half-applied transaction behind.
+2. **The server sniffs bytes; nothing trusts the client.** `inspectAsset` reads magic bytes
+   and headers: PNG, JPEG (SOF scan), GIF, WebP (VP8/VP8L/VP8X), AVIF (`ftyp` + `ispe`), and
+   SVG (root `<svg>` after BOM/declaration/comments/doctype); fonts TTF/OTF/WOFF/WOFF2
+   (collections refused). The declared MIME type and extension are ignored. `asset.add` is
+   refused (`INVALID`, "use the asset info the upload returned") unless its mime and size
+   match what the server inspected, so a client can't relabel an SVG as a PNG. SVG stays
+   `<img>`-only (Phase 1 rule).
+   **Why:** the file lands in a FOSS app's documents that other people open, so the
+   server is the security boundary, not the browser.
+3. **Upload hardening.** It requires an `x-veloce-upload: 1` header (a cross-site form
+   can't set it, so a hostile page can't push files into a deck, on top of D34's
+   Host/Origin checks). It is capped at 50 MiB (`MAX_ASSET_BYTES`), by `content-length` and
+   again while streaming. The file name comes URI-encoded in `x-veloce-filename`, and only
+   its basename is kept. Errors are 403/404/413/415 with a reason the editor shows as a
+   toast.
+4. **Fonts are named by the file.** The server reads the `name` table (typographic family,
+   nameID 16, else nameID 1), OS/2 weight/italic, and the `fvar` `wght` range. It
+   decompresses WOFF with zlib and WOFF2 with brotli, with output caps. Variable fonts
+   without nameID 16 get trailing style words stripped ("Manrope ExtraLight" → "Manrope").
+   It falls back to the file name. The result is stored as `AssetInfo.font`
+   `{ family, weight (number or [min,max]), style }`, an **additive, optional field**:
+   format v1 hasn't shipped, so no migration. Editor tabs and the render page register
+   each deck font as a `FontFace` (`deck-fonts.ts`), swapping the set when the deck
+   changes, and the canvas re-measures on `loadingdone`. Theme font pickers list deck
+   fonts first (hint "deck"), as the stack `"Family", system-ui, sans-serif`.
+   **Why:** users and agents pick fonts by family name; requiring them to type it would
+   break on the first file whose name doesn't match its family.
+5. **Placement.** Dropped images are centered on the drop point, inside the deepest free
+   (absolute) frame under it that isn't locked or hidden. They keep their own pixel size,
+   shrunk to at most 60% of that frame and never upscaled. Several files cascade by 24px.
+   Pasted files go where pasted layers go. In stacks and grids they're appended, and the
+   layout places them (golden rule #4). Replacing an image keeps the layer's box and
+   removes the old file when nothing else uses it.
+6. **Cross-deck paste copies files.** The clipboard payload records the source deck and the
+   infos of the assets the copied layers use. On paste into another deck, the editor
+   fetches each missing file from the source deck and uploads it to this one, then pastes:
+   `asset.add` + nodes in one transaction. If the source deck is gone, the paste is
+   refused with a reason, and never yields layers pointing at missing files.
+7. **`add_asset` (MCP, tool 14).** It takes `files: [{ path } | { data, name }]`, 1–20 per
+   call. Paths must be absolute regular files under the size cap, and base64 is accepted for
+   generated images. It's one commit for all files, deduplicated. Its reply gives each
+   image's `"asset:<id>"` with a usage example, and each font's family with a `set_theme`
+   example. Deck fonts also appear in `get_docs` (theme section).
+   **Why:** agents need images (logos, charts, photos) and brand fonts, and a path is
+   cheaper than pasting megabytes of base64 into a tool call.
+8. **Dropdown triggers pass copy/paste through.** `undoPassesThrough` from D47 §7 is now
+   `deckKeysPassThrough` and also covers the clipboard. Ctrl+V right after switching decks
+   in the deck picker did nothing, because focus stayed on that combobox.
+
+`tests/integration/phase3-assets.test.ts` covers this in real Chromium: drop (position,
+one transaction, undo), refusals, screenshot paste, cross-deck paste, Replace…, and a font
+dropped → offered in the theme → rendering. HTTP and MCP paths are covered in
+`phase2.test.ts` and `mcp.test.ts`.

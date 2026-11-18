@@ -1555,6 +1555,60 @@ html.is-scrubbing * {
   margin-top: 12px;
 }
 
+/* An asset prop: preview, name and size, Replace… */
+.asset-field {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.asset-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: repeating-conic-gradient(#2a2e38 0 25%, #20232b 0 50%) 0 0 / 10px 10px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.asset-meta {
+  display: grid;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.asset-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-size {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-replace {
+  grid-column: 1 / -1;
+  justify-self: start;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.add-font {
+  justify-self: start;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.add-font:hover {
+  color: var(--text);
+}
+
 .inspector-group-title {
   margin: 0;
   color: var(--text);
@@ -1623,6 +1677,28 @@ html.is-scrubbing * {
 .theme-issues svg {
   flex: none;
   margin-top: 2px;
+}
+
+/* Files dragged over the canvas */
+.drop-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
+.drop-overlay span {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
 /* Toasts */

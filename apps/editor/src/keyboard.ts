@@ -9,10 +9,11 @@ export const typing = (target: EventTarget | null) =>
 
 /**
  * A focused dropdown trigger (our `Select`: a button with role combobox) has no text of its
- * own to undo, so Ctrl+Z / Ctrl+Y still undo the deck. Without this, undo did nothing right
- * after picking from an inspector dropdown, until focus moved.
+ * own to undo, copy or paste, so Ctrl+Z / Ctrl+Y and the clipboard still act on the deck.
+ * Without this, undo did nothing right after picking from an inspector dropdown, and Ctrl+V
+ * did nothing right after switching decks, until focus moved.
  */
-export const undoPassesThrough = (target: EventTarget | null) =>
+export const deckKeysPassThrough = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   target.getAttribute("role") === "combobox" &&
   !target.isContentEditable &&

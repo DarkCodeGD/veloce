@@ -29,6 +29,8 @@ export type Slide = z.infer<typeof SlideSchema>;
 /** A slide's own fields without its node tree. */
 export const SlideFieldsSchema = SlideSchema.omit({ root: true });
 
+const FontWeightSchema = z.number().int().min(1).max(1000);
+
 export const AssetInfoSchema = z.strictObject({
   mime: z
     .string()
@@ -41,6 +43,26 @@ export const AssetInfoSchema = z.strictObject({
   /** Intrinsic pixel size for images/videos. */
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  /**
+   * For font files: the face it provides, read from the font's own `name` and `OS/2` tables
+   * when it was imported. Themes use `family` in their font stacks; every font asset with that
+   * family is registered as one of its faces.
+   */
+  font: z
+    .strictObject({
+      family: z
+        .string()
+        .min(1)
+        .max(100)
+        // It goes into font stacks (CSS): no quotes, backslashes or control characters.
+        .refine((name) => [...name].every((c) => c >= " " && c !== '"' && c !== "\\"), {
+          error: "Font family names can't contain quotes, backslashes or control characters",
+        }),
+      /** CSS font-weight (1–1000). A variable font gives its range, e.g. [100, 900]. */
+      weight: z.union([FontWeightSchema, z.tuple([FontWeightSchema, FontWeightSchema])]).optional(),
+      style: z.enum(["normal", "italic"]).optional(),
+    })
+    .optional(),
 });
 export type AssetInfo = z.infer<typeof AssetInfoSchema>;
 

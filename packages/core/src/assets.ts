@@ -51,3 +51,67 @@ export function assetUsage(deck: Deck): Map<string, string[]> {
   }
   return usage;
 }
+
+// ── Importable files ────────────────────────────────────────────────────────────────────
+
+/** The largest file that can be imported as an asset (50 MiB). */
+export const MAX_ASSET_BYTES = 50 * 1024 ** 2;
+
+export const IMAGE_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/svg+xml",
+] as const;
+export const FONT_MIME_TYPES = ["font/woff2", "font/woff", "font/ttf", "font/otf"] as const;
+
+export type AssetKind = "image" | "font" | "other";
+
+export function assetKind(mime: string): AssetKind {
+  if ((IMAGE_MIME_TYPES as readonly string[]).includes(mime)) return "image";
+  if ((FONT_MIME_TYPES as readonly string[]).includes(mime)) return "font";
+  return "other";
+}
+
+// ── Deck fonts ──────────────────────────────────────────────────────────────────────────
+
+/** One face of a font the deck carries as an asset (a file dropped in, or added by an agent). */
+export interface DeckFontFace {
+  assetId: string;
+  mime: string;
+  family: string;
+  /** CSS `font-weight` descriptor: "400", or "100 900" for a variable font. */
+  weight: string;
+  style: "normal" | "italic";
+}
+
+/** Every font face in the deck's assets, in a stable order. */
+export function deckFontFaces(deck: Pick<Deck, "assets">): DeckFontFace[] {
+  const faces: DeckFontFace[] = [];
+  for (const [assetId, info] of Object.entries(deck.assets).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    if (!info.font || assetKind(info.mime) !== "font") continue;
+    const w = info.font.weight;
+    faces.push({
+      assetId,
+      mime: info.mime,
+      family: info.font.family,
+      weight: w === undefined ? "100 900" : Array.isArray(w) ? `${w[0]} ${w[1]}` : String(w),
+      style: info.font.style ?? "normal",
+    });
+  }
+  return faces;
+}
+
+/** The deck's own font families (each listed once), alphabetically. */
+export function deckFontFamilies(deck: Pick<Deck, "assets">): string[] {
+  return [...new Set(deckFontFaces(deck).map((f) => f.family))].sort((a, b) => a.localeCompare(b));
+}
+
+/** A theme font stack for an imported family: `"Acme Sans", system-ui, sans-serif`. */
+export function fontStackFor(family: string): string {
+  return `"${family}", system-ui, sans-serif`;
+}

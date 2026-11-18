@@ -4,17 +4,24 @@
  * fonts. Every change is one `deck.setTheme` transaction (the op the AI's set_theme uses), so
  * the whole deck restyles at once and Ctrl+Z takes it back in one step. Contrast problems in
  * the palette are flagged right here, before they show up as lint warnings on slides.
+ *
+ * Font pickers list the deck's own fonts (files dropped on the canvas, added here, or by an
+ * agent) above the bundled ones.
  */
 import {
   BUILTIN_THEMES,
   BUNDLED_FONTS,
-  bundledFont,
+  type Deck,
+  deckFontFamilies,
+  fontStackFor,
   primaryFamily,
   type Theme,
 } from "@veloce/core";
-import { TriangleAlert } from "lucide-react";
-
+import { Plus, TriangleAlert } from "lucide-react";
+import { useRef } from "react";
 import { run } from "../actions.js";
+import { uploadAll } from "../assets.js";
+import { addFonts, splitImports } from "../model/asset-insert.js";
 import {
   builtinIdOf,
   contrastIssues,
@@ -24,6 +31,7 @@ import {
   withFont,
 } from "../model/theme-edit.js";
 import { setPreview } from "../preview.js";
+import { showToast } from "../toasts.js";
 import { Group, Section, SelectField } from "./fields.js";
 import type { SelectOption } from "./Select.js";
 import { useColorPicker } from "./useColorPicker.js";
@@ -35,8 +43,20 @@ const FONT_OPTIONS: SelectOption[] = BUNDLED_FONTS.map((f) => ({
   fontFamily: f.stack,
 }));
 
-export function ThemeSection({ theme }: { theme: Theme }) {
+export function ThemeSection({ deck }: { deck: Deck }) {
+  const { theme } = deck;
   const currentId = builtinIdOf(theme);
+  const fontOptions = [
+    ...deckFontFamilies(deck).map(
+      (family): SelectOption => ({
+        value: fontStackFor(family),
+        label: family,
+        hint: "deck",
+        fontFamily: fontStackFor(family),
+      }),
+    ),
+    ...FONT_OPTIONS,
+  ];
   const issues = contrastIssues(theme);
   const flagged = new Set(issues.flatMap((i) => i.tokens));
   const commit = (next: Theme, label: string) =>
@@ -93,26 +113,76 @@ export function ThemeSection({ theme }: { theme: Theme }) {
       </Group>
 
       <Group title="Fonts">
-        {Object.entries(theme.fonts).map(([name, stack]) => (
-          <SelectField
-            key={name}
-            label={name.charAt(0).toUpperCase() + name.slice(1)}
-            value={stack}
-            options={
-              bundledFont(stack)
-                ? FONT_OPTIONS
-                : // A font the AI (or a file) set that isn't bundled: keep it pickable.
-                  [{ value: stack, label: primaryFamily(stack), hint: "custom" }, ...FONT_OPTIONS]
-            }
-            onCommit={(next) => {
-              if (typeof next === "string" && next !== stack) {
-                commit(withFont(theme, name, next), `Change theme font "${name}"`);
+        {Object.entries(theme.fonts).map(([name, stack]) => {
+          // The option for this stack: matched by family, so `"Acme", serif` written by an
+          // agent still shows as Acme. A font that's neither bundled nor in the deck stays
+          // pickable as "custom".
+          const family = primaryFamily(stack).toLowerCase();
+          const match = fontOptions.find((o) => primaryFamily(o.value).toLowerCase() === family);
+          return (
+            <SelectField
+              key={name}
+              label={name.charAt(0).toUpperCase() + name.slice(1)}
+              value={match?.value ?? stack}
+              options={
+                match
+                  ? fontOptions
+                  : [{ value: stack, label: primaryFamily(stack), hint: "custom" }, ...fontOptions]
               }
-            }}
-          />
-        ))}
+              onCommit={(next) => {
+                if (typeof next === "string" && next !== (match?.value ?? stack)) {
+                  commit(withFont(theme, name, next), `Change theme font "${name}"`);
+                }
+              }}
+            />
+          );
+        })}
+        <AddFontButton deck={deck} />
       </Group>
     </Section>
+  );
+}
+
+/** Pick font files to add to the deck (dropping them on the canvas works too). */
+function AddFontButton({ deck }: { deck: Deck }) {
+  const input = useRef<HTMLInputElement>(null);
+  const add = async (files: File[]) => {
+    const { imported, errors } = await uploadAll(deck.id, files);
+    const { fonts } = splitImports(imported);
+    const notFonts = imported.length - fonts.length;
+    if (notFonts > 0)
+      errors.push(`${notFonts === 1 ? "1 file isn't" : `${notFonts} files aren't`} a font`);
+    if (errors.length > 0) showToast({ message: errors.join("; "), tone: "error" }, 8000);
+    const command = addFonts(fonts, new Set(Object.keys(deck.assets)));
+    if (command && (await run(command))) {
+      showToast({
+        message: `${command.label.replace(/^Add /, "Added ")}: pick it above`,
+        tone: "info",
+      });
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="button button-ghost add-font"
+        onClick={() => input.current?.click()}
+      >
+        <Plus size={14} aria-hidden="true" /> Add font file…
+      </button>
+      <input
+        ref={input}
+        type="file"
+        hidden
+        multiple
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = ""; // picking the same file again still fires
+          if (files.length > 0) void add(files);
+        }}
+      />
+    </>
   );
 }
 
