@@ -6,7 +6,7 @@
 
 ## Current status
 
-- **Active phase:** Phase 2: See it + let the AI in (two real-agent trials done; hardened)
+- **Active phase:** Phase 3: Manual editor (round 1, the editing foundation, done)
 - **Last updated:** 2026-11-18
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
   are done. `pnpm check` is green (153 tests, including real-Chromium lint and preview tests).
@@ -16,7 +16,12 @@
   - **First real Claude Code run:** a 5-slide deck. Its five hiccups are fixed and tested (D37).
   - **Second trial:** found the restart overwrite gap, false overflow on wrapped text, radial
     gradient edges and icon glyphs. All fixed or documented (D38).
-  - **Next:** Phase 3, the manual editor.
+  - **Phase 3, round 1 (D39):** selection with Figma-style drill-in, hover and selection
+    outlines, a layers panel, a schema-generated inspector, slide add/duplicate/delete,
+    editable notes, undo/redo with undo toasts, and keyboard shortcuts. Verified by driving
+    real Chromium (select → recolor → delete → Undo → new slide, no console errors).
+  - **Next (round 2):** move/resize on the canvas, rich text editing, then marquee, drag
+    reordering, clipboard and the history panel.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -197,15 +202,22 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 ## Phase 3 — Manual editor
 
 - [ ] Selection (click, shift-click, marquee), hover outlines, layers panel
+  - Done: click / shift-click / double-click drill-in, Esc/Enter/Ctrl+A, hover outlines, layers
+    panel (rename, hide, lock). Left: marquee.
 - [ ] Move/resize/rotate (Moveable); snapping guides + spacing indicators
 - [ ] Auto-layout-aware drag (reorder within frame, drop into frames)
 - [ ] Text editing with TipTap, mapped to the core rich text model
-- [ ] Inspector panel auto-generated from each plugin's `propsSchema`
+- [x] Inspector panel auto-generated from each plugin's `propsSchema`
 - [ ] Slide panel: add, duplicate, delete, reorder (drag)
+  - Done: add, duplicate, delete, reorder with Alt+↑/↓. Left: drag reordering.
 - [ ] Theme picker + token-aware color/font pickers
 - [ ] Asset import (drag & drop images/fonts/files → content-hashed assets)
 - [ ] Clipboard (copy/paste within and between decks), keyboard shortcuts
+  - Done: shortcuts (undo/redo, delete, duplicate, select, reorder, slide navigation). Left:
+    clipboard.
 - [ ] Undo/redo for the `user` origin only; history panel shows agent transactions too
+  - Done: undo/redo buttons and shortcuts (the server scopes them to `user`), undo toasts. Left:
+    history panel.
 
 **Done when:** a full deck can be built by hand; human and agent edit concurrently without
 conflicts; Ctrl+Z never undoes the agent's work.

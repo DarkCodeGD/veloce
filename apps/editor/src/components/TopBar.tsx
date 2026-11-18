@@ -1,6 +1,9 @@
 import type { DeckListing } from "@veloce/core";
+import { Redo2, Undo2 } from "lucide-react";
+import { redo, undo } from "../actions.js";
 import { originLabel } from "../editor-context.js";
 import type { ConnectionStatus, LastChange } from "../sync-client.js";
+import { Select } from "./Select.js";
 
 interface Props {
   status: ConnectionStatus;
@@ -40,21 +43,38 @@ export function TopBar({
 
       <div className="deck-picker">
         {decks.length > 1 ? (
-          <select
+          <Select
             aria-label="Open deck"
+            className="deck-select"
             value={deckId ?? ""}
-            onChange={(e) => onOpenDeck(e.target.value)}
-          >
-            {decks.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.title}
-              </option>
-            ))}
-          </select>
+            options={decks.map((d) => ({ value: d.id, label: d.title }))}
+            onChange={onOpenDeck}
+          />
         ) : (
           <span className="deck-title">{title ?? "No deck"}</span>
         )}
         {position && <span className="deck-position">{position}</span>}
+      </div>
+
+      <div className="history">
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Undo"
+          title="Undo (Ctrl+Z)"
+          onClick={undo}
+        >
+          <Undo2 size={16} />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Redo"
+          title="Redo (Ctrl+Shift+Z)"
+          onClick={redo}
+        >
+          <Redo2 size={16} />
+        </button>
       </div>
 
       <div className="topbar-right">

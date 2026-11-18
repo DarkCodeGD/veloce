@@ -1,5 +1,8 @@
 import type { Deck } from "@veloce/core";
+import { Copy, Plus, Trash } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
+import { run } from "../actions.js";
+import { addSlide, deleteSlide, duplicateSlide } from "../model/commands.js";
 import { SlideCanvas } from "./SlideCanvas.js";
 
 interface Props {
@@ -11,6 +14,7 @@ interface Props {
   onSelect(slideId: string): void;
 }
 
+/** Slide thumbnails with add / duplicate / delete. Reorder: Alt+↑/↓ (no dragging needed). */
 export const SlideRail = memo(function SlideRail({
   deck,
   deckId,
@@ -29,32 +33,78 @@ export const SlideRail = memo(function SlideRail({
       button.focus({ preventScroll: true });
   }, [selectedId]);
 
+  const selectedIndex = deck.slides.findIndex((s) => s.id === selectedId);
+  const create = async () => {
+    const command = addSlide(selectedIndex === -1 ? deck.slides.length - 1 : selectedIndex);
+    if (await run(command)) onSelect(command.select?.[0] ?? "");
+  };
+
   return (
     <nav className="rail" aria-label="Slides">
       <ol>
-        {deck.slides.map((slide, i) => (
-          <li key={slide.id}>
-            <button
-              ref={slide.id === selectedId ? selectedRef : undefined}
-              type="button"
-              className={`thumb${slide.id === selectedId ? " is-selected" : ""}${recent.has(slide.id) ? " is-recent" : ""}${slide.hidden ? " is-hidden" : ""}`}
-              aria-current={slide.id === selectedId ? "true" : undefined}
-              aria-label={`Slide ${i + 1}${slide.name ? `: ${slide.name}` : ""}`}
-              onClick={() => onSelect(slide.id)}
+        {deck.slides.map((slide, i) => {
+          const selected = slide.id === selectedId;
+          const name = `Slide ${i + 1}${slide.name ? `: ${slide.name}` : ""}`;
+          return (
+            <li
+              key={slide.id}
+              className={`thumb-row${selected ? " is-selected" : ""}${recent.has(slide.id) ? " is-recent" : ""}${slide.hidden ? " is-hidden" : ""}`}
             >
-              <span className="thumb-number">{i + 1}</span>
-              <SlideCanvas
-                className="thumb-view"
-                deck={deck}
-                deckId={deckId}
-                slideId={slide.id}
-                padding={0}
-                lazy
-              />
-            </button>
-          </li>
-        ))}
+              <button
+                ref={selected ? selectedRef : undefined}
+                type="button"
+                className="thumb"
+                aria-current={selected ? "true" : undefined}
+                aria-label={name}
+                onClick={() => onSelect(slide.id)}
+              >
+                <span className="thumb-number">{i + 1}</span>
+                <SlideCanvas
+                  className="thumb-view"
+                  deck={deck}
+                  deckId={deckId}
+                  slideId={slide.id}
+                  padding={0}
+                  lazy
+                />
+              </button>
+              <div className="thumb-actions">
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Duplicate ${name}`}
+                  title="Duplicate slide"
+                  onClick={async () => {
+                    const command = duplicateSlide(slide, i);
+                    if (await run(command)) onSelect(command.select?.[0] ?? slide.id);
+                  }}
+                >
+                  <Copy size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Delete ${name}`}
+                  title="Delete slide"
+                  disabled={deck.slides.length === 1}
+                  onClick={async () => {
+                    const next = deck.slides[i + 1] ?? deck.slides[i - 1];
+                    if ((await run(deleteSlide(slide), { undoToast: true })) && selected && next)
+                      onSelect(next.id);
+                  }}
+                >
+                  <Trash size={13} />
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ol>
+      <div className="rail-footer">
+        <button type="button" className="button button-ghost" onClick={create}>
+          <Plus size={14} /> New slide
+        </button>
+      </div>
     </nav>
   );
 });

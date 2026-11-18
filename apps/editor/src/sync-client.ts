@@ -4,14 +4,29 @@
  * Holds a replica of the open deck: a snapshot, then each change applied with core's pure
  * `applyChange` (exactly what the server did), so unchanged slides keep their identity and the
  * renderer skips them. Any gap or failure triggers a fresh snapshot. Reconnects with backoff.
+ *
+ * Writes (`transact`, `undo`, `redo`) are requests: the server applies them (stamping the
+ * `user` origin) and broadcasts the change like any other. No optimistic local edits: the server
+ * owns the document, and a localhost round trip is ~1 ms. Interactions such as dragging preview
+ * locally and commit one transaction at the end.
  */
 import {
   applyChange,
   type Deck,
   type DeckListing,
+  type ErrorInfo,
+  type Op,
   type Origin,
+  randomId,
   type ServerMessage,
 } from "@veloce/core";
+
+/** A rejected write: the server's reason, ready to show to the user. */
+export class SyncError extends Error {
+  constructor(readonly info: Pick<ErrorInfo, "message"> & Partial<ErrorInfo>) {
+    super(info.message);
+  }
+}
 
 export type ConnectionStatus = "connecting" | "online" | "offline";
 
@@ -51,6 +66,7 @@ export class SyncClient {
   #retry = 0;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
   #disposed = false;
+  readonly #pending = new Map<string, { resolve(): void; reject(error: SyncError): void }>();
 
   constructor(url: string) {
     this.#url = url;
@@ -68,6 +84,45 @@ export class SyncClient {
   /** Show another deck (also makes it the active deck for agents). */
   open(deckId: string): void {
     this.#send({ type: "open", deckId });
+  }
+
+  /** Apply ops to the open deck as one undoable step. Rejects with the server's reason. */
+  transact(label: string, ops: Op[]): Promise<void> {
+    const deckId = this.#state.deckId;
+    if (!deckId) return Promise.reject(new SyncError({ message: "No deck is open" }));
+    return this.#request((requestId) => ({ type: "transaction", requestId, deckId, label, ops }));
+  }
+
+  /** Undo your last change (never an agent's). Resolves false when there's nothing to undo. */
+  undo(): Promise<boolean> {
+    return this.#history("undo");
+  }
+
+  redo(): Promise<boolean> {
+    return this.#history("redo");
+  }
+
+  async #history(type: "undo" | "redo"): Promise<boolean> {
+    const deckId = this.#state.deckId;
+    if (!deckId) return false;
+    try {
+      await this.#request((requestId) => ({ type, requestId, deckId }));
+      return true;
+    } catch (error) {
+      if (error instanceof SyncError && error.info.code === "NOT_FOUND") return false;
+      throw error;
+    }
+  }
+
+  #request(build: (requestId: string) => unknown): Promise<void> {
+    if (this.#socket?.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new SyncError({ message: "Not connected to the Veloce server" }));
+    }
+    const requestId = randomId(16);
+    return new Promise<void>((resolve, reject) => {
+      this.#pending.set(requestId, { resolve, reject });
+      this.#send(build(requestId));
+    });
   }
 
   dispose(): void {
@@ -93,6 +148,10 @@ export class SyncClient {
     };
     socket.onclose = () => {
       if (this.#socket !== socket || this.#disposed) return;
+      for (const { reject } of this.#pending.values()) {
+        reject(new SyncError({ message: "Lost the connection to the Veloce server" }));
+      }
+      this.#pending.clear();
       this.#set({ status: "offline" });
       const delay = Math.min(5000, 500 * 2 ** this.#retry++);
       this.#retryTimer = setTimeout(() => this.#connect(), delay);
@@ -137,9 +196,15 @@ export class SyncClient {
         });
         return;
       }
-      case "result":
+      case "result": {
+        const pending = this.#pending.get(message.requestId);
+        this.#pending.delete(message.requestId);
+        if (message.ok) pending?.resolve();
+        else pending?.reject(new SyncError(message.error));
+        return;
+      }
       case "error":
-        if (message.type === "error") console.warn(`[veloce] ${message.message}`);
+        console.warn(`[veloce] ${message.message}`);
         return;
     }
   }

@@ -330,3 +330,51 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
    use symbol characters as icons. **Why:** the bundled fonts cover text only, so symbols fall
    back to a mismatched system font. Bundling symbol fonts would be the wrong fix; icons should
    be vector elements.
+
+### D39: Editor editing foundation (2026-11-18)
+
+1. **No optimistic writes.** The editor sends a transaction and waits for the server's
+   `result`; the next `change` repaints. **Why:** the server owns the document (golden rule 2)
+   and a localhost round trip is about 1 ms, so optimistic state would buy nothing and add a
+   reconciliation layer. Interactions (later: drag, resize) preview locally and commit one
+   transaction at the end.
+2. **Figma-style selection.** A click picks the top-level layer under the pointer; once inside a
+   frame, clicks pick that frame's children. Double-click drills in, Esc selects the parents,
+   Enter the first child, Ctrl+A the siblings. Locked layers pass clicks to their container.
+   **Why:** auto-layout decks are deeply nested, so "innermost wins" would make frames almost
+   impossible to select. The rules live in `model/selection.ts`, free of DOM, and are tested.
+3. **The inspector reads the plugin's schema through JSON Schema**
+   (`z.toJSONSchema(…, {io: "input"})`) and maps it to a small set of field kinds (enum,
+   boolean, number, token, color, paint, length, text, rich text, read-only). **Why:** golden
+   rule 5. Third-party plugins get a working inspector for free, and JSON Schema is a stable
+   surface, unlike Zod's internals. Fields commit on Enter or blur and revert on Esc;
+   `null` resets to the default.
+4. **Undo toasts instead of confirmation dialogs** for destructive actions. **Why:** every edit
+   is one undoable transaction, so a dialog only slows people down.
+5. **Accessibility rules** from the ui-ux-pro-max skill's checklist (used as read-only guidance):
+   visible labels and focus, SVG icons, 150–300 ms transitions, reduced motion, and a
+   non-drag path for every drag (WCAG 2.5.7; Alt+↑/↓ reorders layers and slides).
+   **Rejected from the skill:** its suggested palette, IBM Plex fonts and landing-page patterns.
+   **Why:** they don't fit a dark, content-first editor whose chrome must stay quieter than
+   the slide.
+6. **`lucide-react` 1.67.0** for icons (ISC license; pinned past the minimum release age).
+   **Why:** tree-shakable SVG icons with a consistent stroke, and a permissive license.
+
+### D40: Custom dropdowns and quiet scrollbars (2026-11-18)
+
+1. **A hand-rolled `Select` replaces every native `<select>`** (`components/Select.tsx`). It
+   follows the WAI-ARIA "select-only combobox" pattern: focus stays on the trigger,
+   `aria-activedescendant` marks the highlighted option, and the keyboard matches a native
+   select. The keyboard logic is pure and tested (`model/listbox.ts`). **Why:** the native
+   popup is drawn by the OS, so it can't follow the theme and looked dated. A library (Radix,
+   MIT) would also work, but it adds about a dozen packages for one control.
+   **Not used:** `appearance: base-select`. It is Chromium-only, so the editor would look
+   different in other browsers during development.
+2. **While open, the popup follows its trigger when a panel scrolls**, and it closes once the
+   trigger is out of sight. **Why:** closing on any scroll fought inertial touchpad scrolling,
+   whose late scroll events closed the popup right after it opened (seen in a browser test).
+3. **Scrollbars have no track and no arrow buttons; the thumb is a slim pill** that brightens
+   while the pointer is over the panel. Chromium (Electron) is styled with `::-webkit-scrollbar`.
+   The standard `scrollbar-width`/`scrollbar-color` properties go only to engines without it.
+   **Why:** Chromium ignores the webkit rules once the standard properties are set, and the
+   standard ones can't hide the arrow buttons.
