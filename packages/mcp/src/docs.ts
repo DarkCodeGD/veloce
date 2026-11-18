@@ -3,7 +3,7 @@
  * fetched on demand with `get_docs`. Theme and element docs are generated from the live theme
  * and plugin registry, so they can't drift from what the engine actually accepts.
  */
-import { BUILTIN_THEMES, type Deck, LINT_RULES, type Theme } from "@veloce/core";
+import { BUILTIN_THEMES, BUNDLED_FONTS, type Deck, LINT_RULES, type Theme } from "@veloce/core";
 import type { PluginRegistry } from "@veloce/plugin-api";
 
 export const INSTRUCTIONS = `Veloce builds presentation decks. The user watches the deck update live in the Veloce editor.
@@ -140,7 +140,12 @@ ${list(current.space, "space", (v: number) => `${v}px`)}
 ${list(current.radius, "radius", (v: number) => `${v}px`)}
 ${list(current.shadow, "shadow", () => "shadow")}
 
-Fonts bundled with Veloce: Inter, JetBrains Mono. Other fonts only render if installed on the machine.`;
+## Fonts
+${list(current.fonts, "font", (v: string) => v)}
+
+Bundled with Veloce (they look the same on every machine; other fonts only render where
+installed). Set them with set_theme, e.g. \`{ "theme": { "fonts": { "heading": "Fraunces, Georgia, serif" } } }\`:
+${BUNDLED_FONTS.map((f) => `- ${f.family} (\`${f.stack}\`): ${f.note}`).join("\n")}`;
 }
 
 export function docTopics(registry: PluginRegistry): string[] {

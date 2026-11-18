@@ -1,5 +1,6 @@
 import type { DeckListing } from "@veloce/core";
 import { Redo2, Undo2 } from "lucide-react";
+import { useEffect } from "react";
 import { redo, undo } from "../actions.js";
 import { originName } from "../model/history.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
@@ -36,13 +37,13 @@ export function TopBar({
   onOpenDeck,
   position,
 }: Props) {
+  // The document leads; the app's name lives in the window/tab title, as in Figma or Keynote.
+  useEffect(() => {
+    document.title = title ? `${title} – Veloce` : "Veloce";
+  }, [title]);
+
   return (
     <header className="topbar">
-      <div className="brand">
-        <span className="brand-mark" aria-hidden="true" />
-        <span className="brand-name">Veloce</span>
-      </div>
-
       <div className="deck-picker">
         {decks.length > 1 ? (
           <Select

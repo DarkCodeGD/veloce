@@ -10,6 +10,7 @@ export * from "./checks.js";
 export * from "./default-theme.js";
 export * from "./document.js";
 export * from "./errors.js";
+export * from "./fonts.js";
 export * from "./ids.js";
 export * from "./json.js";
 export * from "./lint.js";

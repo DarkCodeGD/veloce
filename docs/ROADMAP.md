@@ -6,10 +6,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor (left: theme/color pickers, asset import)
+- **Active phase:** Phase 3: Manual editor (left: asset import)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (283 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (297 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -38,9 +38,12 @@
   - **History panel (D46):** every change by you and the AI, grouped by author, with the
     slides it touched; the server keeps the log, so it includes what the AI did before the
     editor opened.
-  - **Next:** the theme picker with token-aware color/font pickers, then asset import
-    (which also lets images be pasted between decks). Text color/alignment/style controls
-    in the text toolbar.
+  - **Themes (D47):** theme cards, palette editing with the system color picker and contrast
+    warnings, font pickers over six bundled fonts (two new themes, Paper and Studio, use
+    them), font previews in dropdowns, and "snap to the nearest theme color".
+    `tests/integration/phase3-theme.test.ts` covers it.
+  - **Next:** asset import (drag and drop images and fonts; also lets images be pasted between
+    decks). Text color/alignment/style controls in the text toolbar.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -227,7 +230,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
   - Left for later: toolbar controls for text color, paragraph alignment and style.
 - [x] Inspector panel auto-generated from each plugin's `propsSchema`
 - [x] Slide panel: add, duplicate, delete, reorder (drag, or Alt+↑/↓) (D45)
-- [ ] Theme picker + token-aware color/font pickers
+- [x] Theme picker + token-aware color/font pickers (D47)
 - [ ] Asset import (drag & drop images/fonts/files → content-hashed assets)
 - [x] Clipboard (copy/paste within and between decks), keyboard shortcuts (D45)
   - Images can't be pasted between decks until asset import lands.

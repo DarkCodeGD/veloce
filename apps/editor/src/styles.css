@@ -366,29 +366,12 @@ textarea::placeholder {
   border-bottom: 1px solid var(--border);
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: conic-gradient(from 210deg, #8b7bff, #3ecfe0, #ff7ab6, #8b7bff);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08) inset;
-}
-
+/* The deck leads the bar (no in-app logo: the app's name is in the window title). */
 .deck-picker {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding-left: 20px;
-  border-left: 1px solid var(--border);
 }
 
 .deck-title {
@@ -634,6 +617,11 @@ textarea::placeholder {
 
 .history-author.is-agent {
   color: var(--live);
+}
+
+/* Each author's run of changes stands apart from the next. */
+.history-group + .history-group {
+  margin-top: 10px;
 }
 
 .history-entry {
@@ -1213,7 +1201,7 @@ textarea::placeholder {
 .inspector-actions {
   display: flex;
   gap: 8px;
-  padding: 12px 16px 4px;
+  padding: 14px 16px 8px;
 }
 
 .inspector-actions .button {
@@ -1222,15 +1210,19 @@ textarea::placeholder {
   padding: 0 8px;
 }
 
+/*
+ * Inspector rhythm: sections are divided by a rule and 18–20px of padding; rows inside are
+ * 10px apart; a group inside a section (".inspector-group") adds 12px more above its title.
+ */
 .inspector-section {
   display: grid;
-  gap: 8px;
-  padding: 14px 16px 16px;
+  gap: 10px;
+  padding: 18px 16px 20px;
   border-bottom: 1px solid var(--border);
 }
 
-.inspector-section h3 {
-  margin: 0 0 2px;
+.inspector-section-title {
+  margin: 0 0 4px;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
@@ -1431,6 +1423,206 @@ html.is-scrubbing * {
   box-shadow:
     0 0 0 2px var(--panel),
     0 0 0 4px var(--accent);
+}
+
+/* A native color input, invisible over its swatch: the swatch is what you click. */
+.color-chip,
+.theme-swatch {
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-chip:has(.picker-input:focus-visible),
+.theme-swatch:has(.picker-input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.color-snap {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.color-snap:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.color-snap-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15) inset;
+}
+
+/* Theme section */
+
+.theme-grid {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 8px;
+}
+
+.theme-card {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: left;
+}
+
+.theme-card:hover,
+.theme-card.is-on {
+  color: var(--text);
+}
+
+.theme-preview {
+  position: relative;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transition: box-shadow var(--fast);
+}
+
+.theme-card:hover .theme-preview {
+  box-shadow: 0 0 0 1px var(--text-muted);
+}
+
+.theme-card.is-on .theme-preview {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 4px var(--accent);
+}
+
+.theme-aa {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.theme-dots {
+  position: absolute;
+  bottom: 7px;
+  left: 8px;
+  display: flex;
+  gap: 3px;
+}
+
+.theme-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.theme-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-group {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.inspector-group-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.theme-colors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.theme-color {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.theme-color:hover {
+  background: var(--hover);
+}
+
+.theme-swatch {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15) inset;
+}
+
+.theme-color.is-warn .theme-swatch {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 3px var(--warn);
+}
+
+.theme-color-value {
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.theme-issues {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.theme-issues li {
+  display: flex;
+  gap: 6px;
+}
+
+.theme-issues svg {
+  flex: none;
+  margin-top: 2px;
 }
 
 /* Toasts */

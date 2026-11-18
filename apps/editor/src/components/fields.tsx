@@ -3,11 +3,13 @@
  * or immediately (choices), and can reset to the default (`null` in the patch).
  * Token-aware: colors and lengths offer the theme's tokens first, raw values second.
  */
-import type { Theme } from "@veloce/core";
+import { primaryFamily, type Theme } from "@veloce/core";
 import { RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { parseNumber } from "../model/scrub.js";
+import { nearestColorToken, toHex6 } from "../model/theme-edit.js";
 import { Select, type SelectOption } from "./Select.js";
+import { useColorPicker } from "./useColorPicker.js";
 import { useNumberControl } from "./useNumberControl.js";
 
 type LabelProps = ReturnType<typeof useNumberControl>["labelProps"];
@@ -245,8 +247,28 @@ export function ToggleField({
   );
 }
 
-/** Theme tokens of one group, as select options: `$space.md` → "md", hinted "32". */
+/**
+ * Theme tokens of one group, as select options: `$space.md` → "md", hinted "32". Fonts and
+ * text styles show in their own typeface, hinted with the family / size and weight, so you
+ * pick by look, not by token name.
+ */
 export function tokenOptions(theme: Theme, group: string): SelectOption[] {
+  if (group === "font") {
+    return Object.entries(theme.fonts).map(([name, stack]) => ({
+      value: `$font.${name}`,
+      label: name,
+      hint: primaryFamily(stack),
+      fontFamily: stack,
+    }));
+  }
+  if (group === "text") {
+    return Object.entries(theme.text).map(([name, style]) => ({
+      value: `$text.${name}`,
+      label: name,
+      hint: `${style.size} · ${style.weight}`,
+      fontFamily: theme.fonts[style.font],
+    }));
+  }
   const record = (theme as unknown as Record<string, Record<string, unknown>>)[group] ?? {};
   return Object.entries(record).map(([name, v]) => ({
     value: `$${group}.${name}`,
@@ -344,7 +366,11 @@ export function LengthField({
   );
 }
 
-/** Theme color swatches first, then any hex color. Gradients/images are kept, not edited. */
+/**
+ * Theme color swatches first, then any color (typed, or from the system picker behind the
+ * chip). A raw color gets a one-click "use the closest theme color". Gradients and images
+ * are kept, not edited.
+ */
 export function ColorField({
   label,
   value,
@@ -376,6 +402,17 @@ export function ColorField({
       onCommit(t);
     }
   });
+  const pickerValue = (resolved && toHex6(resolved)) ?? "#000000";
+  const picker = useColorPicker(pickerValue, (hex) => {
+    if (hex !== pickerValue) onCommit(hex);
+  });
+  // A raw color (not a token): offer the closest theme color, so the slide stays on-theme and
+  // follows the next theme switch.
+  const raw = typeof value === "string" && !value.startsWith("$") && value !== "transparent";
+  const snapToken = raw ? nearestColorToken(theme, value) : null;
+  const snap = snapToken
+    ? { token: snapToken, name: snapToken.slice(7), hex: theme.colors[snapToken.slice(7)] }
+    : null;
   return (
     <Field label={label} htmlFor={id} isSet={value !== undefined} onReset={() => onCommit(null)}>
       <div className="color">
@@ -386,9 +423,19 @@ export function ColorField({
           </span>
         ) : (
           <div className="color-input">
-            <span className="color-chip" style={{ background: resolved ?? "transparent" }} />
+            {/* The chip opens the system picker, for a color outside the theme. */}
+            <label className="color-chip" style={{ background: resolved ?? "transparent" }}>
+              <span className="sr-only">{`${label}: custom color`}</span>
+              <input ref={picker} type="color" className="picker-input" />
+            </label>
             <input id={id} type="text" spellCheck={false} placeholder="Default" {...draft} />
           </div>
+        )}
+        {snap && (
+          <button type="button" className="color-snap" onClick={() => onCommit(snap.token)}>
+            <span className="color-snap-dot" style={{ background: snap.hex }} />
+            Use theme color “{snap.name}”
+          </button>
         )}
         <div className="swatches">
           {tokens.map(([name, hex]) => {
@@ -473,11 +520,25 @@ export function SizingField({
   );
 }
 
+/** A top-level inspector block ("Layer", "Theme"), divided from the next by a rule. */
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="inspector-section">
-      <h3>{title}</h3>
+      <h3 className="inspector-section-title">{title}</h3>
       {children}
     </section>
+  );
+}
+
+/**
+ * A titled group inside a section ("Colors" and "Fonts" in Theme): set apart by space and a
+ * smaller, sentence-case heading, so it reads as one level below the section title.
+ */
+export function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="inspector-group">
+      <h4 className="inspector-group-title">{title}</h4>
+      {children}
+    </div>
   );
 }

@@ -585,3 +585,55 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
    The panel's root class is `.history-panel`: `.history` was already the top bar's
    undo/redo group, and the clash stacked those buttons vertically. A browser test now
    checks that layout.
+
+### D47: Theme picker, palette and font editing, token-aware pickers (2026-11-19)
+
+1. **Theme changes are whole-theme `deck.setTheme` ops** (the op the AI's `set_theme` sends),
+   built by pure helpers in `model/theme-edit.ts`. **Why:** golden rule #1 (same ops for
+   humans and agents), and swapping a theme or one token restyles every slide at once and is
+   one undo step. Editing a token renames the theme "Name (custom)" once, so the picker and
+   the AI can tell a tweaked theme from the built-in one (`builtinIdOf` compares by value).
+2. **The Theme section lives in the inspector when nothing is selected**, under the slide's
+   settings: built-in theme cards (each previewed in its own background, heading font and
+   colors), the palette (each swatch opens the system color picker), contrast warnings, and
+   one font picker per font token. **Why:** it's the deck-level equivalent of "properties of
+   the selection", where Figma and Keynote put document settings; no new panel or modal.
+3. **Native `<input type="color">`, wired to the gesture contract (D41)** by
+   `useColorPicker`: the `input` event previews (once per frame), the native `change` event
+   (the picker closing) commits one transaction. **Why:** no color-picker dependency, it's
+   accessible, and the OS picker has an eyedropper. Trade-off: no alpha, so editing a
+   translucent token makes it opaque. The hook binds through a callback ref, so a picker that
+   mounts later (a gradient replaced by a color) still gets its listeners.
+4. **Contrast warnings in the palette** check the pairs slides lean on most (text and muted
+   on background/surface: 4.5:1; primary on background: 3:1; on-primary on primary: 4.5:1),
+   the same WCAG math lint uses. **Why:** a bad palette breaks every slide at once; it should
+   be caught where it's made, not slide by slide in lint.
+5. **Four more bundled fonts (OFL 1.1, @fontsource-variable, pinned 5.3.0):** Manrope, Space
+   Grotesk, Fraunces, Lora, alongside Inter and JetBrains Mono. Core's `BUNDLED_FONTS`
+   catalogs them (family, stack, category, one-line note) for the editor's font picker and
+   the AI's `get_docs("theme")`. Only Inter and JetBrains Mono load at startup; the rest load
+   when a slide uses them (`document.fonts.ready` covers measurement). Two new built-in themes
+   use them: **Paper** (Fraunces + Lora, warm light) and **Studio** (Space Grotesk + Manrope,
+   dark with an electric lime). A test makes sure every built-in theme only uses bundled fonts.
+   **Why:** a deck must look identical on every machine and in headless previews, and
+   "pick any system font" breaks that. Arbitrary fonts arrive with asset import (font files
+   in the `.veloce` zip).
+6. **Token-aware pickers:** font and text-style dropdowns show each option in its own
+   typeface (`SelectOption.fontFamily`). A color field holding a raw hex offers "Use theme
+   color 'x'": the nearest theme color by redmean distance. **Why:** raw colors don't follow
+   theme switches; one click puts a stray color back on the theme.
+7. **Undo passes through dropdowns.** The shortcut guard treated our `Select` trigger
+   (`role="combobox"`) like a text field, so Ctrl+Z did nothing right after picking from any
+   inspector dropdown until focus moved. Undo/redo now pass through non-text comboboxes
+   (`undoPassesThrough`); every other shortcut is still blocked there.
+   `tests/integration/phase3-theme.test.ts` covers it.
+8. **Inspector spacing rhythm:** sections are divided by a rule with 18–20px of padding, rows
+   inside are 10px apart, and a titled `Group` inside a section ("Colors", "Fonts") adds 12px
+   above a smaller sentence-case heading. History author groups follow the same spacing.
+   Section titles use a class (`.inspector-section-title`), not `.inspector-section h3`:
+   that descendant rule made every heading inside a section look like a section title.
+9. **No in-app logo or wordmark.** The top bar opens with the deck: title (or the deck
+   picker), slide position, undo/redo. The app's name lives in the window/tab title
+   ("Deck title – Veloce"), as in Figma, Keynote and other professional tools. **Why:** a
+   gradient logo plus name in the toolbar read as toy-like, and the document should lead.
+   App identity belongs to the OS chrome (window title, dock/taskbar icon, About dialog).

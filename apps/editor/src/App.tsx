@@ -14,7 +14,7 @@ import { TopBar } from "./components/TopBar.js";
 import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
 import { client } from "./editor-context.js";
-import { typing } from "./keyboard.js";
+import { typing, undoPassesThrough } from "./keyboard.js";
 import {
   deleteNodes,
   deleteSlide,
@@ -106,9 +106,10 @@ export function App() {
   // ── Keyboard ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (typing(e.target)) return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      const history = mod && (key === "z" || key === "y");
+      if (typing(e.target) && !(history && undoPassesThrough(e.target))) return;
       const handled = () => e.preventDefault();
       /** Claim the key press for the editor and run `action`. */
       const act = (action: () => void) => {

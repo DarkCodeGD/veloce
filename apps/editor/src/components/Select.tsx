@@ -28,6 +28,8 @@ export interface SelectOption {
   /** Muted text on the right, e.g. a token's value. */
   hint?: string;
   icon?: ReactNode;
+  /** Shows the label in this typeface (font pickers: see the font before choosing it). */
+  fontFamily?: string;
   disabled?: boolean;
 }
 
@@ -243,7 +245,10 @@ export function Select({
         onBlur={close}
       >
         {selected?.icon && <span className="select-icon">{selected.icon}</span>}
-        <span className={`select-value${selected ? "" : " is-placeholder"}`}>
+        <span
+          className={`select-value${selected ? "" : " is-placeholder"}`}
+          style={selected?.fontFamily ? { fontFamily: selected.fontFamily } : undefined}
+        >
           {selected?.label ?? placeholder}
         </span>
         {selected?.hint && <span className="select-hint">{selected.hint}</span>}
@@ -278,7 +283,12 @@ export function Select({
                   {i === selectedIndex && <Check size={14} />}
                 </span>
                 {option.icon && <span className="select-icon">{option.icon}</span>}
-                <span className="select-label">{option.label}</span>
+                <span
+                  className="select-label"
+                  style={option.fontFamily ? { fontFamily: option.fontFamily } : undefined}
+                >
+                  {option.label}
+                </span>
                 {option.hint && <span className="select-hint">{option.hint}</span>}
               </div>
             ))}

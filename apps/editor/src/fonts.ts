@@ -1,8 +1,14 @@
 /**
  * Bundled fonts (SIL Open Font License 1.1), registered under the exact family names the
- * themes use ("Inter", "JetBrains Mono"). Bundling means a deck looks the same on every machine
- * and in headless screenshots. Each subset only downloads when a slide uses its characters.
+ * themes use (core's BUNDLED_FONTS: "Inter", "Fraunces"…). Bundling means a deck looks the same
+ * on every machine and in headless screenshots. Each face only downloads when a slide uses
+ * its family and characters (Latin + Latin Extended here; Inter also covers Cyrillic, Greek
+ * and Vietnamese).
  */
+import frauncesLatinExtItalic from "@fontsource-variable/fraunces/files/fraunces-latin-ext-wght-italic.woff2?url";
+import frauncesLatinExt from "@fontsource-variable/fraunces/files/fraunces-latin-ext-wght-normal.woff2?url";
+import frauncesLatinItalic from "@fontsource-variable/fraunces/files/fraunces-latin-wght-italic.woff2?url";
+import frauncesLatin from "@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2?url";
 import interCyrillic from "@fontsource-variable/inter/files/inter-cyrillic-wght-normal.woff2?url";
 import interGreek from "@fontsource-variable/inter/files/inter-greek-wght-normal.woff2?url";
 import interLatinExtItalic from "@fontsource-variable/inter/files/inter-latin-ext-wght-italic.woff2?url";
@@ -12,6 +18,14 @@ import interLatin from "@fontsource-variable/inter/files/inter-latin-wght-normal
 import interVietnamese from "@fontsource-variable/inter/files/inter-vietnamese-wght-normal.woff2?url";
 import monoLatinExt from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-ext-wght-normal.woff2?url";
 import monoLatin from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url";
+import loraLatinExtItalic from "@fontsource-variable/lora/files/lora-latin-ext-wght-italic.woff2?url";
+import loraLatinExt from "@fontsource-variable/lora/files/lora-latin-ext-wght-normal.woff2?url";
+import loraLatinItalic from "@fontsource-variable/lora/files/lora-latin-wght-italic.woff2?url";
+import loraLatin from "@fontsource-variable/lora/files/lora-latin-wght-normal.woff2?url";
+import manropeLatinExt from "@fontsource-variable/manrope/files/manrope-latin-ext-wght-normal.woff2?url";
+import manropeLatin from "@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url";
+import groteskLatinExt from "@fontsource-variable/space-grotesk/files/space-grotesk-latin-ext-wght-normal.woff2?url";
+import groteskLatin from "@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2?url";
 
 const RANGES = {
   latin:
@@ -34,7 +48,22 @@ const FACES: Array<[family: string, url: string, range: string, style?: "italic"
   ["Inter", interLatinExtItalic, RANGES.latinExt, "italic"],
   ["JetBrains Mono", monoLatin, RANGES.latin],
   ["JetBrains Mono", monoLatinExt, RANGES.latinExt],
+  ["Manrope", manropeLatin, RANGES.latin],
+  ["Manrope", manropeLatinExt, RANGES.latinExt],
+  ["Space Grotesk", groteskLatin, RANGES.latin],
+  ["Space Grotesk", groteskLatinExt, RANGES.latinExt],
+  ["Fraunces", frauncesLatin, RANGES.latin],
+  ["Fraunces", frauncesLatinExt, RANGES.latinExt],
+  ["Fraunces", frauncesLatinItalic, RANGES.latin, "italic"],
+  ["Fraunces", frauncesLatinExtItalic, RANGES.latinExt, "italic"],
+  ["Lora", loraLatin, RANGES.latin],
+  ["Lora", loraLatinExt, RANGES.latinExt],
+  ["Lora", loraLatinItalic, RANGES.latin, "italic"],
+  ["Lora", loraLatinExtItalic, RANGES.latinExt, "italic"],
 ];
+
+/** Fetched at startup: the default theme's fonts. The rest load when a slide uses them. */
+const EAGER = new Set(["Inter", "JetBrains Mono"]);
 
 let loading: Promise<void> | null = null;
 
@@ -49,10 +78,11 @@ export function loadFonts(): Promise<void> {
         display: "block",
       });
       document.fonts.add(face);
-      return { face, eager: unicodeRange === RANGES.latin && !style };
+      return { face, eager: EAGER.has(family) && unicodeRange === RANGES.latin && !style };
     });
-    // Latin regular is on almost every slide: load it now so the first render (and measurement)
-    // uses the real font. Other subsets load on demand; `document.fonts.ready` waits for them.
+    // The default fonts' Latin regular is on almost every slide: load it now so the first render
+    // (and measurement) uses the real font. The rest load on demand, and `document.fonts.ready`
+    // (which measurement and previews await) waits for them.
     await Promise.all(faces.filter((f) => f.eager).map((f) => f.face.load().catch(() => {})));
   })();
   return loading;

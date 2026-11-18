@@ -83,12 +83,85 @@ export const EMBER_THEME: Theme = {
   radius: { sm: 6, md: 12, lg: 24, full: 9999 },
 };
 
+/** Light and editorial: serif headings (Fraunces) over a calm text serif (Lora), warm paper. */
+export const PAPER_THEME: Theme = {
+  ...DEFAULT_THEME,
+  name: "Paper",
+  colors: {
+    background: "#fbf8f3",
+    surface: "#f1ebe1",
+    text: "#1d1a16",
+    muted: "#5f574d",
+    border: "#e2d8c8",
+    primary: "#8a3b12",
+    "on-primary": "#ffffff",
+    secondary: "#1f5f7a",
+    accent: "#b4235a",
+    success: "#2f7a3b",
+    danger: "#b42318",
+  },
+  fonts: {
+    heading: "Fraunces, Georgia, serif",
+    body: "Lora, Georgia, serif",
+    mono: DEFAULT_THEME.fonts.mono as string,
+  },
+  text: {
+    ...DEFAULT_THEME.text,
+    display: { font: "heading", size: 120, weight: 700, lineHeight: 1.05, letterSpacing: -0.02 },
+    h1: { font: "heading", size: 80, weight: 650, lineHeight: 1.1, letterSpacing: -0.01 },
+    h2: { font: "heading", size: 56, weight: 600, lineHeight: 1.15 },
+    body: { font: "body", size: 32, weight: 400, lineHeight: 1.5 },
+  },
+  radius: { sm: 4, md: 8, lg: 16, full: 9999 },
+};
+
+/** Dark and bold: a grotesk for headings (Space Grotesk), Manrope body, an electric lime. */
+export const STUDIO_THEME: Theme = {
+  ...DEFAULT_THEME,
+  name: "Studio",
+  colors: {
+    background: "#111111",
+    surface: "#1c1c1c",
+    text: "#f5f5f0",
+    muted: "#a3a39b",
+    border: "#2e2e2e",
+    primary: "#d4ff3f",
+    "on-primary": "#111111",
+    secondary: "#7dd3fc",
+    accent: "#ff6b4a",
+    success: "#4ade80",
+    danger: "#f87171",
+  },
+  fonts: {
+    heading: "'Space Grotesk', system-ui, sans-serif",
+    body: "Manrope, system-ui, sans-serif",
+    mono: DEFAULT_THEME.fonts.mono as string,
+  },
+  text: {
+    ...DEFAULT_THEME.text,
+    display: { font: "heading", size: 128, weight: 700, lineHeight: 1, letterSpacing: -0.04 },
+    h1: { font: "heading", size: 84, weight: 700, lineHeight: 1.05, letterSpacing: -0.03 },
+    caption: {
+      font: "body",
+      size: 20,
+      weight: 700,
+      lineHeight: 1.3,
+      letterSpacing: 0.14,
+      transform: "uppercase",
+    },
+  },
+  radius: { sm: 4, md: 10, lg: 20, full: 9999 },
+  shadow: DARK_SHADOWS,
+};
+
 /** Built-in themes keyed by their short ID (what `set_theme` and the UI accept). */
 export const BUILTIN_THEMES: Readonly<Record<string, Theme>> = {
   light: DEFAULT_THEME,
   dark: DARK_THEME,
   midnight: MIDNIGHT_THEME,
   ember: EMBER_THEME,
+  paper: PAPER_THEME,
+  studio: STUDIO_THEME,
 };
 
 /** Look a built-in theme up by ID (`"dark"`) or display name (`"Veloce Dark"`), case-insensitively. */

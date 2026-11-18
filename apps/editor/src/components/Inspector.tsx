@@ -33,6 +33,7 @@ import {
   ToggleField,
   TokenField,
 } from "./fields.js";
+import { ThemeSection } from "./ThemeSection.js";
 
 interface Props {
   deck: Deck;
@@ -47,7 +48,12 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
 
   let body: React.ReactNode;
   if (nodes.length === 0) {
-    body = <SlideSection deck={deck} slide={slide} />;
+    body = (
+      <>
+        <SlideSection deck={deck} slide={slide} />
+        <ThemeSection theme={deck.theme} />
+      </>
+    );
   } else if (nodes.length > 1) {
     body = (
       <Section title={`${nodes.length} layers`}>
