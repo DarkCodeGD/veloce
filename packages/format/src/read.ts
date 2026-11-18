@@ -12,12 +12,18 @@
  * Note: this reads the whole archive into memory (fflate `unzipSync`). Fine for typical decks;
  * switch to fflate's streaming `Unzip` if multi-GB video decks become common.
  */
-import { type ApplyContext, FORMAT_VERSION, sha256Hex, validateDeck } from "@veloce/core";
+import {
+  type ApplyContext,
+  FORMAT_VERSION,
+  ID_PATTERN,
+  sha256Hex,
+  validateDeck,
+} from "@veloce/core";
 import { strFromU8, type UnzipFileInfo, unzipSync } from "fflate";
 import type { ReadResult } from "./bundle.js";
 import { DEFAULT_READ_LIMITS, PATHS, type ReadLimits } from "./constants.js";
 import { FormatError } from "./errors.js";
-import { ManifestSchema, type PluginsLock, PluginsLockSchema } from "./manifest.js";
+import { type Manifest, ManifestSchema, type PluginsLock, PluginsLockSchema } from "./manifest.js";
 import { migrateDocument, type RawDocument } from "./migrations.js";
 
 export interface ReadOptions {
@@ -134,12 +140,47 @@ export async function readVeloce(
   };
 }
 
+// ── Quick look ──────────────────────────────────────────────────────────────────────
+
+export interface VeloceInfo {
+  manifest: Manifest;
+  deckId: string;
+  slideCount: number;
+}
+
+/**
+ * Cheap look at a .veloce file for file lists: reads only the manifest and the document
+ * (no assets, no full validation), with the same zip safety checks as `readVeloce`.
+ */
+export function inspectVeloce(
+  bytes: Uint8Array,
+  options: Pick<ReadOptions, "limits"> = {},
+): VeloceInfo {
+  const limits = { ...DEFAULT_READ_LIMITS, ...options.limits };
+  const entries = unzip(bytes, limits, [], new Set([PATHS.manifest, PATHS.document]));
+  const manifestBytes = entries[PATHS.manifest];
+  const manifest =
+    manifestBytes && ManifestSchema.safeParse(parseJson(manifestBytes, PATHS.manifest));
+  if (!manifest?.success)
+    throw new FormatError("NOT_VELOCE", "Not a .veloce file: no valid manifest.json");
+  const document = parseJsonObject(entries, PATHS.document);
+  if (typeof document.id !== "string" || !ID_PATTERN.test(document.id)) {
+    throw new FormatError("CORRUPT", "document.json has no valid deck id");
+  }
+  return {
+    manifest: manifest.data,
+    deckId: document.id,
+    slideCount: Array.isArray(document.slides) ? document.slides.length : 0,
+  };
+}
+
 // ── Zip extraction with safety checks ────────────────────────────────────────────────
 
 function unzip(
   bytes: Uint8Array,
   limits: ReadLimits,
   warnings: string[],
+  only?: ReadonlySet<string>,
 ): Record<string, Uint8Array> {
   let count = 0;
   let declaredTotal = 0;
@@ -156,6 +197,7 @@ function unzip(
       warnings.push(`Ignored unknown file "${file.name}"`);
       return false;
     }
+    if (only && !only.has(file.name)) return false;
     assertEntrySize(file.name, file.originalSize, limits);
     declaredTotal += file.originalSize;
     assertTotalSize(declaredTotal, limits);

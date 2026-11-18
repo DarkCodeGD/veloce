@@ -1,6 +1,13 @@
 /**
- * @veloce/doc-server: Owns open documents: applies transactions, versioning, WebSocket sync, atomic autosave.
+ * @veloce/doc-server: owns open documents (D1).
  *
- * Placeholder until Phase 2 (see docs/ROADMAP.md).
+ * - `Workspace`: a folder of .veloce files; open/create/list, active deck, atomic autosave.
+ * - `OpenDeck`: one live document (transactions, per-origin undo, asset bytes, change events).
+ * - `SyncHub`: the sync protocol for editor clients, independent of the transport.
+ * - `RenderService`: contract for headless measuring/screenshots (implemented by the apps).
  */
-export const packageName = "@veloce/doc-server";
+export * from "./fs.js";
+export * from "./open-deck.js";
+export * from "./render.js";
+export * from "./sync-hub.js";
+export * from "./workspace.js";

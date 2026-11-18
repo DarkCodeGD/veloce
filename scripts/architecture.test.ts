@@ -16,12 +16,25 @@ const ALLOWED: Record<string, readonly string[]> = {
   "@veloce/core": [], // the foundation: zero internal deps, ever
   "@veloce/format": ["@veloce/core"],
   "@veloce/plugin-api": ["@veloce/core"],
+  // The built-in plugin set; apps use it instead of each listing the plugins.
+  "@veloce/builtins": [
+    "@veloce/plugin-api",
+    "@veloce/plugin-text",
+    "@veloce/plugin-shape",
+    "@veloce/plugin-image",
+  ],
   "@veloce/renderer": ["@veloce/core", "@veloce/plugin-api"],
   "@veloce/doc-server": ["@veloce/core", "@veloce/format"],
   "@veloce/mcp": ["@veloce/core", "@veloce/doc-server", "@veloce/plugin-api"],
-  "@veloce/server": ["@veloce/doc-server", "@veloce/mcp", "@veloce/core"],
-  "@veloce/editor": ["@veloce/core", "@veloce/plugin-api", "@veloce/renderer", "@veloce/format"],
-  "@veloce/desktop": ["@veloce/doc-server", "@veloce/mcp", "@veloce/core"],
+  "@veloce/server": ["@veloce/doc-server", "@veloce/mcp", "@veloce/core", "@veloce/builtins"],
+  "@veloce/editor": [
+    "@veloce/core",
+    "@veloce/plugin-api",
+    "@veloce/renderer",
+    "@veloce/format",
+    "@veloce/builtins",
+  ],
+  "@veloce/desktop": ["@veloce/doc-server", "@veloce/mcp", "@veloce/core", "@veloce/builtins"],
 };
 
 /** Plugins may only build on the public plugin API (and core types). */

@@ -15,6 +15,9 @@
     },
     {
       "path": "../../packages/doc-server"
+    },
+    {
+      "path": "../../packages/plugin-api"
     }
   ]
 }

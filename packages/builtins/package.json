@@ -1,0 +1,24 @@
+{
+  "name": "@veloce/builtins",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The built-in plugin set (text, shape, image) and a registry preloaded with it.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/plugin-api": "workspace:*",
+    "@veloce/plugin-image": "workspace:*",
+    "@veloce/plugin-shape": "workspace:*",
+    "@veloce/plugin-text": "workspace:*"
+  }
+}

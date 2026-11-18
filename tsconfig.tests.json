@@ -17,6 +17,7 @@
     "plugins/*/src/**/*.test.ts",
     "scripts/**/*.ts",
     "tests/**/*.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "apps/editor/vite.config.ts"
   ]
 }

@@ -1,0 +1,221 @@
+/**
+ * Measure a rendered slide: bounds, overflow and the colors text is drawn in, in stage pixels.
+ *
+ * Overflow is measured geometrically (content rects vs the box), not with `scrollHeight`:
+ * centered content (a slide root with `justify: center`, a text box with
+ * `verticalAlign: middle`) spills out of both ends, and `scrollHeight` only sees the bottom.
+ */
+import {
+  compositeOver,
+  contrastRatio,
+  flattenLayers,
+  type NodeMeasurement,
+  parseCssColor,
+  type Rect,
+  type Rgba,
+  type SlideMeasurement,
+  type TextSample,
+  toRgbString,
+} from "@veloce/core";
+
+const MAX_TEXT_SAMPLES = 12;
+
+export function measureSlide(
+  stage: HTMLElement,
+  slideId: string,
+  elements: ReadonlyMap<string, HTMLElement>,
+): SlideMeasurement {
+  const width = stage.offsetWidth;
+  const height = stage.offsetHeight;
+  const stageRect = stage.getBoundingClientRect();
+  // The stage may be CSS-scaled to fit the window; report everything in unscaled stage pixels.
+  const scale = width > 0 && stageRect.width > 0 ? stageRect.width / width : 1;
+  const toStage = (r: DOMRect | Rect): Rect => ({
+    x: round((("left" in r ? r.left : r.x) - stageRect.left) / scale),
+    y: round((("top" in r ? r.top : r.y) - stageRect.top) / scale),
+    width: round(r.width / scale),
+    height: round(r.height / scale),
+  });
+  const styles = new Map<Element, CSSStyleDeclaration>();
+  const style = (el: Element) => {
+    let s = styles.get(el);
+    if (!s) {
+      s = el.ownerDocument.defaultView?.getComputedStyle(el) ?? (el as HTMLElement).style;
+      styles.set(el, s);
+    }
+    return s;
+  };
+
+  const nodes: Record<string, NodeMeasurement> = {};
+  for (const [id, el] of elements) {
+    if (el.getClientRects().length === 0) continue; // display: none (hidden, or in a hidden frame)
+    const box = el.getBoundingClientRect();
+    const m: NodeMeasurement = { bounds: toStage(box) };
+    const isFrame = el.classList.contains("v-frame");
+    const clipped = style(el).overflow === "hidden";
+    const content = isFrame ? childRects(el) : contentRects(el, style);
+    const overflow = clipped ? null : overflowOf(box, content, scale);
+    if (overflow) m.overflow = overflow;
+    if (!isFrame) {
+      const text = textSamples(el, stage, style);
+      if (text.length) m.text = text;
+    }
+    nodes[id] = m;
+  }
+  return { slideId, stage: { width, height }, nodes };
+}
+
+const round = (v: number) => Math.round(v * 10) / 10;
+
+/** Rects of a frame's direct children (their own overflow is reported on them). */
+function childRects(el: HTMLElement): DOMRect[] {
+  return [...el.children].flatMap((c) =>
+    c.getClientRects().length ? [c.getBoundingClientRect()] : [],
+  );
+}
+
+/** Edges of something drawn, in viewport pixels. */
+interface Extent {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * Extents of everything an element draws. Vertical extents come from block-level boxes only:
+ * text ranges and inline boxes cover the font's full ascent+descent, which is taller than the
+ * line box whenever line-height < ~1.2 (normal for headings), and would read as overflow.
+ * They still count horizontally (e.g. a long unbreakable word).
+ */
+function contentRects(el: HTMLElement, style: (el: Element) => CSSStyleDeclaration): Extent[] {
+  const box = el.getBoundingClientRect();
+  const horizontalOnly = (r: DOMRect): Extent => ({
+    left: r.left,
+    right: r.right,
+    top: box.top,
+    bottom: box.top,
+  });
+  const rects: Extent[] = [];
+  for (const child of el.querySelectorAll("*")) {
+    const r = child.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) continue;
+    rects.push(style(child).display === "inline" ? horizontalOnly(r) : r);
+  }
+  const doc = el.ownerDocument;
+  const walker = doc.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
+  const range = doc.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.nodeValue?.trim()) continue;
+    range.selectNodeContents(n);
+    const r = range.getBoundingClientRect();
+    if (r.width > 0 || r.height > 0) rects.push(horizontalOnly(r));
+  }
+  return rects;
+}
+
+function overflowOf(box: DOMRect, rects: Extent[], scale: number): { x: number; y: number } | null {
+  if (rects.length === 0) return null;
+  let [left, top, right, bottom] = [box.left, box.top, box.right, box.bottom];
+  for (const r of rects) {
+    left = Math.min(left, r.left);
+    top = Math.min(top, r.top);
+    right = Math.max(right, r.right);
+    bottom = Math.max(bottom, r.bottom);
+  }
+  const x = (box.left - left + (right - box.right)) / scale;
+  const y = (box.top - top + (bottom - box.bottom)) / scale;
+  return x > 0.5 || y > 0.5 ? { x: round(x), y: round(y) } : null;
+}
+
+/** Distinct (color, background, size, weight) combinations of the text inside `el`. */
+function textSamples(
+  el: HTMLElement,
+  stage: HTMLElement,
+  style: (el: Element) => CSSStyleDeclaration,
+): TextSample[] {
+  const samples = new Map<string, TextSample>();
+  const walker = el.ownerDocument.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
+  for (let n = walker.nextNode(); n && samples.size < MAX_TEXT_SAMPLES; n = walker.nextNode()) {
+    const parent = n.parentElement;
+    if (!parent || !n.nodeValue?.trim()) continue;
+    const s = style(parent);
+    const sample: TextSample = {
+      color: s.color,
+      background: worstBackground(s.color, backgroundsBehind(parent, stage, style)),
+      fontSize: Number.parseFloat(s.fontSize) || 0,
+      fontWeight: fontWeight(s.fontWeight),
+    };
+    const key = `${sample.color}|${sample.background}|${sample.fontSize}|${sample.fontWeight}`;
+    if (!samples.has(key)) samples.set(key, sample);
+  }
+  return [...samples.values()];
+}
+
+/** Most background combinations to consider per text run (gradients multiply them). */
+const MAX_BACKGROUNDS = 48;
+
+/**
+ * Every opaque color that can sit behind an element: its own background composited over its
+ * ancestors' down to the stage. Gradients contribute their stops plus points between them
+ * (contrast can be worst mid-gradient when the text color sits between two stops).
+ * `null` when an image is involved: contrast can't be computed.
+ */
+function backgroundsBehind(
+  from: Element,
+  stage: HTMLElement,
+  style: (el: Element) => CSSStyleDeclaration,
+): Rgba[] | null {
+  const opaque = (stack: readonly Rgba[]) => stack.some((c) => c[3] >= 1);
+  let stacks: Rgba[][] = [[]]; // each stack lists layers top-first
+  for (let el: Element | null = from; el; el = el === stage ? null : el.parentElement) {
+    const s = style(el);
+    const base = parseCssColor(s.backgroundColor || "transparent");
+    if (!base) return null;
+    const options = layerOptions(s.backgroundImage, base);
+    if (!options) return null;
+    stacks = stacks
+      .flatMap((stack) => (opaque(stack) ? [stack] : options.map((o) => [...stack, ...o])))
+      .slice(0, MAX_BACKGROUNDS);
+    if (stacks.every(opaque)) break;
+  }
+  return stacks.map((stack) => flattenLayers(stack.filter((c) => c[3] > 0)));
+}
+
+/** One element's possible paint (top-first layers): its gradient samples over its color. */
+function layerOptions(image: string, base: Rgba): Rgba[][] | null {
+  if (!image || image === "none") return [[base]];
+  if (/url\(/i.test(image)) return null;
+  const stops = (image.match(/rgba?\([^)]*\)/g) ?? []).map(parseCssColor);
+  if (stops.length === 0 || stops.some((c) => c === null)) return null;
+  const colors = stops as Rgba[];
+  const samples: Rgba[] = [];
+  colors.forEach((color, i) => {
+    samples.push(color);
+    const next = colors[i + 1];
+    if (next) for (const t of [0.25, 0.5, 0.75]) samples.push(mix(color, next, t));
+  });
+  return samples.map((sample) => [sample, base]);
+}
+
+function mix(a: Rgba, b: Rgba, t: number): Rgba {
+  return [0, 1, 2, 3].map((i) => (a[i] ?? 0) + ((b[i] ?? 0) - (a[i] ?? 0)) * t) as unknown as Rgba;
+}
+
+/** The candidate background with the lowest contrast against this text color. */
+function worstBackground(color: string, backgrounds: Rgba[] | null): string | null {
+  const fg = parseCssColor(color);
+  if (!fg || !backgrounds?.length) return null;
+  let worst: { ratio: number; bg: Rgba } | null = null;
+  for (const bg of backgrounds) {
+    const ratio = contrastRatio(compositeOver(fg, bg), bg);
+    if (!worst || ratio < worst.ratio) worst = { ratio, bg };
+  }
+  return worst ? toRgbString(worst.bg) : null;
+}
+
+function fontWeight(value: string): number {
+  if (value === "bold") return 700;
+  if (value === "normal" || value === "") return 400;
+  return Number.parseInt(value, 10) || 400;
+}

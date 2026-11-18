@@ -30,4 +30,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+
+      # Headless Chromium + the built render page: lint measurements and slide previews are
+      # tested for real, not skipped (VELOCE_REQUIRE_BROWSER makes a missing browser fail).
+      - run: pnpm --filter @veloce/server exec playwright-core install --with-deps chromium-headless-shell
+      - run: pnpm build:editor
+
       - run: pnpm test
+        env:
+          VELOCE_REQUIRE_BROWSER: "1"

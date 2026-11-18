@@ -16,5 +16,5 @@ export * from "./errors.js";
 export * from "./manifest.js";
 export * from "./migrations.js";
 export { extensionFor } from "./mime.js";
-export { type ReadOptions, readVeloce } from "./read.js";
+export { inspectVeloce, type ReadOptions, readVeloce, type VeloceInfo } from "./read.js";
 export { type WriteOptions, writeVeloce } from "./write.js";

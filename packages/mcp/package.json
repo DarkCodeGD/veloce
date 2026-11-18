@@ -16,7 +16,10 @@
     "dist"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@veloce/core": "workspace:*",
-    "@veloce/doc-server": "workspace:*"
+    "@veloce/doc-server": "workspace:*",
+    "@veloce/plugin-api": "workspace:*",
+    "zod": "4.6.7"
   }
 }

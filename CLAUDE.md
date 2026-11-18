@@ -40,6 +40,13 @@ dependency licenses matter (check a library's license before adding it).
 - `pnpm check`: lint + typecheck + test (same as CI). Run before declaring work done.
 - `pnpm test` runs Vitest against `src/` (no build needed); `pnpm build` = `tsc -b`.
 - `pnpm format` auto-fixes formatting (Biome also formats Markdown).
+- `pnpm start` builds everything and runs the server + editor on `http://127.0.0.1:4321` (decks in
+  `./decks`). `pnpm dev:server` + `pnpm dev:editor` for editor work with Vite HMR on :5173.
+- Browser tests need `pnpm build:editor` and headless Chromium
+  (`pnpm --filter @veloce/server exec playwright-core install chromium-headless-shell`); without
+  them they skip locally. CI requires them (`VELOCE_REQUIRE_BROWSER=1`).
+- The render page runs the **built** editor: rebuild (`pnpm build:editor`) after renderer changes
+  before trusting browser test results.
 - New package/dependency between packages → update `scripts/architecture.test.ts` + DECISIONS.md.
 - Respect pnpm's minimum-release-age policy: never add `minimumReleaseAgeExclude`; pin an older version.
 - Plugins live in `plugins/<name>` as `@veloce/plugin-<name>`; every plugin test runs `checkElementConformance`.

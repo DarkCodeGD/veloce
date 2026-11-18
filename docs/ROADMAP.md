@@ -6,11 +6,23 @@
 
 ## Current status
 
-- **Active phase:** Phase 2: See it + let the AI in (not started)
+- **Active phase:** Phase 2: See it + let the AI in (first real-agent trial done; fixes landed)
 - **Last updated:** 2026-11-18
-- **Notes:** Phase 1 done: `pnpm check` green (lint + typecheck + 117 tests, no build needed).
-  `renderer`, `doc-server`, `mcp`, `server`, `editor`, `desktop` are still placeholders.
-  Next: renderer (deck → DOM with the plugin registry), then doc-server, then MCP.
+- **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
+  are done. `pnpm check` is green (153 tests, including real-Chromium lint and preview tests).
+  Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
+  A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
+  Midnight theme).
+  - **First real Claude Code run:** a 5-slide deck. Its five hiccups are fixed and tested (D37).
+  - **Next:** a second trial on a fresh session, to confirm the fixes and catch anything new.
+    Then Phase 3.
+  - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
+    server must be running first. Register it with
+    `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
+    the README; Electron will start the server automatically.
+  - **Still open:** the "current slide ±1" plugin-mount policy (thumbnails are live and lazily
+    mounted for now; it matters once heavy plugins arrive).
+  - `desktop` is still a placeholder.
 
 ---
 
@@ -136,43 +148,46 @@ identically, and per-origin undo/redo works. Built-in plugins pass the conforman
 
 **Renderer**
 
-- [ ] Deck → DOM; frames map to CSS flexbox; stage scaled to fit via CSS transform
+- [x] Deck → DOM; frames map to CSS flexbox; stage scaled to fit via CSS transform
 - [ ] Plugin host: mount current slide ±1 only; others show static thumbnails
-- [ ] Theme tokens → CSS variables; font loading (await fonts before measuring)
-- [ ] Measurement pass: computed bounds per node, text overflow detection → reported to server
+- [x] Theme tokens → CSS variables; font loading (await fonts before measuring)
+- [x] Measurement pass: computed bounds per node, text overflow detection → reported to server
 
 **Doc server**
 
-- [ ] Open/create/save documents; versioned; transactions applied in order
-- [ ] WebSocket sync protocol: client sends transaction → server applies → broadcasts patch + version; rejects stale/invalid with reason
-- [ ] Atomic autosave (write temp file → rename)
-- [ ] Render worker for screenshots/measurement without a user window (Playwright in dev/web; hidden BrowserWindow in Electron later)
+- [x] Open/create/save documents; versioned; transactions applied in order
+- [x] WebSocket sync protocol: client sends transaction → server applies → broadcasts patch + version; rejects stale/invalid with reason
+- [x] Atomic autosave (write temp file → rename)
+- [x] Render worker for screenshots/measurement without a user window (Playwright in dev/web; hidden BrowserWindow in Electron later)
 
 **Lint (`core` rules + renderer measurements)**
 
-- [ ] Rules: text overflow, overlap, off-canvas, low contrast (WCAG), empty slide, too much text, missing alt text
-- [ ] Output structured JSON with node ids and suggested fixes
+- [x] Rules: text overflow, overlap, off-canvas, low contrast (WCAG), empty slide, too much text, missing alt text (+ small text, unknown token)
+- [x] Output structured JSON with node ids and suggested fixes
 
 **MCP (`mcp`, Streamable HTTP at `http://localhost:<port>/mcp`)**
 
-- [ ] Server `instructions` (core workflow + rules: the fallback for agents without the skill)
-- [ ] Tools (keep the set small, ~10):
+- [x] Server `instructions` (core workflow + rules: the fallback for agents without the skill)
+- [x] Tools (keep the set small, ~10):
   - `get_deck_summary` (compact: slides, node ids, types, bounds; no blobs)
   - `get_slide(slideId)`
   - `upsert_slide(slide)` (whole slide in one call)
   - `apply_ops(ops, label)` (batch transaction)
   - `list_element_types` (from plugin registry, with prop schemas)
-  - `set_theme` / `list_themes`
+  - `set_theme` (built-in name or brand overrides; the error and `get_docs("theme")` list themes, so no `list_themes`)
   - `lint(slideId?)`
-  - `render_preview(slideId, step?)` → image content block
+  - `render_preview(slideId)` → image content block (`step` arrives with Phase 4 motion)
   - `undo_agent_changes(count?)`
   - `get_docs(topic)` (on-demand docs: core, layout, theme, each plugin's aiDocs)
-- [ ] Resources: `deck://current/summary`, `deck://current/theme`
-- [ ] All inputs validated with Zod; errors are actionable (`isError: true` + how to fix)
+  - added: `create_deck`, `list_decks`, `open_deck` (D33)
+- [x] Resources: `deck://current/summary`, `deck://current/theme`
+- [x] All inputs validated with Zod; errors are actionable (`isError: true` + how to fix)
 
 **Editor (view-only)**
 
-- [ ] Slide list + stage + live updates from server
+- [x] Slide list + stage + live updates from server
+
+- [x] `apps/server`: one local port for the editor, `/ws`, `/mcp` and assets; Host/Origin checks (D34)
 
 **Done when:** in Claude Code, "make a 5-slide pitch deck about X" produces a good-looking deck
 live in the browser; the agent runs `lint` + `render_preview` and fixes its own issues.

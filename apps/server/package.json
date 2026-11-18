@@ -16,7 +16,20 @@
     "dist"
   ],
   "dependencies": {
+    "@veloce/builtins": "workspace:*",
+    "@veloce/core": "workspace:*",
     "@veloce/doc-server": "workspace:*",
-    "@veloce/mcp": "workspace:*"
+    "@veloce/mcp": "workspace:*",
+    "playwright-core": "1.64.1",
+    "ws": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  },
+  "bin": {
+    "veloce-server": "./dist/cli.js"
+  },
+  "scripts": {
+    "start": "node dist/cli.js"
   }
 }

@@ -11,10 +11,16 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../../packages/core"
+    },
+    {
       "path": "../../packages/doc-server"
     },
     {
       "path": "../../packages/mcp"
+    },
+    {
+      "path": "../../packages/builtins"
     }
   ]
 }

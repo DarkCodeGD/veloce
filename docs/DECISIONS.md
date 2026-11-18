@@ -170,3 +170,139 @@ Vitest resolves the `@veloce/source` export condition in both browser-like (`res
 and Node (`ssr.resolve.conditions`) environments. **Why:** found in Phase 1. With only the first
 set, cross-package tests in Node silently used stale `dist/` builds. `pnpm test` must pass with
 no `dist/` folders at all.
+
+### D25: Sync protocol lives in `core` (2026-11-18)
+
+Messages (`open`, `transaction`, `undo`, `redo` / `welcome`, `decks`, `snapshot`, `change`,
+`result`, `error`) are Zod schemas in `core/sync.ts`. Clients replay a `change` with the same pure
+`applyChange` the server used and ask for a fresh snapshot on any version gap. The server always
+stamps the origin (a client-sent `origin` key is rejected). Transactions apply against the latest
+version, never rejected as "stale": ops address nodes by ID, so they compose, and an invalid op
+fails with a reason. **Why:** one definition shared by the editor, the server, tests and later
+Electron; replaying ops keeps unchanged slides identical by reference, so the renderer skips them;
+server-stamped origins make per-origin undo trustworthy.
+
+### D26: `@veloce/builtins` package (2026-11-18)
+
+`createBuiltinRegistry()` registers text, shape and image for every app (editor, render page,
+server, desktop). **Why:** one list of built-ins instead of four copies drifting apart.
+
+### D27: Rendering is a contract in `doc-server` (2026-11-18)
+
+`RenderService { measure, screenshot, close }` is defined in `doc-server`; Playwright lives only in
+`apps/server` (Electron will use a hidden window). `CachedRenderService` caches measurements in
+WeakMaps keyed by slide, theme and stage objects. **Why:** keeps `doc-server` and `mcp` testable
+without a browser (fakes in tests). Structural sharing makes identity a free cache key: an
+unchanged slide is never re-measured, and entries disappear with the old document.
+
+### D28: One shared active deck (2026-11-18)
+
+The workspace (a folder of `.veloce` files) has one active deck that the editor and all agents
+share. Agents switch it with `open_deck`/`create_deck`, and editor tabs follow. **Why:** the
+product is "watch the AI build it". If agents and users could point at different decks, users
+would miss the work. Per-session decks can come later if needed.
+
+### D29: MCP via the SDK's low-level `Server` (2026-11-18)
+
+We use the low-level `Server` with our own ListTools/CallTool handlers instead of `McpServer`.
+Tool input schemas come from `z.toJSONSchema(…, { io: "input", reused: "ref" })`. `apply_ops`
+advertises a compact schema but validates strictly. There is one `Server` per HTTP session, capped
+at 64 sessions (least recently used is evicted). **Why:** `McpServer` wants its own zod schema
+shapes; we already have exact schemas and need control over their size. `reused: "ref"` shrank
+`upsert_slide` from 19.8 KB to 7.5 KB, and a test keeps the budget.
+
+### D30: Write tools return lint results (2026-11-18)
+
+`upsert_slide` and `apply_ops` lint the slides they changed (with real measurements when a
+renderer is available) and append the issues to the result. **Why:** agents rarely call `lint`
+on their own; the feedback arrives at the moment they can fix it, at no extra round trip.
+
+### D31: Lint additions (2026-11-18)
+
+- `unknown-token` (error): a well-formed but undefined token such as `$text.h11`. The schema checks
+  only the format; the theme can change later. Suggestions match on the token name.
+- `small-text` (< 20px on a 1920-wide stage).
+- Overflow is measured geometrically: content rects against the element box. Vertical extents come
+  from block boxes only, because text ranges include the font's full ascent and descent and read
+  as overflow at line-height < 1.2.
+- `overflow: clip` frames skip the check.
+
+**Why:** found while testing with real Chromium. `scrollHeight` misses content overflowing at the
+top, and text-range heights caused false positives on every heading.
+
+### D32: Pinned Playwright, bundled fonts (2026-11-18)
+
+- `playwright-core` is pinned to 1.64.1 (Apache-2.0) to match the cached
+  `chromium-headless-shell` build. Upgrade both together.
+- Inter and JetBrains Mono (OFL-1.1, `@fontsource-variable`) are registered with `FontFace` under
+  the exact family names the themes use.
+- The render page waits for fonts before measuring.
+
+**Why:** measurements and screenshots must be identical on every machine. A system fallback font
+changes line breaks and therefore lint results.
+
+### D33: 13 MCP tools (2026-11-18)
+
+The ~10 planned tools plus `create_deck`, `list_decks` and `open_deck`. There is no
+`list_themes`: the `set_theme` error and `get_docs("theme")` list the themes. **Why:** an agent
+must be able to start from an empty workspace without the user's help.
+
+### D34: Local server security (2026-11-18)
+
+- The server binds to loopback by default.
+- The `Host` header must name this server (DNS rebinding).
+- Requests carrying an `Origin` must come from the server's own pages (cross-site requests and
+  WebSocket hijacking). Extra origins are allowed with `--allow-origin`.
+- Pages are served with a strict CSP.
+- Assets are served with `sandbox` CSP and `nosniff`.
+- The render page may only load from this server.
+
+All of this is covered by `tests/integration/phase2.test.ts`.
+
+**Why:** any website the user visits can reach `localhost`. The server can write files and has no
+login, so these checks are its only protection.
+
+### D35: Renderer lifecycle and sizing (2026-11-18)
+
+- On a slide switch, removed nodes are disposed **before** new ones mount. Plugin errors are
+  isolated behind a placeholder.
+- An absent size resolves as `node.width ?? plugin.defaultSize ?? "auto"`. `"auto"` fits content
+  on the main axis and follows the parent's `align` on the cross axis.
+
+**Why:** browsers cap WebGL contexts (~16), so a disposed-after-mount swap can fail on heavy
+slides. `"auto"` gives agents the layout they expect when they omit sizes.
+
+### D36: Built-in themes keep agent-facing pairs readable (2026-11-18)
+
+A test checks every built-in theme:
+
+- `primary` and `muted` reach ≥ 4.5:1 on both `background` and `surface`.
+- `on-primary` reaches ≥ 4.5:1 on `primary`.
+- `text` reaches ≥ 7:1 on `background`.
+
+Midnight's primary changed to `#8b6dff`, with dark `on-primary`.
+
+**Why:** the first scripted agent run hit `low-contrast` with nothing but theme tokens. If the
+obvious tokens fail lint, agents waste turns fixing problems the theme created.
+
+### D37: Fixes from the first real-agent transcript (2026-11-18)
+
+Claude Code built a 5-slide deck and reported five hiccups. Each one now has a regression test.
+
+1. **The agent reads the real palette.** Before any deck exists, `get_docs("theme")` used to
+   describe Light as if it were current. It now lists every built-in theme's palette, and
+   `create_deck`/`set_theme` results include the active palette. **Why:** the agent assumed
+   `on-primary` was white, which it isn't in Midnight.
+2. **Contrast is checked over gradients.** The check samples the stops and three points between
+   each pair, and the worst background wins. Images are still skipped. **Why:** a gradient that
+   darkens under dark text passed lint, and only a preview caught it.
+3. **`"hug"` follows the parent's `align`.** Only `stretch` falls back to `start`.
+   **Why:** a hug-sized button stayed left-aligned in a centered column; this was a renderer bug.
+4. **`upsert_slide` protects other people's work.** It refuses to replace a slide that another
+   origin (usually the user) edited last, unless the agent passes `overwrite: true`. Replacing a
+   slide keeps the root frame's ID, and the tool description points to `apply_ops` for fixes.
+   **Why:** golden rule 1. A whole-slide rebuild would silently discard the human's edits.
+   Last-editor tracking is per session: `OpenDeck.lastEditor`, derived from slide identity.
+5. **New `empty-space` rule (info).** It fires when more than 40% of the slide height is empty
+   above or below all elements. **Why:** agents that skip previews can't see unbalanced slides.
+   The rule only measures elements, because fill frames span the slide anyway.

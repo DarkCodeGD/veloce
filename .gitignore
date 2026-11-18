@@ -26,3 +26,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.tsbuild/
+# Local decks created while developing (pnpm start)
+decks/
