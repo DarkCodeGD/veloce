@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP tools, resources and instructions, mounted in-process next to the doc-server.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/doc-server": "workspace:*"
+  }
+}

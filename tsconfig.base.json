@@ -1,0 +1,33 @@
+{
+  // Shared compiler options for every workspace project.
+  // Each project extends this and only adds what's specific to it
+  // (rootDir/outDir, `lib`/`types` for its runtime, and project references).
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": [],
+
+    // Strictness — the core has to be trustworthy because humans AND agents mutate it.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "useUnknownInCatchVariables": true,
+
+    // Module hygiene.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+
+    // Project references (`tsc -b`) need composite builds with declarations.
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  }
+}

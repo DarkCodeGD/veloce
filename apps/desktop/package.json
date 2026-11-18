@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electron shell: main process hosts doc-server + MCP, window loads the editor.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/doc-server": "workspace:*",
+    "@veloce/mcp": "workspace:*"
+  }
+}

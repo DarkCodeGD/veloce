@@ -1,0 +1,21 @@
+{
+  // Type-checks test files (which the per-package builds exclude) in one program.
+  // Workspace imports resolve to src/ via the "@veloce/source" export condition.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "customConditions": ["@veloce/source"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": [
+    "apps/*/src/**/*.test.ts",
+    "packages/*/src/**/*.test.ts",
+    "plugins/*/src/**/*.test.ts",
+    "scripts/**/*.ts",
+    "vitest.config.ts"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/doc-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Owns open documents: applies transactions, versioning, WebSocket sync, atomic autosave.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/format": "workspace:*"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@veloce/editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Veloce editor web app (UI shell around the renderer).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/plugin-api": "workspace:*",
+    "@veloce/renderer": "workspace:*"
+  }
+}

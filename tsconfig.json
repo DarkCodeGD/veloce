@@ -1,0 +1,32 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/format"
+    },
+    {
+      "path": "./packages/plugin-api"
+    },
+    {
+      "path": "./packages/renderer"
+    },
+    {
+      "path": "./packages/doc-server"
+    },
+    {
+      "path": "./packages/mcp"
+    },
+    {
+      "path": "./apps/server"
+    },
+    {
+      "path": "./apps/editor"
+    },
+    {
+      "path": "./apps/desktop"
+    }
+  ]
+}

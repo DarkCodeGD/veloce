@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+out/
+*.tsbuildinfo
+
+# test & coverage
+coverage/
+test-results/
+playwright-report/
+
+# electron packaging
+release/
+
+# env & local
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/

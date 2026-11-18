@@ -1,0 +1,21 @@
+{
+  "name": "@veloce/plugin-api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Plugin contract, registry and conformance test kit. Built-in elements use this same API.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*"
+  }
+}
