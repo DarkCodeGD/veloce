@@ -6,7 +6,7 @@
 
 ## Current status
 
-- **Active phase:** Phase 3 complete; next is Phase 4: Motion
+- **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
   are done. `pnpm check` is green (328 tests, including real-Chromium lint, preview and editor tests).
@@ -47,8 +47,11 @@
     between decks. Agents get `add_asset`. The server sniffs every file. Fonts are named
     from their own `name` table and offered in the theme's font pickers.
     `tests/integration/phase3-assets.test.ts` covers it.
-  - **Next:** Phase 4 (Motion). Left over from Phase 3: text color/alignment/style controls
-    in the text toolbar.
+  - **Phase 3 reopened (2026-11-19):** the decks agents build are stacks and grids all the way
+    down, so dragging a layer only reorders it; there's no way to place one freely, and
+    switching a frame to Free collapses its children. Round 4 (below) fixes that and adds the
+    basics people expect from Figma/Keynote before Motion, which needs freely placed layers.
+  - **Next:** round 4, starting with free positioning per layer.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -232,7 +235,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 - [x] Move/resize/rotate; snapping guides + spacing indicators (D43, D45)
 - [x] Auto-layout-aware drag (reorder within frame, drop into frames)
 - [x] Text editing with TipTap, mapped to the core rich text model (D44)
-  - Left for later: toolbar controls for text color, paragraph alignment and style.
+  - Moved to round 4: toolbar controls for text color, paragraph alignment and style.
 - [x] Inspector panel auto-generated from each plugin's `propsSchema`
 - [x] Slide panel: add, duplicate, delete, reorder (drag, or Alt+↑/↓) (D45)
 - [x] Theme picker + token-aware color/font pickers (D47)
@@ -240,7 +243,30 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 - [x] Clipboard (copy/paste within and between decks, images included), keyboard shortcuts (D45, D48)
 - [x] Undo/redo for the `user` origin only; history panel shows agent transactions too (D46)
 
-**Done when:** a full deck can be built by hand; human and agent edit concurrently without
+**Round 4: free positioning and pro-tool basics**
+
+- [ ] Free positioning per layer: a layer inside a stack or grid can leave the flow and sit
+      at its own `x`/`y` on top of it (Figma's "ignore auto layout"). Inspector toggle
+      (Position: Auto / Free) and dragging a layer out of its stack; it keeps its on-screen
+      spot. Same option for agents over MCP (schema + docs + lint), with a migration if the
+      format changes
+- [ ] Switching a frame to Free keeps everything where it is: children get their current
+      rendered positions (and sizes where they were stretched), in one transaction
+- [ ] Layers panel drag and drop: reorder, and move layers into or out of frames (same ops as
+      canvas drags; keyboard path stays Alt+↑/↓)
+- [ ] Group / ungroup (Ctrl+G / Ctrl+Shift+G): wrap the selection in a frame that keeps its
+      layout, and unwrap it
+- [ ] Align and distribute for multi-selection (left/center/right, top/middle/bottom; space
+      evenly), in free frames
+- [ ] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
+      handles, guides and text editing stay correct at every zoom
+- [ ] Text toolbar: text color (theme tokens first), paragraph alignment, text style
+      (`$text.*`)
+- [ ] Unused uploads are cleaned up: files uploaded but never registered with `asset.add`
+      (a cancelled drop, a failed paste) are swept on save and on close
+
+**Done when:** a full deck can be built by hand, with layers placed exactly where you want
+them, including inside the AI's auto-layout slides; human and agent edit concurrently without
 conflicts; Ctrl+Z never undoes the agent's work.
 
 ## Phase 4 — Motion
