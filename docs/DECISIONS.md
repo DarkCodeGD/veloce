@@ -484,3 +484,48 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
 7. **Tests:** pure modules are unit-tested; `tests/integration/phase3-canvas.test.ts` drives
    every gesture in Chromium (one transaction each, exact stored values, undo). The browser
    suites share `tests/integration/editor-harness.ts`.
+
+### D44: Typing on the slide with TipTap, inside the layer's own box (2026-11-19)
+
+Double-click a text layer (or press Enter with it selected) to edit it in place.
+
+1. **TipTap 3 (`@tiptap/core`, `@tiptap/pm`, `@tiptap/starter-kit`, pinned 3.33.1, MIT; ProseMirror
+   and linkifyjs underneath, MIT)**, used through `@tiptap/core` directly (no `@tiptap/react`:
+   the editor mounts imperatively into the stage). Limited to what the core rich text model
+   holds: headings, quotes, code blocks, rules and hard breaks are off. A heading is a text
+   _style_ here (`$text.h1`), not a node type. **Why:** ProseMirror is the proven model for
+   rich text with an explicit schema. A bare `contenteditable` would have us re-implementing
+   selection, marks, lists and paste normalisation.
+2. **Pure mapping in `apps/editor/src/model/rich-text-doc.ts`.** Flat paragraphs tagged
+   `list` + `level` become nested `bulletList > listItem > paragraph`, grouped exactly like the
+   renderer groups `<ul>`/`<ol>`. Coming back, the tree is flattened, adjacent runs with the
+   same marks merge, and every value is re-validated with the core schemas (links, colors,
+   text style tokens). Unformatted text goes back to the plain string form. Paragraph
+   alignment and text style are global attributes; color is our own mark that keeps the core
+   value (a token stays a token). **Why:** pasted HTML must never produce a transaction the
+   server refuses (the whole edit would be lost) or a `javascript:` link. A no-op edit must
+   not change the stored form either.
+3. **The editor lives inside the layer's DOM box on the stage.** It mirrors the text plugin's
+   box style, and the plugin's own render stays underneath (`visibility: hidden`). **Why:**
+   it inherits the stage scale, ancestor rotations, theme CSS variables and fonts for free,
+   so the text doesn't move when editing starts (the browser test checks every glyph to
+   within 0.5 px). The hidden render, fed by the live preview, keeps laying the slide out,
+   so a hug-height box grows and its stack reflows as you type. The renderer only rewrites
+   its own child and the box's inline style, so the extra child and the `data-text-editing`
+   attribute survive re-renders. Limited to the built-in `text` type for now. Other plugins
+   would need a plugin API hook to declare an editable rich text prop and its box style.
+4. **Same contract as every gesture (D41):** typing only previews (once per frame). Ending the
+   session commits ONE `node.update` of `props.content` ("Edit text …"), so a whole typing
+   session is one undo step; inside it, Ctrl+Z is TipTap's own history. It ends on Esc (the
+   layer stays selected), a press elsewhere on the canvas, a selection change, the layer
+   being deleted (nothing is sent then), or a slide/deck switch. "Follow the AI" doesn't jump
+   slides while you type.
+5. **Floating toolbar** (bold, italic, underline, strike, code, bulleted/numbered list, link)
+   above the layer, outside the `aria-hidden` overlay, `role="toolbar"`. Buttons keep focus in
+   the editor. Links use an inline field, not `window.prompt` (Electron has none). Bare
+   addresses are completed (`veloce.dev` → `https://…`, `a@b.co` → `mailto:`) and other
+   schemes are refused. Text color and per-paragraph style/alignment round-trip but have no
+   toolbar controls yet.
+6. **TipTap is a lazy chunk** (~122 KB gzip). It's prefetched as soon as a text layer is
+   selected, so the main bundle grew only ~4 KB. **Why:** most sessions never type on the
+   slide, and startup matters more than the first keystroke after a double-click.

@@ -6,10 +6,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor (round 2: direct manipulation done, text editing next)
-- **Last updated:** 2026-11-18
+- **Active phase:** Phase 3: Manual editor (round 2 done: direct manipulation and text editing)
+- **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (236 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (255 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -28,8 +28,11 @@
     snapping guides; stacks/grids: live reorder; drop into other frames), resize and rotate
     handles that follow rotated layers, arrow-key nudging. Every gesture is one transaction
     (`tests/integration/phase3-canvas.test.ts`).
-  - **Next:** rich text editing on the canvas (TipTap), then marquee, spacing indicators,
-    slide drag reordering, clipboard and the history panel.
+  - **Round 2, typing on the slide (D44):** double-click or Enter edits a text layer in place
+    with TipTap, pixel-identical to the render; the layout reflows live; formatting toolbar
+    (marks, lists, links). One transaction per session (`tests/integration/phase3-text.test.ts`).
+  - **Next:** marquee, spacing indicators, slide drag reordering, clipboard and the history
+    panel. Text color/alignment/style controls in the text toolbar.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -215,7 +218,8 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 - [ ] Move/resize/rotate; snapping guides + spacing indicators
   - Done: move, resize, rotate, snapping guides, arrow nudging (D43). Left: spacing indicators.
 - [x] Auto-layout-aware drag (reorder within frame, drop into frames)
-- [ ] Text editing with TipTap, mapped to the core rich text model
+- [x] Text editing with TipTap, mapped to the core rich text model (D44)
+  - Left for later: toolbar controls for text color, paragraph alignment and style.
 - [x] Inspector panel auto-generated from each plugin's `propsSchema`
 - [ ] Slide panel: add, duplicate, delete, reorder (drag)
   - Done: add, duplicate, delete, reorder with Alt+↑/↓. Left: drag reordering.

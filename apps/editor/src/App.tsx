@@ -1,8 +1,8 @@
 import type { Slide } from "@veloce/core";
 import { Layers, PanelsTopLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { redo, run, undo } from "./actions.js";
-import { EditorCanvas } from "./components/EditorCanvas.js";
+import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
 import { Inspector } from "./components/Inspector.js";
 import { LayersPanel } from "./components/LayersPanel.js";
@@ -21,6 +21,7 @@ import {
   reorderNode,
 } from "./model/commands.js";
 import {
+  editableText,
   pickTarget,
   pruneSelection,
   selectFirstChild,
@@ -45,6 +46,9 @@ export function App() {
   const slides = deck?.slides ?? [];
   const [slideId, setSlideId] = useState<string | null>(null);
   const [selection, setSelection] = useState<string[]>([]);
+  const [editing, setEditing] = useState<TextEdit | null>(null);
+  const typingOnSlide = useRef(false);
+  typingOnSlide.current = editing !== null;
   const [hoverHit, setHoverHit] = useState<string | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("slides");
@@ -69,13 +73,22 @@ export function App() {
     if (slideIndex) setSelection((s) => pruneSelection(slideIndex, s));
   }, [slideIndex]);
 
-  // Follow the agent: jump to the slide it just added or changed.
+  // Typing on the slide ends when its layer stops being the one selected layer: a click
+  // elsewhere, Esc up to the parent, the layer deleted (by anyone), another slide or deck.
+  useEffect(() => {
+    if (!editing) return;
+    const still = selection.length === 1 && selection[0] === editing.id;
+    if (!still || !slideIndex || !editableText(slideIndex, editing.id)) setEditing(null);
+  }, [editing, selection, slideIndex]);
+
+  // Follow the agent: jump to the slide it just added or changed (not while you're typing).
   useEffect(() => {
     if (!lastChange) return;
     setActivityVisible(true);
     const timer = setTimeout(() => setActivityVisible(false), ACTIVITY_MS);
     const target = lastChange.slideIds.at(-1);
-    if (follow && lastChange.origin.startsWith("agent:") && target) setSlideId(target);
+    const jump = follow && !typingOnSlide.current && lastChange.origin.startsWith("agent:");
+    if (jump && target) setSlideId(target);
     return () => clearTimeout(timer);
   }, [lastChange, follow]);
 
@@ -113,6 +126,11 @@ export function App() {
       if (mod && key === "a") return act(() => setSelection(selectSiblings(slideIndex, selection)));
       if (e.key === "Escape") return setSelection(selectParents(slideIndex, selection));
       if (e.key === "Enter" && selection.length > 0) {
+        // A text layer: start typing, all text selected (Figma). A frame: go inside.
+        const only = selection.length === 1 ? selection[0] : undefined;
+        if (only && editableText(slideIndex, only)) {
+          return act(() => setEditing({ id: only, caret: "all" }));
+        }
         return act(() => setSelection(selectFirstChild(slideIndex, selection)));
       }
 
@@ -243,6 +261,8 @@ export function App() {
                 hover={hover}
                 onSelect={setSelection}
                 onHoverHit={setHoverHit}
+                editing={editing}
+                onEditText={setEditing}
               />
               <NotesEditor slide={current} />
             </main>

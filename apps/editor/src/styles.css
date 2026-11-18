@@ -1495,6 +1495,68 @@ html.is-scrubbing * {
   }
 }
 
+/* ── Typing on the slide (components/TextEditSession.tsx) ─────────────────────────── */
+
+/* The text plugin's render stays laid out under the editor (it sizes the box), unpainted. */
+[data-text-editing] > :not(.text-edit-host) {
+  visibility: hidden;
+}
+
+.text-edit-host {
+  cursor: text;
+  user-select: text; /* the canvas turns selection off */
+}
+
+/* Mirrors plugins/text renderParagraphs, so text doesn't move when editing starts. */
+.text-edit-content {
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.text-edit-content p {
+  margin: 0;
+}
+
+.text-edit-content ul,
+.text-edit-content ol {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.text-edit-content strong {
+  font-weight: 700;
+}
+
+.text-edit-content code {
+  font-family: var(--v-font-mono, monospace);
+  font-size: 0.9em;
+}
+
+.text-toolbar {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  transform: translateY(calc(-100% - 8px));
+}
+
+.text-toolbar-link {
+  width: 240px;
+  height: 28px;
+  margin-left: 4px;
+}
+
+.text-toolbar-link[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before {

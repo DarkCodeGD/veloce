@@ -19,6 +19,7 @@ import {
   replacePatch,
 } from "./commands.js";
 import {
+  editableText,
   pick,
   pruneSelection,
   selectFirstChild,
@@ -89,6 +90,14 @@ describe("selection", () => {
     expect(selectFirstChild(index, ["card"])).toEqual(["title"]);
     expect(selectSiblings(index, ["footer"])).toEqual(["card", "footer"]); // not the locked one
     expect(pruneSelection(index, ["card", "gone"])).toEqual(["card"]);
+  });
+
+  it("knows which layers can be typed into on the canvas", () => {
+    expect(editableText(index, "title")).toBe(true);
+    expect(editableText(index, "card")).toBe(false); // a frame
+    expect(editableText(index, "inner")).toBe(false); // inside a locked frame
+    expect(editableText(index, "gone")).toBe(false);
+    expect(editableText(index, undefined)).toBe(false);
   });
 });
 

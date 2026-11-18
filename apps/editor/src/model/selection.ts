@@ -85,3 +85,13 @@ export function pruneSelection(index: SlideIndex, selection: readonly string[]):
   const kept = selection.filter((id) => index.nodes.has(id) && id !== index.rootId);
   return kept.length === selection.length ? (selection as string[]) : kept;
 }
+
+/**
+ * Text layers you can type into on the canvas (double-click or Enter): `text` elements that
+ * aren't locked, directly or through a locked frame around them.
+ */
+export function editableText(index: SlideIndex, id: string | undefined): boolean {
+  const node = id ? index.nodes.get(id)?.node : undefined;
+  if (!id || node?.kind !== "element" || node.type !== "text") return false;
+  return !chainOf(index, id).some((at) => index.nodes.get(at)?.node.locked);
+}

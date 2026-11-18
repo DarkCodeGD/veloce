@@ -541,7 +541,8 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
               />
             ) : (
               <p key={field.key} className="inspector-hint">
-                {field.label}: formatted text. Double-click it on the slide to edit (coming next).
+                {field.label}: formatted text. Double-click it on the slide (or press Enter) to edit
+                it there.
               </p>
             );
           case "readonly":

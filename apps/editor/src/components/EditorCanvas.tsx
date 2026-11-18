@@ -5,8 +5,9 @@
  * exactly where the layer is, rotation included. The overlay only takes pointer events on
  * its handles: clicks go to the slide, and the selection rules (model/selection.ts) decide
  * what they select. Dragging a selected layer moves it (components/canvas-drags.ts).
+ * Double-clicking a text layer types into it (components/TextEditSession.tsx).
  */
-import type { Deck } from "@veloce/core";
+import type { Deck, TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { assetUrl, registry } from "../editor-context.js";
@@ -20,10 +21,16 @@ import {
   resizeCursor,
 } from "../model/geometry.js";
 import { ancestorRotation } from "../model/manipulate.js";
-import { pick, pickTarget } from "../model/selection.js";
+import { editableText, pick, pickTarget } from "../model/selection.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
 import { CanvasSpace } from "./canvas-space.js";
+import {
+  type Caret,
+  inTextEditor,
+  prefetchTextEditor,
+  TextEditSession,
+} from "./TextEditSession.js";
 import { useCanvasGestures } from "./useCanvasGestures.js";
 
 interface Props {
@@ -38,6 +45,14 @@ interface Props {
   onSelect(ids: string[]): void;
   /** The layer under the pointer, before the selection rules apply. */
   onHoverHit(hitId: string | null): void;
+  /** The text layer being typed into, if any. */
+  editing: TextEdit | null;
+  onEditText(edit: TextEdit | null): void;
+}
+
+export interface TextEdit {
+  id: string;
+  caret: Caret;
 }
 
 /** A layer's box in overlay pixels: centre, own size, on-screen rotation. */
@@ -61,12 +76,16 @@ export function EditorCanvas({
   hover,
   onSelect,
   onHoverHit,
+  editing,
+  onEditText,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const view = useRef<SlideView | null>(null);
   const deckIdRef = useRef(deckId);
   deckIdRef.current = deckId;
+  const indexRef = useRef(index);
+  indexRef.current = index;
   const { begin, active, feedback } = useCanvasGestures();
   const [boxes, setBoxes] = useState<{
     hover: OverlayBox | null;
@@ -143,6 +162,11 @@ export function EditorCanvas({
     };
   }, [measure]);
 
+  // A text layer is selected: typing is one double-click away, so load the editor now.
+  useEffect(() => {
+    if (selection.some((id) => editableText(index, id))) prefetchTextEditor().catch(() => {});
+  }, [selection, index]);
+
   // ── Pointer → layer ─────────────────────────────────────────────────────────────
   const hitAt = (target: EventTarget | null): string | null => {
     const stage = view.current?.stage;
@@ -156,6 +180,8 @@ export function EditorCanvas({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (inTextEditor(e.target)) return; // placing the caret, selecting text
+    if (editing) onEditText(null); // a press anywhere else on the canvas ends typing
     if (e.button !== 0 || e.detail > 1) return;
     const hit = hitAt(e.target);
     const target = pickTarget(index, hit, selection);
@@ -202,7 +228,7 @@ export function EditorCanvas({
   };
   const primary = boxes.selected.length === 1 ? boxes.selected[0] : undefined;
   const editable =
-    primary && primary.id !== index.rootId && !index.nodes.get(primary.id)?.node.locked;
+    !editing && primary && primary.id !== index.rootId && !index.nodes.get(primary.id)?.node.locked;
   const { stage } = boxes;
   /** Slide pixels → overlay pixels. */
   const toOverlay = (p: Point): Point => ({
@@ -220,8 +246,16 @@ export function EditorCanvas({
       ref={wrapperRef}
       className={`editor-canvas${active ? ` ${GESTURE_CLASS[active]}` : ""}`}
       onPointerDown={onPointerDown}
-      onDoubleClick={(e) => onSelect(pick(index, hitAt(e.target), selection, { deep: true }))}
-      onPointerMove={(e) => onHoverHit(active ? null : hitAt(e.target))}
+      onDoubleClick={(e) => {
+        if (inTextEditor(e.target)) return; // selects a word
+        const ids = pick(index, hitAt(e.target), selection, { deep: true });
+        onSelect(ids);
+        // Reaching a text layer starts typing, caret under the pointer.
+        if (ids.length === 1 && editableText(index, ids[0])) {
+          onEditText({ id: ids[0] as string, caret: { x: e.clientX, y: e.clientY } });
+        }
+      }}
+      onPointerMove={(e) => onHoverHit(active || editing ? null : hitAt(e.target))}
       onPointerLeave={() => onHoverHit(null)}
       onDragStart={(e) => e.preventDefault()} // images: no native drag-and-drop
     >
@@ -238,7 +272,7 @@ export function EditorCanvas({
             )}
           </div>
         ))}
-        {primary && !active && (
+        {primary && !active && !editing && (
           <div className="outline-label" style={labelStyle(primary)}>
             {labelFor(primary.id)}
           </div>
@@ -279,8 +313,29 @@ export function EditorCanvas({
           </div>
         )}
       </div>
+      {editing && view.current && (
+        <TextEditSession
+          key={editing.id}
+          stage={view.current.stage}
+          nodeId={editing.id}
+          content={textContentOf(index, editing.id)}
+          label={labelFor(editing.id)}
+          caret={editing.caret}
+          // Above the layer, like its name tag (hidden while typing).
+          anchor={primary?.id === editing.id ? labelAnchor(primary) : null}
+          exists={() => editableText(indexRef.current, editing.id)}
+          onExit={() => onEditText(null)}
+        />
+      )}
     </div>
   );
+}
+
+/** A text layer's stored content ("" if it has none yet). */
+function textContentOf(index: SlideIndex, id: string): TextContent {
+  const node = index.nodes.get(id)?.node;
+  const content = node?.kind === "element" ? node.props.content : undefined;
+  return typeof content === "string" || Array.isArray(content) ? (content as TextContent) : "";
 }
 
 /** Resize handles (sides are edge strips, corners squares) and the rotate knob. */
@@ -336,7 +391,11 @@ const boxStyle = (b: Box): React.CSSProperties => ({
 });
 
 /** The name tag sits above the layer's on-screen bounds (it never rotates: it's text). */
-const labelStyle = (b: Box): React.CSSProperties => {
+const labelAnchor = (b: Box): Point => {
   const r = boundingRect(b);
-  return { left: r.x, top: r.y };
+  return { x: r.x, y: r.y };
+};
+const labelStyle = (b: Box): React.CSSProperties => {
+  const at = labelAnchor(b);
+  return { left: at.x, top: at.y };
 };
