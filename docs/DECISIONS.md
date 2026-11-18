@@ -409,3 +409,39 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
    a resize grip.
 7. **`tests/integration/phase3-editor.test.ts`** drives these controls in real Chromium and
    counts the transactions the server receives.
+
+### D42: Infinite scrubbing with pointer lock (2026-11-18)
+
+1. **A scrub that reaches the window's left or right edge locks the pointer** (Pointer Lock
+   API). Movement keeps arriving past the edge, and a virtual cursor wraps around the window
+   (`components/virtual-cursor.ts`), Blender style. On release the lock is dropped and the
+   real cursor reappears where it froze. **Why:** a page can't move the OS cursor, as Blender
+   does. Pointer lock is the standard web equivalent and works in Electron.
+2. **The lock is only requested at the edge (16 px zone), not when a scrub starts.** Short
+   scrubs (most of them) never lock. **Why:** in a browser tab, Chrome shows a "Press Esc
+   to show your cursor" notice whenever the lock engages, and the page can't hide it. Users
+   found it annoying on every scrub; now it only appears when a scrub really goes past the
+   edge. A plain label click never locks. Chrome grants the lock seconds after the press
+   (tested at 6 s); if it ever refuses, the fallback below applies.
+3. **Robustness:**
+   - "Locked" is read from `document.pointerLockElement` on every event, because it is set
+     before the `pointerlockchange` event fires.
+   - The first event after locking and jumps over 300 px are ignored, because Chromium
+     reports a bogus jump when the lock engages.
+   - Losing the lock mid-scrub (Esc in a browser, switching windows) cancels, like Esc.
+   - Engaging the lock releases pointer capture, which is not treated as the end of the
+     gesture.
+   - Accelerated (OS) movement is used: `unadjustedMovement` isn't supported everywhere, and
+     accelerated movement feels like the normal cursor.
+4. **Fallback:** when the lock is refused (no API, or Chrome's cooldown right after Esc), the
+   scrub works as before and stops at the screen edge.
+5. **Tests:** headless Chromium emulates the lock by snapping its synthetic cursor back after
+   each move (+N, then -N), so real mouse moves can't drive a locked scrub. The suite refuses
+   the lock by default, which covers the fallback path. The locked tests take a real press
+   and a real lock, then deliver movement events directly. They check wrapping, the
+   ignored glitch events, one transaction, and the cancel on lock loss.
+6. **Test stability:** after waiting for the server, tests also wait for the editor to receive
+   and paint that version (`synced()`). Without that, CI once pressed Space on a switch that
+   still showed the old state. `VELOCE_TEST_CPU_THROTTLE=4` runs the suite on a 4× slower
+   CPU, which it passes. Past that, headless Chromium's own pointer-lock emulation stalls,
+   even on a blank page (2 fps at 8×), so higher rates aren't meaningful.

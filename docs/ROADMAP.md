@@ -9,7 +9,7 @@
 - **Active phase:** Phase 3: Manual editor (round 1, the editing foundation, done)
 - **Last updated:** 2026-11-18
 - **Notes:** Renderer, doc-server, lint, MCP (13 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (190 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (194 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -23,6 +23,7 @@
   - **Polish pass (D40–D41):** custom dropdowns, quiet scrollbars, toggle switches, styled
     tooltips with shortcuts, auto-growing text fields, and scrubbable number fields with live
     previews (one transaction per gesture, verified by `tests/integration/phase3-editor.test.ts`).
+    Scrubbing is infinite (pointer lock + a wrapping virtual cursor, D42).
   - **Next (round 2):** move/resize on the canvas, rich text editing, then marquee, drag
     reordering, clipboard and the history panel.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the

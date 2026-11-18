@@ -2,7 +2,12 @@
  * Everything a number field does, as props for its <label> and <input>:
  *
  * - **Scrub:** drag the label sideways (Shift 10× faster, Alt 10× finer). A press without
- *   movement is still a normal label click that focuses the input.
+ *   movement is still a normal label click that focuses the input. The scrub is infinite:
+ *   when it reaches the window's left or right edge, the pointer is locked so movement
+ *   continues, and a virtual cursor wraps around the window (Blender style). Locking only at
+ *   the edge keeps short scrubs free of the browser's "Press Esc to show your cursor"
+ *   notice. Where the lock is refused (e.g. Chrome's short cooldown after Esc), the scrub
+ *   still works, stopping at the screen edge.
  * - **Nudge:** ↑/↓ in the input, same modifiers. Holding the key repeats.
  * - **Type:** a number with an optional unit ("24px", "50%"); Enter or blur commits, an empty
  *   field resets to the default.
@@ -23,7 +28,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { type NumberConstraints, nudge, parseNumber, quantize, Scrub } from "../model/scrub.js";
+import {
+  atWindowEdge,
+  lockedMovement,
+  type NumberConstraints,
+  nudge,
+  parseNumber,
+  quantize,
+  Scrub,
+} from "../model/scrub.js";
+import { VirtualCursor } from "./virtual-cursor.js";
 
 export interface NumberControlOptions extends NumberConstraints {
   value: number | undefined;
@@ -37,6 +51,38 @@ export interface NumberControlOptions extends NumberConstraints {
 
 /** Pixels the pointer must travel before a label press becomes a scrub. */
 const SCRUB_THRESHOLD = 3;
+
+/**
+ * Ask for pointer lock; resolves whether it was granted. Handles both the promise-returning
+ * API (Chromium) and the older event-only one, and never throws.
+ */
+function requestLock(el: HTMLElement): Promise<boolean> {
+  if (typeof el.requestPointerLock !== "function") return Promise.resolve(false);
+  try {
+    const result = el.requestPointerLock() as unknown;
+    if (result instanceof Promise)
+      return result.then(
+        () => true,
+        () => false,
+      );
+  } catch {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    const done = (granted: boolean) => () => {
+      document.removeEventListener("pointerlockchange", onChange);
+      document.removeEventListener("pointerlockerror", onError);
+      resolve(granted);
+    };
+    const onChange = done(true);
+    const onError = done(false);
+    document.addEventListener("pointerlockchange", onChange);
+    document.addEventListener("pointerlockerror", onError);
+  });
+}
+
+/** Pointer lock state of one scrub. */
+type Lock = "none" | "pending" | "locked" | "off";
 
 const format = (value: number | undefined) =>
   value === undefined ? "" : String(Math.round(value * 100) / 100);
@@ -54,13 +100,20 @@ export function useNumberControl(o: NumberControlOptions) {
   const nudged = useRef<number | null>(null);
   const gesture = useRef<{
     pointerId: number;
+    label: HTMLElement;
     startX: number;
     lastX: number;
+    lastY: number;
     scrub: Scrub | null;
     value: number;
     frame: number;
-    /** Esc handler while scrubbing (kept here so the same function is removed). */
+    lock: Lock;
+    /** The next locked event is the first since the lock engaged (unreliable movement). */
+    firstLocked: boolean;
+    cursor: VirtualCursor | null;
+    /** Listeners added while scrubbing (kept here so the same functions are removed). */
     onKey: ((e: globalThis.KeyboardEvent) => void) | null;
+    onLockChange: (() => void) | null;
   } | null>(null);
   const suppressClick = useRef(false);
 
@@ -87,14 +140,58 @@ export function useNumberControl(o: NumberControlOptions) {
     if (!g) return;
     gesture.current = null;
     cancelAnimationFrame(g.frame);
-    document.documentElement.classList.remove("is-scrubbing");
+    document.documentElement.classList.remove("is-scrubbing", "is-scrub-locked");
     if (g.onKey) window.removeEventListener("keydown", g.onKey, true);
+    if (g.onLockChange) document.removeEventListener("pointerlockchange", g.onLockChange);
+    if (document.pointerLockElement === g.label) document.exitPointerLock();
+    g.cursor?.dispose();
     if (!g.scrub) return; // a plain click, never became a scrub
     setScrubbing(false);
     suppressClick.current = true; // the click after a drag must not focus the input
     if (mode === "commit") return commit(g.value);
     preview(null);
     setDraft(format(opts.current.value));
+  };
+
+  /**
+   * Lock the pointer for an infinite scrub. Until it engages (or if it's refused) the scrub
+   * keeps following the visible pointer. Losing the lock mid-scrub (Esc, switching windows)
+   * cancels, like Esc.
+   */
+  const startLock = (g: NonNullable<typeof gesture.current>) => {
+    if (document.pointerLockElement) return; // someone else holds it: plain scrub
+    g.lock = "pending";
+    g.onLockChange = () => {
+      if (gesture.current !== g) return;
+      if (document.pointerLockElement === g.label) enterLocked(g);
+      else if (g.lock === "locked") endScrub("cancel");
+    };
+    document.addEventListener("pointerlockchange", g.onLockChange);
+    void requestLock(g.label).then((granted) => {
+      if (gesture.current !== g) {
+        // The gesture ended before the lock arrived: give it straight back.
+        if (granted && document.pointerLockElement === g.label) document.exitPointerLock();
+        return;
+      }
+      if (!granted) g.lock = "off";
+    });
+  };
+
+  /**
+   * Switch a scrub to locked mode. Called from whichever comes first: the change event, or a
+   * pointer event that already sees the lock (`pointerLockElement` is set before the event
+   * fires, and events in between must not read the frozen `clientX`).
+   */
+  const enterLocked = (g: NonNullable<typeof gesture.current>) => {
+    if (g.lock === "locked") return;
+    g.lock = "locked";
+    g.firstLocked = true;
+    // Starts where the real cursor froze (inside the window, even if it got past the edge).
+    g.cursor = new VirtualCursor(
+      Math.min(Math.max(g.lastX, 0), window.innerWidth - 1),
+      Math.min(Math.max(g.lastY, 0), window.innerHeight - 1),
+    );
+    document.documentElement.classList.add("is-scrub-locked");
   };
 
   const labelProps = {
@@ -105,12 +202,18 @@ export function useNumberControl(o: NumberControlOptions) {
       suppressClick.current = false;
       gesture.current = {
         pointerId: e.pointerId,
+        label: e.currentTarget,
         startX: e.clientX,
         lastX: e.clientX,
+        lastY: e.clientY,
         scrub: null,
         value: startValue(),
         frame: 0,
+        lock: "none",
+        firstLocked: false,
+        cursor: null,
         onKey: null,
+        onLockChange: null,
       };
     },
     onPointerMove(e: PointerEvent<HTMLElement>) {
@@ -132,8 +235,21 @@ export function useNumberControl(o: NumberControlOptions) {
         };
         window.addEventListener("keydown", g.onKey, true);
       }
-      const next = g.scrub.move(e.clientX - g.lastX, e);
-      g.lastX = e.clientX;
+      if (g.lock === "pending" && document.pointerLockElement === g.label) enterLocked(g);
+      let dx: number;
+      if (g.lock === "locked") {
+        // Locked: the pointer is frozen; movement is all there is (past the screen edge too).
+        dx = lockedMovement(e.movementX, g.firstLocked);
+        g.cursor?.move(dx, lockedMovement(e.movementY, g.firstLocked));
+        g.firstLocked = false;
+      } else {
+        dx = e.clientX - g.lastX;
+        g.lastX = e.clientX;
+        g.lastY = e.clientY;
+        // Reached the window edge: lock the pointer so the scrub can keep going.
+        if (g.lock === "none" && atWindowEdge(e.clientX, window.innerWidth)) startLock(g);
+      }
+      const next = g.scrub.move(dx, e);
       if (next === g.value) return;
       g.value = next;
       // At most one preview per frame, however fast the pointer reports.
@@ -151,8 +267,10 @@ export function useNumberControl(o: NumberControlOptions) {
       endScrub("cancel");
     },
     // Capture lost without a pointer up (e.g. the window lost focus): keep what's shown.
+    // Engaging pointer lock also releases capture; that's not the end of the gesture.
     onLostPointerCapture() {
-      endScrub("commit");
+      const lock = gesture.current?.lock;
+      if (lock !== "pending" && lock !== "locked") endScrub("commit");
     },
     onClick(e: MouseEvent<HTMLElement>) {
       if (suppressClick.current) {

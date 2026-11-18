@@ -1,5 +1,6 @@
 /**
- * Phase 3 acceptance (editor controls): scrubbing, nudging and typing numbers, toggle
+ * Phase 3 acceptance (editor controls): scrubbing (including infinite, pointer-locked
+ * scrubbing), nudging and typing numbers, toggle
  * switches, tooltips and auto-growing text fields, driven in real Chromium against the real
  * server. The server's change feed is the source of truth: these tests count the
  * transactions it receives (a whole drag must be exactly one) and read the values it stores.
@@ -43,6 +44,8 @@ let browser: Browser;
 let page: Page;
 const changes: DeckChange[] = [];
 const pageErrors: string[] = [];
+/** The newest deck version the editor has received over its WebSocket. */
+let editorVersion = 0;
 
 /** Transactions the editor (origin `user`) has sent so far. */
 const userTransactions = () => changes.filter((c) => c.origin === "user").length;
@@ -97,6 +100,52 @@ async function startScrub(name: string, dx: number) {
   await page.waitForTimeout(80); // one animation frame for the preview
 }
 
+/**
+ * Wait until the editor has received everything the server stored, and painted it. Waiting
+ * on the server alone isn't enough: on a slow machine the editor can still show the old
+ * value, and an interaction then acts on stale state (seen in CI).
+ */
+async function synced() {
+  const latest = changes.at(-1)?.version ?? 0;
+  await expect.poll(() => editorVersion).toBeGreaterThanOrEqual(latest);
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+}
+
+/** Let the next scrubs lock the pointer (refused by default; see the init script). */
+const allowPointerLock = (allow: boolean) =>
+  page.evaluate((allow) => {
+    (window as unknown as { __allowPointerLock: boolean }).__allowPointerLock = allow;
+  }, allow);
+
+/** Movement while the pointer is locked, delivered the way the browser reports it. */
+const lockedMove = (dx: number, dy = 0) =>
+  page.evaluate(
+    ([dx, dy]) => {
+      const el = document.pointerLockElement;
+      if (!el) throw new Error("the pointer is not locked");
+      const { __pointerId: pointerId } = window as unknown as { __pointerId: number };
+      el.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId,
+          pointerType: "mouse",
+          isPrimary: true,
+          movementX: dx,
+          movementY: dy,
+        }),
+      );
+    },
+    [dx, dy] as const,
+  );
+
+const virtualCursorX = () =>
+  page.locator(".virtual-cursor").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.left + r.width / 2;
+  });
+
 beforeAll(async () => {
   if (problem) return;
   dir = await mkdtemp(join(tmpdir(), "veloce-phase3-"));
@@ -150,8 +199,43 @@ beforeAll(async () => {
 
   browser = await chromium.launch();
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.addInitScript(() => {
+    // Headless Chromium emulates pointer lock by snapping its synthetic cursor back after
+    // every move (+N, then -N), so real mouse moves can't drive a locked scrub. The lock is
+    // refused unless a test allows it, which exercises the fallback path everywhere else;
+    // the locked tests feed movement events directly.
+    const w = window as unknown as { __allowPointerLock?: boolean; __pointerId?: number };
+    const request = Element.prototype.requestPointerLock;
+    Element.prototype.requestPointerLock = function (this: Element, options) {
+      if (!w.__allowPointerLock) {
+        return Promise.reject(new DOMException("disabled in this test", "NotSupportedError"));
+      }
+      return request.call(this, options);
+    };
+    addEventListener("pointerdown", (e) => (w.__pointerId = e.pointerId), true);
+  });
+  page.on("websocket", (ws) =>
+    ws.on("framereceived", ({ payload }) => {
+      try {
+        const message = JSON.parse(String(payload)) as { type?: string; version?: number };
+        if (message.type === "change" || message.type === "snapshot") {
+          editorVersion = Math.max(editorVersion, message.version ?? 0);
+        }
+      } catch {
+        // not JSON: ignore
+      }
+    }),
+  );
   page.on("pageerror", (e) => pageErrors.push(String(e)));
   page.on("console", (m) => m.type() === "error" && pageErrors.push(m.text()));
+  // Stress knob: VELOCE_TEST_CPU_THROTTLE=4 runs the page on a 4x slower CPU, roughly a slow
+  // CI runner, to flush out timing assumptions. (Past ~4x, headless Chromium's own pointer
+  // lock emulation stalls, even on a blank page.)
+  if (process.env.VELOCE_TEST_CPU_THROTTLE) {
+    const cdp = await page.context().newCDPSession(page);
+    const rate = Number(process.env.VELOCE_TEST_CPU_THROTTLE);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate });
+  }
   await page.goto(app.url);
   await page.locator(".editor-canvas [data-node-id='card']").waitFor();
 }, 60_000);
@@ -168,6 +252,8 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
   beforeEach(async () => {
     await page.mouse.up();
     for (const key of ["Shift", "Alt"]) await page.keyboard.up(key);
+    await allowPointerLock(false);
+    await synced();
   });
 
   it("has no browser-default controls left", async () => {
@@ -184,6 +270,9 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
 
     await startScrub("Opacity", -30); // unset = 100% → 70%
     expect(await input("Opacity").inputValue()).toBe("70");
+    // Lock refused (see the init script): a plain scrub, no virtual cursor.
+    expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
+    expect(await page.locator(".virtual-cursor").count()).toBe(0);
     expect(await canvasStyle("card", "opacity")).toBe("0.7");
     expect(userTransactions()).toBe(before); // nothing sent mid-drag
 
@@ -220,6 +309,7 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
     await page.mouse.up();
     await page.keyboard.up("Shift");
     await expect.poll(() => stored("card").rotation).toBe(60);
+    await synced(); // the next scrub starts from the value the editor shows
 
     await page.keyboard.down("Alt");
     await startScrub("Rotation", 5);
@@ -240,6 +330,7 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
     await page.keyboard.up("ArrowUp");
     await expect.poll(userTransactions).toBe(before + 1);
     expect(stored("card").rotation).toBe(start + 5);
+    await synced();
 
     await page.keyboard.press("Shift+ArrowDown");
     await expect.poll(() => stored("card").rotation).toBe(start - 5);
@@ -251,6 +342,7 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
     await input("Opacity").fill("45%");
     await input("Opacity").press("Enter");
     await expect.poll(() => stored("card").opacity).toBe(0.45);
+    await synced(); // garbage must revert to the value the editor shows
 
     const before = userTransactions();
     await input("Opacity").fill("abc");
@@ -277,11 +369,90 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
     await expect.poll(() => stored("body").props?.fontSize).toBe(rendered + 10);
   });
 
+  it("locks only at the window edge, then scrubs on with a cursor that wraps around", async () => {
+    await allowPointerLock(true);
+    await select("Body");
+    const before = userTransactions();
+    const rendered = Number.parseFloat((await canvasStyle("body", "font-size", true)) ?? "");
+    const original = stored("body").props?.fontSize as number | undefined;
+    const start = original ?? rendered; // unset: scrubbing starts from the rendered size
+    const box = await label("Font size").boundingBox();
+    if (!box) throw new Error("no label");
+    const x = Math.round(box.x + box.width / 2);
+    const y = Math.round(box.y + box.height / 2);
+    const edge = 1440 - 8; // inside the right edge zone
+
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 8, y); // a short scrub…
+    await page.waitForTimeout(80);
+    expect(await input("Font size").inputValue()).toBe(String(start + 8));
+    // …never locks the pointer, so the browser shows no "Press Esc" notice.
+    expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
+
+    await page.mouse.move(edge, y); // one jump to the edge: now it locks
+    await expect
+      .poll(() => page.evaluate(() => document.pointerLockElement?.textContent ?? null))
+      .toBe("Font size");
+    expect(await virtualCursorX()).toBeCloseTo(edge, 0);
+    const atEdge = start + (edge - x);
+    // Chromium sends a bogus jump as the first event after locking (headless does too): it
+    // must not move the value. A zero-movement primer keeps this test independent of
+    // whether a given build sends it.
+    await lockedMove(0);
+    await page.waitForTimeout(40);
+    expect(await input("Font size").inputValue()).toBe(String(atEdge));
+
+    for (let i = 0; i < 8; i++) await lockedMove(150, 2); // 1200 px past the right edge
+    await lockedMove(5000); // glitch-sized jumps: ignored
+    await lockedMove(-301);
+    await page.waitForTimeout(80);
+
+    expect(await input("Font size").inputValue()).toBe(String(atEdge + 1200));
+    expect(await canvasStyle("body", "font-size", true)).toBe(`${atEdge + 1200}px`); // preview
+    expect(await virtualCursorX()).toBeCloseTo((edge + 1200) % 1440, 0); // wrapped around
+    expect(userTransactions()).toBe(before);
+
+    await page.mouse.up();
+    await expect.poll(userTransactions).toBe(before + 1);
+    expect(stored("body").props?.fontSize).toBe(atEdge + 1200);
+    expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
+    expect(await page.locator(".virtual-cursor").count()).toBe(0);
+    await page.keyboard.press("Control+z"); // one undo step puts it back
+    await expect.poll(() => stored("body").props?.fontSize).toBe(original);
+  });
+
+  it("losing the pointer lock mid-scrub (Esc, switching windows) cancels it", async () => {
+    await allowPointerLock(true);
+    await select("Card");
+    const before = userTransactions();
+    const opacity = await canvasStyle("card", "opacity");
+
+    await startScrub("Opacity", -8);
+    expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
+    const y = (await label("Opacity").boundingBox())?.y ?? 0;
+    await page.mouse.move(1440 - 8, y + 5); // reach the edge: locks
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement !== null)).toBe(true);
+    await lockedMove(0);
+    await lockedMove(-20);
+    await page.waitForTimeout(80);
+    expect(await canvasStyle("card", "opacity")).not.toBe(opacity);
+
+    await page.evaluate(() => document.exitPointerLock()); // what the browser does on Esc
+    await expect.poll(() => canvasStyle("card", "opacity")).toBe(opacity);
+    expect(await page.locator(".virtual-cursor").count()).toBe(0);
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    expect(userTransactions()).toBe(before);
+  });
+
   it("toggles are switches that work with the pointer and the keyboard", async () => {
     await select("Card");
     const locked = page.getByRole("switch", { name: "Locked" });
     await locked.click();
     await expect.poll(() => stored("card").locked).toBe(true);
+    await synced(); // Space toggles what the switch shows; it must show "on" first
+    expect(await locked.isChecked()).toBe(true);
     await locked.press("Space");
     await expect.poll(() => stored("card").locked).toBeUndefined();
   });

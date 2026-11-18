@@ -104,3 +104,39 @@ export function parseNumber(text: string): number | null {
   const n = Number(match[1]);
   return Number.isFinite(n) ? n : null;
 }
+
+// ── Infinite scrubbing (pointer lock) ──────────────────────────────────────────────────
+
+/** Wrap a position into [0, size): leaving one edge re-enters at the opposite edge. */
+export function wrap(position: number, size: number): number {
+  if (size <= 0) return 0;
+  return ((position % size) + size) % size;
+}
+
+/**
+ * Largest believable movement in one pointer event while the pointer is locked. Faster than
+ * ~18 000 px/s at 60 Hz; anything bigger is a browser glitch, not a hand.
+ */
+export const MAX_LOCKED_STEP = 300;
+
+/**
+ * Movement to apply from one event while the pointer is locked. Chromium reports a bogus
+ * jump on the first event after the lock engages, and occasional spikes after that, so the
+ * first event and implausible jumps count as no movement.
+ */
+export function lockedMovement(movement: number, firstAfterLock: boolean): number {
+  if (firstAfterLock || !Number.isFinite(movement)) return 0;
+  return Math.abs(movement) > MAX_LOCKED_STEP ? 0 : movement;
+}
+
+/** How close (px) to the window's left/right edge a scrub must get before it locks. */
+export const EDGE_ZONE = 16;
+
+/**
+ * True when a scrubbing pointer has reached the window's left or right edge. Only then is
+ * the pointer locked: short scrubs never lock, so the browser's "Press Esc to show your
+ * cursor" notice only appears when a scrub actually needs to go further.
+ */
+export function atWindowEdge(x: number, width: number, zone = EDGE_ZONE): boolean {
+  return x <= zone || x >= width - zone;
+}

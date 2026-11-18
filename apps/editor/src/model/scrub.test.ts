@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { nudge, parseNumber, quantize, rate, Scrub } from "./scrub.js";
+import {
+  atWindowEdge,
+  EDGE_ZONE,
+  lockedMovement,
+  MAX_LOCKED_STEP,
+  nudge,
+  parseNumber,
+  quantize,
+  rate,
+  Scrub,
+  wrap,
+} from "./scrub.js";
 
 const none = { shiftKey: false, altKey: false };
 const shift = { shiftKey: true, altKey: false };
@@ -70,5 +81,32 @@ describe("scrubbing", () => {
     expect(parseNumber("abc")).toBeNull();
     expect(parseNumber("12 px 3")).toBeNull();
     expect(parseNumber("1e999")).toBeNull();
+  });
+
+  it("wraps the virtual cursor around the screen edges, both ways", () => {
+    expect(wrap(100, 1440)).toBe(100);
+    expect(wrap(1500, 1440)).toBe(60);
+    expect(wrap(1440, 1440)).toBe(0);
+    expect(wrap(-10, 1440)).toBe(1430);
+    expect(wrap(-1450, 1440)).toBe(1430);
+    expect(wrap(5000, 1440)).toBe(680); // several laps
+    expect(wrap(50, 0)).toBe(0);
+  });
+
+  it("ignores the first locked event and implausible jumps", () => {
+    expect(lockedMovement(-100, true)).toBe(0); // Chromium's bogus jump when the lock engages
+    expect(lockedMovement(12, false)).toBe(12);
+    expect(lockedMovement(-MAX_LOCKED_STEP, false)).toBe(-MAX_LOCKED_STEP);
+    expect(lockedMovement(MAX_LOCKED_STEP + 1, false)).toBe(0);
+    expect(lockedMovement(Number.NaN, false)).toBe(0);
+  });
+
+  it("locks only once a scrub reaches the window's left or right edge", () => {
+    expect(atWindowEdge(700, 1440)).toBe(false);
+    expect(atWindowEdge(EDGE_ZONE + 1, 1440)).toBe(false);
+    expect(atWindowEdge(EDGE_ZONE, 1440)).toBe(true);
+    expect(atWindowEdge(1440 - EDGE_ZONE, 1440)).toBe(true);
+    expect(atWindowEdge(1500, 1440)).toBe(true); // already past it (pointer capture)
+    expect(atWindowEdge(-3, 1440)).toBe(true);
   });
 });
