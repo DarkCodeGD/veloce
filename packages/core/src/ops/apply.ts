@@ -81,7 +81,7 @@ function slideInsert(deck: Deck, op: OpOf<"slide.insert">, ctx: ApplyContext): O
   assertNewIds(collectIds(deck), [slide.id, ...subtreeIds(slide.root)]);
   assertDepth(0, subtreeHeight(slide.root));
   assertAssetsExist(deck, slide, slide.id);
-  assertElementsValid(slide.root, ctx);
+  assertElementsValid(slide.root, ctx, "slide.root");
   return {
     deck: { ...deck, slides: deck.slides.toSpliced(index, 0, slide) },
     inverse: { op: "slide.remove", id: slide.id },
@@ -126,7 +126,7 @@ function nodeInsert(deck: Deck, op: OpOf<"node.insert">, ctx: ApplyContext): OpR
   assertNewIds(collectIds(deck), subtreeIds(op.node));
   assertDepth(parent.path.length + 1, subtreeHeight(op.node));
   assertAssetsExist(deck, op.node, op.node.id);
-  assertElementsValid(op.node, ctx);
+  assertElementsValid(op.node, ctx, "node");
   return {
     deck: insertChild(deck, parent, index, op.node),
     inverse: { op: "node.remove", id: op.node.id },
@@ -189,7 +189,7 @@ function nodeUpdate(deck: Deck, op: OpOf<"node.update">, ctx: ApplyContext): OpR
   } else {
     const patched = parseOrThrow(ElementNodeSchema, mergePatch(loc.node, op.set), ["set"]);
     assertAssetsExist(deck, patched.props, op.id);
-    assertElementsValid(patched, ctx);
+    assertElementsValid(patched, ctx, "set");
     next = patched;
     before = loc.node;
     after = patched;

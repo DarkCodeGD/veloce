@@ -52,18 +52,31 @@ export function assertAssetsExist(deck: Deck, value: unknown, ownerId: string): 
   }
 }
 
-export function assertElementsValid(node: Node, ctx: ApplyContext): void {
-  if (!ctx.validateElement) return;
-  for (const { node: n } of walkNodes(node)) {
-    if (n.kind !== "element") continue;
-    const check = ctx.validateElement(n.type, n.props);
+/**
+ * Every element in the subtree passes its plugin's checks. `at` is where `node` sits in the op
+ * (`"node"`, `"slide.root"`), so the error's path leads to the bad element even when its ID was
+ * generated and the caller has never seen it.
+ */
+export function assertElementsValid(node: Node, ctx: ApplyContext, at: string): void {
+  const validate = ctx.validateElement;
+  if (!validate) return;
+  const visit = (n: Node, path: string): void => {
+    if (n.kind === "frame") {
+      n.children.forEach((child, i) => {
+        visit(child, `${path}.children[${i}]`);
+      });
+      return;
+    }
+    const check = validate(n.type, n.props);
     if (!check.ok) {
       throw new VeloceError(
         check.reason === "unknown-type" ? "NOT_FOUND" : "INVALID",
         `Element "${n.id}" (${n.type}): ${check.message}`,
+        { path: `${path}.${check.reason === "unknown-type" ? "type" : "props"}` },
       );
     }
-  }
+  };
+  visit(node, at);
 }
 
 /** `depthOfNode` = depth the subtree's top node will sit at (root = 0). */

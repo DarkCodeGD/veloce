@@ -406,6 +406,8 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
       },
     });
     expect(result.text).toMatch(/low-contrast · slide faded · fade-top/);
+    // The fix talks about the gradient, not tokens the text already uses.
+    expect(result.text).toMatch(/fade-top: .*Fix: A gradient behind it is too close/);
     expect(result.text).not.toMatch(/low-contrast · slide faded · fade-bottom/);
     await call("apply_ops", { ops: [{ op: "slide.remove", id: "faded" }] });
   });

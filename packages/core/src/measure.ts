@@ -20,6 +20,8 @@ export interface TextSample {
   color: string;
   /** Effective opaque background behind it; `null` when it's an image/gradient (not checkable). */
   background: string | null;
+  /** The background includes a gradient (lint's fix hint then talks about the gradient). */
+  gradient?: boolean;
   /** Font size in stage pixels. */
   fontSize: number;
   fontWeight: number;

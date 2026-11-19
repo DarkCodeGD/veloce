@@ -158,6 +158,9 @@
     links follow the text color, contrast lint samples gradients under the text, empty-space
     and off-canvas count painted frames, clearer errors (opacity range, anchors, tiles),
     serif/mono font fallbacks, decimal sizes and fuller docs.
+  - **Fix-check retest (D70):** 8 of 9 fixes confirmed. Follow-ups: apply_ops errors no longer
+    hide behind "node.kind", element errors point at a path instead of a generated ID,
+    gradient-aware contrast hints, list_decks shows when the user watches the agent's deck.
   - **Next:** round 5: the tool bar (D62).
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with

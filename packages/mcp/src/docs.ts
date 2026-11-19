@@ -96,7 +96,7 @@ All edits are ops applied as one atomic transaction (all or nothing), undoable w
 - \`{ "op": "slide.insert", "slide": <slide like upsert_slide>, "index"? }\`
 - \`{ "op": "slide.remove", "id" }\`, \`{ "op": "slide.move", "id", "index" }\`
 - \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"? } }\`
-- \`{ "op": "node.insert", "parentId": <frame id>, "node": <node>, "index"? }\` (index omitted = last)
+- \`{ "op": "node.insert", "parentId": <frame id>, "node": <node>, "index"? }\` (index omitted = last). The node is written as in upsert_slide: \`kind\` and \`id\` are optional (new IDs are returned).
 - \`{ "op": "node.remove", "id" }\`
 - \`{ "op": "node.move", "id", "parentId", "index"? }\`
 - \`{ "op": "node.update", "id", "set": { … } }\`: JSON Merge Patch. Objects merge, \`null\` deletes a field.
@@ -213,7 +213,7 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
         .map(([rule, what]) => `- \`${rule}\`: ${what}`)
         .join(
           "\n",
-        )}\n\nVisual rules (overflow, off-canvas, overlap, contrast, small text, empty-space) need the headless renderer.\n\nHow they measure:\n- **Contrast:** each text run against what's drawn behind it, translucent layers composited down to the slide. On a gradient, only the part under the text counts. Over an image it can't be measured (check with render_preview).\n- **Overlap:** text and images covering each other. Shapes don't count (they're usually backgrounds or decoration).\n- **off-canvas:** elements, and frames that draw something (fill, stroke, shadow), reported once per box.\n- **empty-space:** the band above or below the content: elements, frames that draw something, and free layers taller than 8% of the slide (a small page number doesn't count).`;
+        )}\n\nVisual rules (overflow, off-canvas, overlap, contrast, small text, empty-space) need the headless renderer.\n\nHow they measure:\n- **Contrast:** each text run against what's drawn behind it, translucent layers composited down to the slide. On a gradient, only the part under the text counts. Over an image it can't be measured (check with render_preview).\n- **Overlap:** text and images covering each other. Shapes don't count (they're usually backgrounds or decoration).\n- **off-canvas:** elements, and frames that draw something (fill, stroke, shadow), reported once per box.\n- **empty-space:** an empty band over 40% of the slide's height above or below the content (unless the bands above and below are about equal: centred content is fine). Content means elements, frames that draw something, and free layers taller than 8% of the slide (a small page number doesn't count).`;
   }
   if (key.startsWith("element/")) {
     const registered = registry.get(key.slice("element/".length));

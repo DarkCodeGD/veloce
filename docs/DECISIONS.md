@@ -1434,3 +1434,29 @@ deck ID, so an agent had no way to protect itself.
     backgrounds; documented). Screenshots stay lossy WebP when that's smaller and passes the
     SSIM bar: the 3× zoom check in D67 showed identical text, and that's TinyPNG's trade too.
     Contrast messages name the layer, not the run (later, if agents trip on it).
+
+## D70 — Errors in the terms the agent sent
+
+**Status:** Accepted (2026-11-20). From the D68/D69 retest (5-slide fix-check deck: 8 of 9
+fixes confirmed, F7 partly).
+
+1. **apply_ops is keyed on `op`.** Its input was a plain union of the shorthand inserts and
+   core's strict `OpSchema`. When an inserted node was invalid, both branches failed, and the
+   error picker preferred core's: "node.kind: Invalid discriminator", which told the agent to
+   add a field that wasn't the problem and hid D69's anchor hint. Now each op is checked
+   against one schema. The shorthand `node.insert` takes a superset of core's node, so
+   nothing that used to pass is refused.
+2. **Element errors carry a path into the tree** (`node.children[0].props`,
+   `slide.root.children[2].props`). MCP drops the IDs it generated itself from messages
+   ("The image element", not "nd_6xahrxrndl", which the agent never saw). For upsert_slide
+   it also drops the internal `ops[0] (slide.insert)` prefix and maps paths to the slide that
+   was sent (`slide.children[0].props`). **Why in MCP:** core can't know which IDs were made
+   up; the tool that generated them can.
+3. **Contrast:** the message reads "has a contrast of 1.20:1 against what's behind it". When a
+   gradient is behind the text, the fix talks about the gradient (move the text, change that
+   stop), not tokens the text already uses (`TextSample.gradient`).
+4. **list_decks** marks a deck both `CURRENT` and `in the user's editor` when the user is
+   watching the agent's deck. Before, "no editor open" looked the same. It's described as
+   "most recently used first", which is what the sort does: opening a deck counts.
+5. Docs: node.insert takes the upsert_slide node shape; the empty-space threshold (40%, unless
+   the bands are about equal).

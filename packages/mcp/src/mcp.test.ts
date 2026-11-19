@@ -309,6 +309,39 @@ describe("building a deck", () => {
     });
     expect(badProps.isError).toBe(true);
     expect(badProps.text).toMatch(/props\.style/);
+    // In the terms the agent sent: no generated ID, no internal op, a path into its slide.
+    expect(badProps.text).toMatch(/^Error: The text element: props\.style/);
+    expect(badProps.text).toMatch(/At: slide\.children\[0\]\.props$/m);
+    expect(badProps.text).not.toMatch(/nd_|slide\.insert|ops\[/);
+
+    // A shorthand node.insert (no kind, no id) reports its real mistake, not core's "kind/id
+    // missing" from the strict node schema (D70).
+    const rootOf = async (slideId: string) =>
+      (await workspace.get(workspace.activeDeckId ?? "")).deck.slides.find((x) => x.id === slideId)
+        ?.root.id;
+    const anchor = { type: "text", positioning: "free", anchor: { x: "right" } };
+    for (const node of [anchor, { ...anchor, kind: "element" }]) {
+      const insert = await call("apply_ops", {
+        label: "x",
+        ops: [{ op: "node.insert", parentId: (await rootOf("s1")) ?? "", node }],
+      });
+      expect(insert.text).toMatch(/node\.anchor\.x: .*\(for "right", use "end"\)/);
+      expect(insert.text).not.toMatch(/node\.(kind|id)/);
+    }
+    const nested = await call("apply_ops", {
+      label: "x",
+      ops: [
+        {
+          op: "node.insert",
+          parentId: (await rootOf("s1")) ?? "",
+          node: { children: [{ type: "text", props: { content: 1 } }] },
+        },
+      ],
+    });
+    expect(nested.text).toMatch(
+      /^Error: ops\[0\] \(node\.insert\): The text element: props\.content/,
+    );
+    expect(nested.text).toMatch(/At: ops\[0\]\.node\.children\[0\]\.props$/m);
 
     // A well-formed but undefined token is accepted, and lint flags it with a suggestion.
     const unknownToken = await call("upsert_slide", {
@@ -465,7 +498,7 @@ describe("themes, docs, previews and decks", () => {
     await call("create_deck", { title: "One" });
     await call("create_deck", { title: "Two" });
     const list = (await call("list_decks")).text;
-    expect(list).toMatch(/"Two" · 0 slides · two\.veloce · CURRENT/);
+    expect(list).toMatch(/"Two" · 0 slides · two\.veloce · CURRENT · in the user's editor/);
     const one = workspace.list().find((d) => d.title === "One");
     await call("open_deck", { deckId: one?.id });
     expect(workspace.activeDeckId).toBe(one?.id);

@@ -161,13 +161,15 @@ function textSamples(
     // Where this text is actually drawn: gradients are sampled under it, not everywhere.
     range.selectNodeContents(n);
     const drawn = range.getBoundingClientRect();
+    const behind = backgroundsBehind(parent, stage, style, drawn);
     const sample: TextSample = {
       color: s.color,
-      background: worstBackground(s.color, backgroundsBehind(parent, stage, style, drawn)),
+      background: worstBackground(s.color, behind?.colors ?? null),
+      ...(behind?.gradient && { gradient: true }),
       fontSize: Number.parseFloat(s.fontSize) || 0,
       fontWeight: fontWeight(s.fontWeight),
     };
-    const key = `${sample.color}|${sample.background}|${sample.fontSize}|${sample.fontWeight}`;
+    const key = `${sample.color}|${sample.background}|${sample.gradient}|${sample.fontSize}|${sample.fontWeight}`;
     if (!samples.has(key)) samples.set(key, sample);
   }
   return [...samples.values()];
@@ -179,28 +181,31 @@ const MAX_BACKGROUNDS = 48;
 /**
  * Every opaque color that can sit behind text drawn at `drawn`: each background down to the
  * stage, composited. Gradients contribute the stretch under the text (`gradient-sample.ts`).
- * `null` when an image is involved: contrast can't be computed.
+ * `gradient` says whether one took part. `null` when an image is involved: contrast can't be
+ * computed.
  */
 function backgroundsBehind(
   from: Element,
   stage: HTMLElement,
   style: (el: Element) => CSSStyleDeclaration,
   drawn: DOMRect,
-): Rgba[] | null {
+): { colors: Rgba[]; gradient: boolean } | null {
   const opaque = (stack: readonly Rgba[]) => stack.some((c) => c[3] >= 1);
   let stacks: Rgba[][] = [[]]; // each stack lists layers top-first
+  let gradient = false;
   for (let el: Element | null = from; el; el = el === stage ? null : el.parentElement) {
     const s = style(el);
     const base = parseCssColor(s.backgroundColor || "transparent");
     if (!base) return null;
     const options = layerOptions(s.backgroundImage, base, el, s, drawn);
     if (!options) return null;
+    if (s.backgroundImage && s.backgroundImage !== "none") gradient = true;
     stacks = stacks
       .flatMap((stack) => (opaque(stack) ? [stack] : options.map((o) => [...stack, ...o])))
       .slice(0, MAX_BACKGROUNDS);
     if (stacks.every(opaque)) break;
   }
-  return stacks.map((stack) => flattenLayers(stack.filter((c) => c[3] > 0)));
+  return { colors: stacks.map((stack) => flattenLayers(stack.filter((c) => c[3] > 0))), gradient };
 }
 
 /**

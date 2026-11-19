@@ -200,17 +200,46 @@ function changedSlides(before: Deck, after: Deck): string[] {
   return after.slides.filter((s) => !old.has(s)).map((s) => s.id);
 }
 
+/** How a failed commit's error should read for the tool that made the ops. */
+interface CommitErrors {
+  /** IDs the tool generated: the agent never saw them, so messages don't name them. */
+  generated?: ReadonlySet<string>;
+  /**
+   * The agent sent a slide, not ops (upsert_slide): drop the "ops[0] (slide.insert)" prefix
+   * and point paths into the slide it sent (`slide.children[1]`, not `ops[0].slide.root…`).
+   */
+  asSlide?: boolean;
+}
+
+/** Rewrites a core error into the terms of what the agent actually sent. */
+function presentError(error: ErrorLike, { generated, asSlide }: CommitErrors): ErrorLike {
+  let { message, path } = error;
+  if (generated?.size) {
+    message = message.replace(
+      /Element "([^"]+)" \(([^)]+)\)/g,
+      (whole, id: string, type: string) => (generated.has(id) ? `The ${type} element` : whole),
+    );
+  }
+  if (asSlide) {
+    message = message.replace(/^ops\[\d+\] \([a-z.]+\): /i, "");
+    path = path?.replace(/^ops\[\d+\]\.slide(\.root)?/, "slide").replace(/^ops\[\d+\]$/, "");
+  }
+  return { ...error, message, path: path || undefined };
+}
+
 async function commit(
   ctx: ToolContext,
   open: OpenDeck,
   label: string,
   ops: unknown[],
+  errors: CommitErrors = {},
 ): Promise<{ before: Deck; after: Deck }> {
   const before = open.deck;
   const result = open.apply({ origin: ctx.origin, label, ops });
   if (!result.ok) {
     const at = result.error.opIndex !== undefined ? `ops[${result.error.opIndex}]` : undefined;
-    throw new ToolError({ ...result.error, ...(at && !result.error.path && { path: at }) });
+    const raw = { ...result.error, ...(at && !result.error.path && { path: at }) };
+    throw new ToolError(presentError(raw, errors));
   }
   const existed = new Set(before.slides.map((s) => s.id));
   ctx.session.markCreated(
@@ -295,7 +324,8 @@ const upsertSlide = defineTool({
   }),
   async run({ slide: input, index, overwrite }, ctx) {
     const open = await currentDeck(ctx);
-    const normalized = normalizeSlide(input);
+    const generated = new Set<string>();
+    const normalized = normalizeSlide(input, generated);
     const existing = findSlide(open.deck, normalized.id);
     if (existing && !overwrite) {
       const editor = open.lastEditor(normalized.id);
@@ -333,7 +363,7 @@ const upsertSlide = defineTool({
           },
         ];
     const label = `${existing ? "Replace" : "Add"} slide ${slide.name ? `"${slide.name}"` : slide.id}`;
-    const { after } = await commit(ctx, open, label, ops);
+    const { after } = await commit(ctx, open, label, ops, { generated, asSlide: true });
     ctx.session.markCreated(open.id, [slide.id]); // rebuilt by this session: its own now
     const position = after.slides.findIndex((s) => s.id === slide.id);
     const saved = after.slides[position];
@@ -392,8 +422,9 @@ const applyOps = defineTool({
   },
   async run({ label, ops: inputs }, ctx) {
     const open = await currentDeck(ctx);
-    const ops = inputs.map(normalizeOp);
-    const { before, after } = await commit(ctx, open, label, ops);
+    const generated = new Set<string>();
+    const ops = inputs.map((input) => normalizeOp(input, generated));
+    const { before, after } = await commit(ctx, open, label, ops, { generated });
     const created = ops.flatMap((op) => {
       const node = (op as { op: string; node?: Node }).node;
       return node ? [...walkNodes(node)].map((n) => n.node.id) : [];
@@ -722,7 +753,7 @@ const listDecks = defineTool({
   name: "list_decks",
   title: "List decks",
   description:
-    "Decks in the workspace, most recently changed first. Your current deck is marked, and so is the one the user's editor shows.",
+    "Decks in the workspace, most recently used first. Your current deck is marked, and so is the one the user's editor shows.",
   input: z.strictObject({}),
   annotations: { readOnlyHint: true },
   async run(_args, ctx) {
@@ -731,7 +762,7 @@ const listDecks = defineTool({
     const mine = sessionDeckId(ctx);
     const shown = ctx.workspace.activeDeckId;
     const marks = (id: string) =>
-      `${id === mine ? " · CURRENT" : ""}${id === shown && id !== mine ? " · in the user's editor" : ""}`;
+      `${id === mine ? " · CURRENT" : ""}${id === shown ? " · in the user's editor" : ""}`;
     return text(
       decks
         .map((d) => `- ${d.id}: "${d.title}" · ${d.slideCount} slides · ${d.file}${marks(d.id)}`)

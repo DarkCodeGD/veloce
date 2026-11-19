@@ -508,7 +508,7 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
 
   for (const { node, m: nm } of elements) {
     if (!nm.text?.length) continue;
-    let worst: { ratio: number; needed: number } | null = null;
+    let worst: { ratio: number; needed: number; gradient: boolean } | null = null;
     let smallest = Number.POSITIVE_INFINITY;
     for (const sample of nm.text) {
       const size = sample.fontSize * scale;
@@ -522,15 +522,19 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
         size >= LINT_LIMITS.largeFontSize ||
         (size >= LINT_LIMITS.largeBoldFontSize && sample.fontWeight >= 700);
       const needed = large ? 3 : 4.5;
-      if (ratio < needed && (!worst || ratio < worst.ratio)) worst = { ratio, needed };
+      if (ratio < needed && (!worst || ratio < worst.ratio)) {
+        worst = { ratio, needed, gradient: sample.gradient === true };
+      }
     }
     if (worst) {
       issue({
         rule: "low-contrast",
         severity: worst.ratio < 2 ? "error" : "warning",
         nodeIds: [node.id],
-        message: `${describe(node)} text contrast is ${worst.ratio.toFixed(2)}:1 (needs ${worst.needed}:1).`,
-        fix: 'Use "$color.text" or "$color.muted" on the slide background and "$color.surface" cards, "$color.on-primary" on "$color.primary" fills, or change the background.',
+        message: `${describe(node)} has a contrast of ${worst.ratio.toFixed(2)}:1 against what's behind it (needs ${worst.needed}:1).`,
+        fix: worst.gradient
+          ? "A gradient behind it is too close to the text color where the text sits. Move the text to the part that contrasts, change that stop's color or opacity, or use a text color that contrasts with it."
+          : 'Use "$color.text" or "$color.muted" on the slide background and "$color.surface" cards, "$color.on-primary" on "$color.primary" fills, or change the background.',
       });
     }
     if (smallest < LINT_LIMITS.minFontSize) {

@@ -286,9 +286,11 @@ describe("lint: visual rules (with measurements)", () => {
       "low-contrast:a",
       "small-text:b",
     ]);
-    expect(issues.find((i) => i.rule === "low-contrast")?.message).toMatch(
-      /2\.\d+:1 \(needs 4\.5:1\)/,
+    const contrast = issues.find((i) => i.rule === "low-contrast");
+    expect(contrast?.message).toMatch(
+      /^text "a" has a contrast of 2\.\d+:1 against what's behind it \(needs 4\.5:1\)\.$/,
     );
+    expect(contrast?.fix).toMatch(/\$color\.on-primary/); // a flat background: the token advice
     expect(issues.every((i) => i.fix.length > 10)).toBe(true);
   });
 

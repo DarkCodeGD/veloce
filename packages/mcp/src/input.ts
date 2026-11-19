@@ -22,6 +22,7 @@ import {
   PointSchema,
   SizingSchema,
   type Slide,
+  SlideSchema,
 } from "@veloce/core";
 import { z } from "zod";
 
@@ -102,42 +103,61 @@ export const SlideInputSchema = z.strictObject({
 });
 export type SlideInput = z.infer<typeof SlideInputSchema>;
 
-/** Core ops, except inserts also accept the shorthand node/slide input above. */
-export const OpInputSchema = z.union([
+/** The ops whose node/slide may use the shorthand above. */
+const SHORTHAND_OPS = new Set(["slide.insert", "node.insert"]);
+
+/**
+ * Core ops, except inserts also accept the shorthand node/slide input above. Keyed on `op`, so
+ * a bad op is checked against one schema only: a plain union also tried core's strict
+ * `node.insert`, and its "kind/id missing" errors hid the real mistake (D70).
+ */
+export const OpInputSchema = z.discriminatedUnion("op", [
   z.strictObject({
     op: z.literal("slide.insert"),
-    slide: SlideInputSchema,
+    slide: z.union([SlideInputSchema, SlideSchema]),
     index: z.number().int().min(0).optional(),
   }),
   z.strictObject({
     op: z.literal("node.insert"),
     parentId: IdSchema,
+    // A superset of core's node: kind, id and layout are optional.
     node: NodeInputSchema,
     index: z.number().int().min(0).optional(),
   }),
-  OpSchema,
+  ...OpSchema.options.filter((option) => !SHORTHAND_OPS.has(option.shape.op.value)),
 ]);
 export type OpInput = z.infer<typeof OpInputSchema>;
 
 // ── Normalization ───────────────────────────────────────────────────────────────────────
 
-export function normalizeNode(input: NodeInput): Node {
-  const { id, kind: _kind, ...rest } = input;
+/**
+ * IDs made up during normalization. The agent never saw them, so errors shouldn't name them
+ * (they point at the node's place in the input instead).
+ */
+export type GeneratedIds = Set<string>;
+
+export function normalizeNode(input: NodeInput, generated?: GeneratedIds): Node {
+  const { id: given, kind: _kind, ...rest } = input;
+  let id = given;
+  if (id === undefined) {
+    id = createId("nd");
+    generated?.add(id);
+  }
   if ("children" in input) {
     const frame = rest as Omit<FrameInput, "id" | "kind">;
     return {
       ...frame,
-      id: id ?? createId("nd"),
+      id,
       kind: "frame",
       layout: frame.layout ?? { mode: "stack" },
-      children: frame.children.map(normalizeNode),
+      children: frame.children.map((child) => normalizeNode(child, generated)),
     };
   }
   const element = rest as Omit<z.infer<typeof ElementInputSchema>, "id" | "kind">;
-  return { ...element, id: id ?? createId("nd"), kind: "element", props: element.props ?? {} };
+  return { ...element, id, kind: "element", props: element.props ?? {} };
 }
 
-export function normalizeSlide(input: SlideInput): Slide {
+export function normalizeSlide(input: SlideInput, generated?: GeneratedIds): Slide {
   const { id, layout, style, children, ...fields } = input;
   return {
     id: id ?? createId("sl"),
@@ -147,17 +167,17 @@ export function normalizeSlide(input: SlideInput): Slide {
       kind: "frame",
       layout: layout ?? DEFAULT_SLIDE_LAYOUT,
       ...(style && { style }),
-      children: children.map(normalizeNode),
+      children: children.map((child) => normalizeNode(child, generated)),
     },
   };
 }
 
-export function normalizeOp(input: OpInput): unknown {
+export function normalizeOp(input: OpInput, generated?: GeneratedIds): unknown {
   if (input.op === "slide.insert" && "slide" in input && !("root" in input.slide)) {
-    return { ...input, slide: normalizeSlide(input.slide as SlideInput) };
+    return { ...input, slide: normalizeSlide(input.slide as SlideInput, generated) };
   }
   if (input.op === "node.insert") {
-    return { ...input, node: normalizeNode(input.node as NodeInput) };
+    return { ...input, node: normalizeNode(input.node as NodeInput, generated) };
   }
   return input;
 }
