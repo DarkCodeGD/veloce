@@ -2,6 +2,7 @@ import type { Slide } from "@veloce/core";
 import { History, Layers, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { redo, run, undo } from "./actions.js";
+import { alignSelection, distributeSelection } from "./align-actions.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
 import { HistoryPanel } from "./components/HistoryPanel.js";
@@ -17,6 +18,7 @@ import { syncDeckFonts } from "./deck-fonts.js";
 import { assetUrl, client } from "./editor-context.js";
 import { groupSelection, ungroupSelection } from "./group-actions.js";
 import { deckKeysPassThrough, typing } from "./keyboard.js";
+import type { AlignEdge } from "./model/align.js";
 import {
   deleteNodes,
   deleteSlide,
@@ -36,6 +38,15 @@ import { indexSlide } from "./model/slide-index.js";
 import { previewDeck, previewStore } from "./preview.js";
 
 const ACTIVITY_MS = 6000;
+/** Alt + these keys align (Figma's layout), by physical key (`KeyboardEvent.code`). */
+const ALIGN_KEYS: Record<string, AlignEdge> = {
+  KeyA: "left",
+  KeyH: "center",
+  KeyD: "right",
+  KeyW: "top",
+  KeyV: "middle",
+  KeyS: "bottom",
+};
 type Panel = "slides" | "layers" | "history";
 
 export function App() {
@@ -139,6 +150,18 @@ export function App() {
         handled();
         const action = e.shiftKey ? ungroupSelection : groupSelection;
         void action(slideIndex, selection).then((ids) => ids && setSelection(ids));
+        return;
+      }
+      // Alignment: Alt+A/H/D (left, center, right), Alt+W/V/S (top, middle, bottom);
+      // Alt+Shift+H/V distribute.
+      if (e.altKey && !mod && selection.length > 0 && e.code in ALIGN_KEYS) {
+        handled();
+        if (e.shiftKey && (e.code === "KeyH" || e.code === "KeyV")) {
+          const axis = e.code === "KeyH" ? "horizontal" : "vertical";
+          void distributeSelection(slideIndex, selection, axis);
+        } else if (!e.shiftKey) {
+          void alignSelection(slideIndex, selection, ALIGN_KEYS[e.code] as AlignEdge);
+        }
         return;
       }
       if (mod && key === "a") return act(() => setSelection(selectSiblings(slideIndex, selection)));

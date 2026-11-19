@@ -52,7 +52,8 @@ export function useLayerDrag({ list, slide, selection, onSelect }: Options) {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent, id: string) => {
-      if (e.button !== 0 || e.shiftKey) return;
+      // Shift and Ctrl/Cmd presses are selection clicks (range, toggle), never drags.
+      if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
       const el = e.target as HTMLElement;
       if (el.closest(".layer-actions, .layer-chevron, input")) return;
       const start = { x: e.clientX, y: e.clientY };

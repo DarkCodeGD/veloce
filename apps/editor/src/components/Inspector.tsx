@@ -43,6 +43,7 @@ import { SHORTCUTS } from "../model/shortcuts.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { shortcutAttrs } from "../platform.js";
 import { setPreview } from "../preview.js";
+import { AlignBar } from "./AlignBar.js";
 import { AssetField } from "./AssetField.js";
 import { mainCanvasSpace } from "./canvas-space.js";
 import {
@@ -82,6 +83,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
     body = (
       <Section title={`${nodes.length} layers`}>
         <LayerActions index={index} ids={selection} onSelect={onSelect} />
+        <AlignBar index={index} ids={selection} />
       </Section>
     );
   } else {
@@ -99,6 +101,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
           </span>
         </header>
         <LayerActions index={index} ids={selection} onSelect={onSelect} />
+        <AlignBar index={index} ids={selection} />
         <LayerSection
           index={index}
           node={node}

@@ -1281,6 +1281,24 @@ textarea::placeholder {
   padding: 0 8px;
 }
 
+/* Align and distribute: one row of icon buttons under the actions. */
+.align-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px 10px;
+}
+
+.align-bar .icon-button:disabled {
+  opacity: 0.35;
+}
+
+.align-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
 /*
  * Inspector rhythm: sections are divided by a rule and 18–20px of padding; rows inside are
  * 10px apart; a group inside a section (".inspector-group") adds 12px more above its title.

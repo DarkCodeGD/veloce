@@ -162,6 +162,29 @@ describe.skipIf(problem !== null)("Phase 3: layers drag and drop", { timeout: 60
     expect(h.userTransactions()).toBe(sent);
   });
 
+  it("selects a range with Shift+click and toggles one with Ctrl+click", async () => {
+    const sent = h.userTransactions();
+    const name = (id: string, label: string) =>
+      row(id).getByRole("button", { name: label, exact: true });
+    const count = () => page.locator(".inspector-section-title").first().textContent();
+    // Title … Footer, with Card expanded: Title, Card, Left, Right, Board, Footer.
+    await name("title", "Title").click();
+    await name("foot", "Footer").click({ modifiers: ["Shift"] });
+    await expect.poll(count).toBe("6 layers");
+    // Shift again from the same anchor shrinks the range: Title … Left.
+    await name("left", "Left").click({ modifiers: ["Shift"] });
+    await expect.poll(count).toBe("3 layers");
+    // Ctrl toggles single rows, without dragging anything.
+    await name("board", "Board").click({ modifiers: ["Control"] });
+    await expect.poll(count).toBe("4 layers");
+    await name("card", "Card").click({ modifiers: ["Control"] });
+    await expect.poll(count).toBe("3 layers");
+    expect(await row("card").getAttribute("class")).not.toContain("is-selected");
+    expect(await row("board").getAttribute("class")).toContain("is-selected");
+    await h.synced();
+    expect(h.userTransactions()).toBe(sent);
+  });
+
   it("produces no page errors", () => {
     expect(h.pageErrors).toEqual([]);
   });

@@ -1,6 +1,6 @@
 /**
- * The layer tree of the current slide. Every canvas action has a path here too: select,
- * rename (double-click or F2), hide, lock, and move. Drag rows to reorder them or to move
+ * The layer tree of the current slide. Every canvas action has a path here too: select
+ * (Shift+click for a range, Ctrl/Cmd+click to toggle one, see model/layer-select.ts), rename (double-click or F2), hide, lock, and move. Drag rows to reorder them or to move
  * layers into or out of frames (useLayerDrag); Alt+↑/↓ reorders from the keyboard (handled
  * by the app's shortcuts).
  */
@@ -23,6 +23,7 @@ import {
 import { useRef, useState } from "react";
 import { run } from "../actions.js";
 import { updateNode } from "../model/commands.js";
+import { clickLayer, type LayerAnchor } from "../model/layer-select.js";
 import { nodeLabel } from "../model/slide-index.js";
 import { INDENT, ROW_PAD, useLayerDrag } from "./useLayerDrag.js";
 
@@ -37,6 +38,8 @@ export function LayersPanel({ slide: live, selection, onSelect, onHover }: Props
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
   const list = useRef<HTMLUListElement>(null);
+  /** Where Shift+click ranges start: the last row clicked without Shift. */
+  const anchor = useRef<LayerAnchor | null>(null);
   const { drag, onPointerDown, suppressClick } = useLayerDrag({
     list,
     slide: live,
@@ -63,6 +66,18 @@ export function LayersPanel({ slide: live, selection, onSelect, onHover }: Props
     }
   };
   for (const child of slide.root.children) visit(child, 0);
+
+  const clickRow = (e: React.MouseEvent, id: string) => {
+    if (suppressClick.current) return;
+    const next = clickLayer(
+      rows.map((r) => r.node.id),
+      selection,
+      anchor.current,
+      { id, range: e.shiftKey, toggle: e.ctrlKey || e.metaKey },
+    );
+    anchor.current = next.anchor;
+    onSelect(next.selection, false);
+  };
 
   if (rows.length === 0) {
     return <p className="panel-empty">This slide has no layers yet.</p>;
@@ -131,7 +146,7 @@ export function LayersPanel({ slide: live, selection, onSelect, onHover }: Props
                 type="button"
                 className="layer-name"
                 aria-pressed={selected}
-                onClick={(e) => !suppressClick.current && onSelect([node.id], e.shiftKey)}
+                onClick={(e) => clickRow(e, node.id)}
                 onDoubleClick={() => setRenaming(node.id)}
                 onKeyDown={(e) => {
                   if (e.key === "F2") setRenaming(node.id);

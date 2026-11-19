@@ -55,13 +55,13 @@ const rootId = () => h.latestDeck().slides[0]?.root.id ?? "";
 const row = (id: string) => page.locator(`.layers [data-layer-id="${id}"]`);
 const onCanvas = (id: string) => page.locator(`.editor-canvas [data-node-id="${id}"]`);
 
-/** Select layers through the Layers panel (Shift-click adds). */
+/** Select layers through the Layers panel (Ctrl+click adds one). */
 async function select(...ids: string[]) {
   for (const [i, id] of ids.entries()) {
     const label = h.stored(id).name as string;
     await row(id)
       .getByRole("button", { name: label, exact: true })
-      .click({ modifiers: i === 0 ? [] : ["Shift"] });
+      .click({ modifiers: i === 0 ? [] : ["Control"] });
   }
 }
 

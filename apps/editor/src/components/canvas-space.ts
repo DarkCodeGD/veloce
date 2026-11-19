@@ -77,6 +77,12 @@ export class CanvasSpace {
     };
   }
 
+  /** A frame's content box (inside its padding) on the slide, in slide pixels. */
+  contentRect(frameId: string): Rect | null {
+    const el = this.element(frameId);
+    return el ? this.#contentOf(el, this.#rectOf(el)) : null;
+  }
+
   /** A frame's box inside its padding, in slide pixels. */
   #contentOf(el: HTMLElement, rect: Rect): Rect {
     const style = getComputedStyle(el);

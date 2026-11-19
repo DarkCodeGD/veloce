@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (382 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (404 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -93,10 +93,15 @@
     selection in a frame and Ctrl+Shift+G dissolves it, one undo step each, without moving
     anything: flow layers get a frame with their parent's flow, free layers an absolute frame
     cut to their box (rotation included). `tests/integration/phase3-group.test.ts` covers it.
+  - **Round 4, align and distribute (D55):** an alignment bar in the inspector and Figma's
+    keys (Alt+A/H/D, Alt+W/V/S, Alt+Shift+H/V) for free layers, across frames; a single
+    layer aligns within its frame. `tests/integration/phase3-align.test.ts` covers it.
+  - **Layers panel multi-select (D56):** Shift+click selects a range of rows, Ctrl/Cmd+click
+    toggles one (it was Shift = toggle only, so selecting ten layers took ten clicks).
   - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
     replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
     says how to write it.
-  - **Next:** round 4: align and distribute for multi-selection.
+  - **Next:** round 4: anchors for free layers.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -307,8 +312,10 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       same trap, and make any remaining error say how to fix the call
 - [x] Group / ungroup (Ctrl+G / Ctrl+Shift+G): wrap the selection in a frame that keeps its
       layout, and unwrap it (D54)
-- [ ] Align and distribute for multi-selection (left/center/right, top/middle/bottom; space
-      evenly), in free frames
+- [x] Align and distribute for multi-selection (left/center/right, top/middle/bottom; space
+      evenly), in free frames (D55)
+- [x] Layers panel multi-select like Figma: Shift+click selects a range of rows,
+      Ctrl/Cmd+click toggles one (D56)
 - [ ] Anchors for free layers: `anchor: { x: "start" | "center" | "end", y: … }` says which
       edge of the frame `position` is measured from, so a badge pinned to a card's top-right
       corner stays there when its text, the card's size or the padding changes (Figma

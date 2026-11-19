@@ -921,3 +921,49 @@ transaction. There's no new op and no MCP tool: an agent groups with the same op
    flow in the frame's slot. Fill, stroke and padding go with the frame, as in Figma.
 4. **Measurements come from the canvas, the decisions from the model.** The model takes a
    `GroupMeasure` (sizes, sizing, `positionIn`), so it's unit-tested without a browser.
+
+## D55 — Align and distribute act on free layers, on the slide
+
+**Status:** Accepted (2026-11-19). Extends D49.
+
+The inspector shows an alignment bar (left, horizontal centers, right, top, vertical
+centers, bottom; distribute horizontally and vertically) with Figma's keys: Alt+A/H/D,
+Alt+W/V/S, Alt+Shift+H/V. The keys are matched by physical key, because Alt+letter types
+symbols on macOS. Op builders live in `apps/editor/src/model/align.ts`; each action is one
+transaction of `node.update`s.
+
+1. **Only free layers.** The bar appears, and the keys work, only when every selected layer
+   is placed by `position`. **Why:** a stack's or grid's layout places its children
+   (golden rule #4); there the frame's align/justify is the tool. Writing positions the
+   flow ignores would trip the `ignored-position` lint.
+2. **The geometry is on the slide.** Boxes come from the canvas (rotation included), so
+   free layers in different frames align with each other. Each shift is turned back into
+   the parent's space by undoing ancestor rotation.
+3. **One layer aligns within its frame's content box** (as in Figma). Distribute needs
+   three or more layers. It keeps the outer two in place and makes the gaps equal, even
+   between boxes of different sizes.
+4. **Moving bakes "fill" on that axis.** A free layer that fills its frame along an axis
+   (text does by default) stretches to the frame's far edge, so moving it would resize it.
+   Moving bakes that size to its rendered pixels, the same rule as going free (D49/D50).
+   A layer that doesn't move keeps "fill".
+
+## D56 — Layers panel: Shift selects a range, Ctrl/Cmd toggles; the canvas keeps Shift
+
+**Status:** Accepted (2026-11-19). Extends D39.
+
+In the Layers panel, Shift+click selects every visible row from the anchor (the last row
+clicked without Shift) to the clicked one, on top of what was selected when the anchor
+was set. Shift-clicking again from the same anchor replaces the range, so it can shrink.
+Ctrl/Cmd+click toggles one row. Pure logic in `apps/editor/src/model/layer-select.ts`.
+
+- **Why:** this is how Figma's layer list and every file manager work. With align,
+  distribute and group, selecting many layers became common, and one Shift-click per
+  layer didn't scale.
+- **The canvas keeps Shift = toggle.** Layers on a slide have no row order to make a range
+  from. Figma's canvas also uses Shift to toggle, and Ctrl/Cmd on our canvas already means
+  "pull out of the layout" when dragging (D49).
+- **A stale anchor isn't trusted.** If the anchor is no longer selected or visible (a click
+  on the canvas, a collapsed frame), the range starts from the last selected visible row.
+  If there's none, Shift just adds the row: Shift never drops what was selected.
+- Shift and Ctrl/Cmd presses never start a row drag (D51), so a selection click can't
+  move a layer.
