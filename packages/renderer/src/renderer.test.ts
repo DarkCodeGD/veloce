@@ -353,6 +353,31 @@ describe("SlideView", () => {
     view.fit();
     expect(view.scale).toBe(0.5);
     expect(view.stage.style.transform).toBe("translate(0px, 230px) scale(0.5)");
+    expect(view.fitted).toBe(true);
+    view.dispose();
+    expect(viewport.children).toHaveLength(0);
+  });
+
+  it("draws the stage where a camera says, keeps it on resize, and fits again on null", () => {
+    const viewport = document.createElement("div");
+    let width = 960;
+    Object.defineProperty(viewport, "clientWidth", { get: () => width });
+    Object.defineProperty(viewport, "clientHeight", { value: 1000 });
+    document.body.append(viewport);
+    const view = new SlideView(viewport, { registry: registry(), assetUrl: () => "" });
+    view.render(deck(), "one");
+    view.setCamera({ scale: 2, x: -100, y: 40 });
+    expect(view.fitted).toBe(false);
+    expect(view.scale).toBe(2);
+    expect(view.camera).toEqual({ scale: 2, x: -100, y: 40 });
+    expect(view.stage.style.transform).toBe("translate(-100px, 40px) scale(2)");
+    width = 480; // the window shrinks: a zoomed canvas stays where it is
+    view.fit();
+    expect(view.camera).toEqual({ scale: 2, x: -100, y: 40 });
+    view.setCamera(null); // zoom to fit
+    expect(view.fitted).toBe(true);
+    expect(view.camera).toEqual(view.fitCamera);
+    expect(view.scale).toBe(0.25);
     view.dispose();
     expect(viewport.children).toHaveLength(0);
   });

@@ -8,6 +8,8 @@
  * dragging on the empty canvas draws a marquee. Red spacing indicators show the gaps while
  * moving/resizing, and with Alt held between the selection and the hovered layer.
  * Double-clicking a text layer types into it (components/TextEditSession.tsx).
+ * Zoom and pan (useCanvasCamera) only move the picture: the overlay re-measures from the
+ * rendered DOM, so outlines, handles and guides stay on their layers at every zoom.
  */
 import type { Deck, TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
@@ -35,8 +37,10 @@ import {
   prefetchTextEditor,
   TextEditSession,
 } from "./TextEditSession.js";
+import { useCanvasCamera } from "./useCanvasCamera.js";
 import { useCanvasGestures } from "./useCanvasGestures.js";
 import { useFileDrop } from "./useFileDrop.js";
+import { ZoomControl } from "./ZoomControl.js";
 
 interface Props {
   /** What to show: the document, with any live preview applied. */
@@ -70,6 +74,8 @@ interface StageFrame {
   x: number;
   y: number;
   scale: number;
+  /** True while the slide fits the canvas (no zoom or pan applied). */
+  fitted: boolean;
 }
 
 export function EditorCanvas({
@@ -97,7 +103,7 @@ export function EditorCanvas({
     hover: OverlayBox | null;
     selected: OverlayBox[];
     stage: StageFrame;
-  }>({ hover: null, selected: [], stage: { x: 0, y: 0, scale: 1 } });
+  }>({ hover: null, selected: [], stage: { x: 0, y: 0, scale: 1, fitted: true } });
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -142,9 +148,38 @@ export function EditorCanvas({
     setBoxes({
       hover: hover && !selection.includes(hover) ? boxOf(hover) : null,
       selected: selection.flatMap((id) => boxOf(id) ?? []),
-      stage: { x: stageRect.left - origin.left, y: stageRect.top - origin.top, scale },
+      stage: {
+        x: stageRect.left - origin.left,
+        y: stageRect.top - origin.top,
+        scale,
+        fitted: v.fitted,
+      },
     });
   }, [hover, selection, shownIndex]);
+
+  // ── Zoom and pan ────────────────────────────────────────────────────────────────
+  /** The selection's bounds in slide pixels (Zoom to selection). */
+  const selectionRect = (): Rect | null => {
+    const v = view.current;
+    if (!v || selection.length === 0) return null;
+    const space = new CanvasSpace(v.stage, v.scale);
+    const rects = selection.flatMap((id) => space.rect(id) ?? []);
+    if (rects.length === 0) return null;
+    const x = Math.min(...rects.map((r) => r.x));
+    const y = Math.min(...rects.map((r) => r.y));
+    const right = Math.max(...rects.map((r) => r.x + r.w));
+    const bottom = Math.max(...rects.map((r) => r.y + r.h));
+    return { x, y, w: right - x, h: bottom - y };
+  };
+  const camera = useCanvasCamera({
+    wrapper: wrapperRef,
+    view,
+    stage: { w: deck.stage.width, h: deck.stage.height },
+    deckId,
+    busy: active !== null,
+    selectionRect,
+    onChange: measure,
+  });
 
   useLayoutEffect(() => {
     view.current?.render(deck, slideId);
@@ -227,6 +262,7 @@ export function EditorCanvas({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (camera.startPan(e)) return; // Space + drag, or the middle button: the hand tool
     if (inTextEditor(e.target)) return; // placing the caret, selecting text
     if (editing) onEditText(null); // a press anywhere else on the canvas ends typing
     if (e.button !== 0 || e.detail > 1) return;
@@ -261,6 +297,7 @@ export function EditorCanvas({
   };
 
   const onHandleDown = (e: React.PointerEvent, id: string, handle: Handle | "rotate") => {
+    if (camera.startPan(e)) return; // Space held over a handle still pans
     if (e.button !== 0) return;
     e.stopPropagation(); // not a click on the slide
     const start = { x: e.clientX, y: e.clientY };
@@ -284,7 +321,12 @@ export function EditorCanvas({
   };
   const primary = boxes.selected.length === 1 ? boxes.selected[0] : undefined;
   const editable =
-    !editing && primary && primary.id !== index.rootId && !index.nodes.get(primary.id)?.node.locked;
+    !editing &&
+    !camera.spaceHeld && // the hand tool is up: nothing to grab but the canvas
+    !camera.panning &&
+    primary &&
+    primary.id !== index.rootId &&
+    !index.nodes.get(primary.id)?.node.locked;
   const { stage } = boxes;
   /** Slide pixels → overlay pixels. */
   const toOverlay = (p: Point): Point => ({
@@ -300,10 +342,18 @@ export function EditorCanvas({
     // biome-ignore lint/a11y/noStaticElementInteractions: the canvas is a pointer surface; every action here also has a keyboard path (arrow keys, layers panel, inspector)
     <div
       ref={wrapperRef}
-      className={`editor-canvas${active ? ` ${GESTURE_CLASS[active]}` : ""}`}
+      className={[
+        "editor-canvas",
+        active ? GESTURE_CLASS[active] : "",
+        camera.panning ? "is-panning" : camera.spaceHeld ? "can-pan" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onPointerDown={onPointerDown}
       onDoubleClick={(e) => {
         if (inTextEditor(e.target)) return; // selects a word
+        // Two quick Space + drags are a double-click too: the hand tool never edits.
+        if (camera.spaceHeld || camera.panning) return;
         const ids = pick(index, hitAt(e.target), selection, { deep: true });
         onSelect(ids);
         // Reaching a text layer starts typing, caret under the pointer.
@@ -311,7 +361,9 @@ export function EditorCanvas({
           onEditText({ id: ids[0] as string, caret: { x: e.clientX, y: e.clientY } });
         }
       }}
-      onPointerMove={(e) => onHoverHit(active || editing ? null : hitAt(e.target))}
+      onPointerMove={(e) =>
+        onHoverHit(active || editing || camera.panning ? null : hitAt(e.target))
+      }
       onPointerLeave={() => onHoverHit(null)}
       onDragStart={(e) => e.preventDefault()} // images: no native drag-and-drop
     >
@@ -392,6 +444,14 @@ export function EditorCanvas({
           onExit={() => onEditText(null)}
         />
       )}
+      <ZoomControl
+        scale={stage.scale}
+        fitted={stage.fitted}
+        onZoomIn={camera.zoomIn}
+        onZoomOut={camera.zoomOut}
+        onZoomTo100={camera.zoomTo100}
+        onZoomToFit={camera.zoomToFit}
+      />
       {dropping && (
         <div className="drop-overlay" aria-hidden="true">
           <span>Drop images or fonts</span>

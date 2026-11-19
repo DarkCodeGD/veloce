@@ -1061,3 +1061,38 @@ it was intended, so the final lint run never came back clean.
    where content past a frame is shown unless the frame clips.
 4. **Marking any finding as intentional** is a separate, wider feature (Phase 8), so it isn't
    bolted onto this rule.
+
+## D60 — Canvas zoom and pan: a camera on the stage, as view state
+
+**Status:** Accepted (2026-11-19).
+
+1. **The renderer's StageView takes a camera** `{scale, x, y}`. `null` means fit, which
+   thumbnails and playback keep using. Layout still runs at stage size and only the picture
+   is transformed, so text wraps the same at every zoom. A set camera stays put when the
+   window resizes; a fitted one refits.
+2. **The math is pure** (`model/camera.ts`, unit-tested):
+   - zoom keeps the point under the pointer still
+   - preset steps
+   - capped wheel factors: pinch is smooth, a mouse notch is about 22%
+   - `keepVisible` keeps 64px of the slide on screen
+   - `cameraFor` zooms to fit a rect (fit and Zoom to selection)
+3. **Input follows Figma's keys.** Shift+digits are matched by `e.code` (Shift+1 types "!").
+   Mod + "+" / "-" are matched by the character typed (`zoomKeyDirection`), because "+" sits
+   on a different key on many layouts (German), where the physical-key match let the browser
+   zoom the whole page instead. Space is claimed
+   only while the pointer is over the canvas and nobody is typing, so a space typed into a
+   text layer or a field stays a space. Handles hide while the hand tool is up.
+4. **Updates land once per animation frame,** and nothing moves the camera while a drag
+   runs, whichever input asks (wheel, keys, the zoom pill, a camera queued just before the
+   drag began), so the drag's start coordinates stay valid. A window or slide-size change
+   re-applies `keepVisible`, so shrinking the window can't strand a zoomed slide off-screen.
+   A Space + double-click (two quick pans) is never a double-click on the canvas: it would
+   hit no layer and clear the selection. A middle-button press on the canvas is the hand
+   tool, never Linux's primary-selection paste: while it's down, `paste` / `beforeinput`
+   (insertFromPaste) are swallowed in the capture phase, until the release has been handled
+   (Figma does the same; otherwise every middle-drag over a text layer being edited pasted).
+5. **Zoom is view state, not document state.** No op, no undo entry, not shared with other
+   tabs or agents. It resets to fit when the deck changes. **Why:** golden rule 2, the
+   document is the deck and the view is per viewer.
+6. **The overlay needs no zoom-specific code.** It already measures the rendered DOM, so
+   outlines, handles, guides and the text editor stay exact at every zoom.

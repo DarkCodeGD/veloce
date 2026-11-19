@@ -995,6 +995,56 @@ textarea::placeholder {
   user-select: none;
 }
 
+/* Zoom pill, bottom-right of the canvas. */
+.zoom-control {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.zoom-value {
+  min-width: 52px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoom-value:hover {
+  background: var(--hover);
+}
+
+.zoom-value:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.zoom-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--border-strong);
+}
+
+.zoom-control .icon-button[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
 .slide-surface {
   border-radius: 4px;
   box-shadow:
@@ -1030,6 +1080,15 @@ textarea::placeholder {
 /* Direct manipulation (EditorCanvas): handles, drop feedback, snapping guides. */
 .editor-canvas.is-moving,
 .editor-canvas.is-rotating {
+  cursor: grabbing;
+}
+
+/* The hand tool: Space held over the canvas, then dragging (handles hide meanwhile). */
+.editor-canvas.can-pan {
+  cursor: grab;
+}
+
+.editor-canvas.is-panning {
   cursor: grabbing;
 }
 

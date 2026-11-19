@@ -25,6 +25,12 @@ export const SHORTCUTS = {
   rename: "F2",
   moveUp: "Alt+ArrowUp",
   moveDown: "Alt+ArrowDown",
+  // Canvas zoom (Figma's keys; Shift+digit matched by physical key).
+  zoomIn: "Mod+=",
+  zoomOut: "Mod+-",
+  zoomToFit: "Shift+1",
+  zoomTo100: "Shift+0",
+  zoomToSelection: "Shift+2",
 } as const;
 
 export type ShortcutSpec = string;

@@ -4,7 +4,7 @@
  */
 import type { Deck, SlideMeasurement } from "@veloce/core";
 import { SlideRenderer, type SlideRendererOptions } from "./slide-renderer.js";
-import { StageView, type StageViewOptions } from "./stage.js";
+import { type Camera, StageView, type StageViewOptions } from "./stage.js";
 
 export class SlideView {
   readonly #view: StageView;
@@ -21,6 +21,26 @@ export class SlideView {
 
   get scale(): number {
     return this.#view.scale;
+  }
+
+  /** Where the stage is drawn right now. */
+  get camera(): Camera {
+    return this.#view.camera;
+  }
+
+  /** True while the stage fits its viewport. */
+  get fitted(): boolean {
+    return this.#view.fitted;
+  }
+
+  /** The camera that fits the stage in its viewport. */
+  get fitCamera(): Camera {
+    return this.#view.fitCamera;
+  }
+
+  /** Zoom and pan: draw the stage with this camera, or fit the viewport again with `null`. */
+  setCamera(camera: Camera | null): void {
+    this.#view.setCamera(camera);
   }
 
   render(deck: Deck, slideId: string): void {

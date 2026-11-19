@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (426 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (448 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -119,7 +119,11 @@
     centre, the upright box is what `position` describes), strokes drawn inside, and
     `get_slide` bounds of rotated nodes. Acknowledging intentional lint findings went to
     Phase 8.
-  - **Next:** round 4: canvas zoom and pan.
+  - **Canvas zoom and pan (D60):** Ctrl/Cmd + wheel and pinch zoom at the pointer (10% to
+    1600%). The wheel pans (Shift: sideways), and so do Space + drag and middle-drag.
+    Keys: Mod+= / Mod+- step, Shift+1 fit, Shift+0 100%, Shift+2 selection. There's a zoom
+    pill in the canvas corner. Zoom is view state, never an op.
+  - **Next:** round 4: text toolbar.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -339,7 +343,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       corner stays there when its text, the card's size or the padding changes (Figma
       constraints). `position` keeps its one `{ x, y }` shape. Inspector anchor picker,
       drags and nudges keep working, MCP docs + lint. Extends D49 (D57)
-- [ ] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
+- [x] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
       handles, guides and text editing stay correct at every zoom
 - [ ] Text toolbar: text color (theme tokens first), paragraph alignment, text style
       (`$text.*`)
