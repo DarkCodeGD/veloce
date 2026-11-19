@@ -6,6 +6,7 @@
  * `verticalAlign: middle`) spills out of both ends, and `scrollHeight` only sees the bottom.
  */
 import {
+  CSS_COLOR_FN,
   compositeOver,
   contrastRatio,
   flattenLayers,
@@ -202,7 +203,8 @@ function backgroundsBehind(
 function layerOptions(image: string, base: Rgba): Rgba[][] | null {
   if (!image || image === "none") return [[base]];
   if (/url\(/i.test(image)) return null;
-  const stops = (image.match(/rgba?\([^)]*\)/g) ?? []).map(parseCssColor);
+  // Stops come back as rgb()/rgba(), or color(srgb …) for a theme color at an opacity.
+  const stops = (image.match(CSS_COLOR_FN) ?? []).map(parseCssColor);
   if (stops.length === 0 || stops.some((c) => c === null)) return null;
   const colors = stops as Rgba[];
   const samples: Rgba[] = [];

@@ -82,6 +82,7 @@ const DESIGN = `# Design rules
 - **Whitespace:** keep the slide padding; prefer $space tokens for gaps. Don't fill every pixel.
 - **Consistency:** same layout for slides of the same kind; same title position across content slides.
 - **Color:** text on $color.background or $color.surface uses $color.text/$color.muted; text on $color.primary uses $color.on-primary. Accent colors for emphasis only.
+- **Translucent color:** add an opacity in percent to a color token: "$color.primary/15" for a tinted card, "$color.secondary/30" for a glow or glass layer. It follows theme switches; a hex with alpha doesn't.
 - **Icons:** there is no icon element yet. Don't use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font. Use shapes, numbers or short words instead.
 - **Numbers:** show a big number ($text.display, $color.primary) with a short caption instead of a sentence.
 - **Check your work:** fix every lint error; run render_preview on slides with images, many elements or custom layouts.`;
@@ -158,6 +159,7 @@ set_theme also takes overrides on top of a theme, e.g. brand colors:
 \`{ "theme": { "base": "light", "colors": { "primary": "#e11d48" } } }\`
 
 ## Colors
+Any color token takes an opacity in percent (0–100): \`"$color.primary/30"\`.
 ${list(current.colors, "color", (v: string) => v)}
 
 ## Text styles (use as \`style\` on text)

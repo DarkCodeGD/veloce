@@ -4,7 +4,7 @@
  */
 import {
   type Color,
-  isTokenRef,
+  colorCss,
   type Paint,
   type Radius,
   type ShadowValue,
@@ -17,8 +17,9 @@ import {
 /** Asset ID → URL, as provided by `ElementContext.assetUrl`. */
 export type AssetUrlResolver = (assetId: string) => string;
 
+/** A document color as CSS: tokens (at an opacity too, `$color.x/30`) become theme variables. */
 export function cssColor(color: Color): string {
-  return isTokenRef(color) ? tokenCssVar(color) : color;
+  return colorCss(color);
 }
 
 /** Pixels or a `$space.*` / `$radius.*` token. */

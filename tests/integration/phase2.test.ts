@@ -331,6 +331,41 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
     },
   );
 
+  it.skipIf(!visual)("checks contrast for theme colors at an opacity", async () => {
+    // "$color.x/NN" renders as color-mix(), which Chromium reports as color(srgb …): text,
+    // fills and gradient stops must all still be measured.
+    const veil = {
+      type: "linear-gradient",
+      stops: [0, 1].map((offset) => ({ offset, color: "$color.text/90" })),
+    };
+    const result = await call("upsert_slide", {
+      slide: {
+        id: "glass",
+        layout: { mode: "stack", gap: "$space.md" },
+        children: [
+          { id: "whisper", type: "text", props: { content: "Whisper", color: "$color.text/15" } },
+          { id: "speak", type: "text", props: { content: "Speak", color: "$color.text/90" } },
+          {
+            id: "tint",
+            layout: { mode: "stack", padding: "$space.sm" },
+            style: { fill: "$color.primary/15" },
+            children: [{ id: "tint-label", type: "text", props: { content: "On a tint" } }],
+          },
+          {
+            id: "veil",
+            layout: { mode: "stack", padding: "$space.sm" },
+            style: { fill: veil },
+            children: [{ id: "veil-label", type: "text", props: { content: "Lost in the veil" } }],
+          },
+        ],
+      },
+    });
+    expect(result.text).toMatch(/low-contrast · slide glass · whisper/);
+    expect(result.text).toMatch(/low-contrast · slide glass · veil-label/);
+    expect(result.text).not.toMatch(/low-contrast · slide glass · (speak|tint-label)/);
+    expect(result.text).not.toMatch(/unknown-token/);
+  });
+
   it.skipIf(!visual)("wrapped text in any alignment never reads as overflowing", async () => {
     // Regression: the space at each soft wrap hangs past the line end; it isn't content.
     const lines = [

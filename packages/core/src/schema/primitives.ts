@@ -48,9 +48,23 @@ export const HexColorSchema = z
     error: 'Expected a hex color like "#4f46e5" (or "#4f46e5cc" with alpha)',
   });
 
+/**
+ * A theme color at an opacity, in percent: `"$color.secondary/30"`. For glows, glass and
+ * tints that must follow theme switches (a hex with alpha would stay behind on a switch).
+ */
+export type ColorTokenWithOpacity = `$color.${string}/${number}`;
+export const COLOR_OPACITY_PATTERN = /^\$color\.[a-zA-Z][a-zA-Z0-9-]*\/(?:100|[1-9]?[0-9])$/;
+export const ColorTokenWithOpacitySchema = patternString<ColorTokenWithOpacity>(
+  COLOR_OPACITY_PATTERN,
+  'Expected a color token with an opacity from 0 to 100, like "$color.primary/30"',
+);
+
 export const ColorSchema = z.union(
-  [HexColorSchema, tokenRefSchema("color"), z.literal("transparent")],
-  { error: 'Expected a hex color ("#4f46e5"), a color token ("$color.primary") or "transparent"' },
+  [HexColorSchema, tokenRefSchema("color"), ColorTokenWithOpacitySchema, z.literal("transparent")],
+  {
+    error:
+      'Expected a hex color ("#4f46e5"), a color token ("$color.primary"), a color token at an opacity in percent ("$color.primary/30") or "transparent"',
+  },
 );
 export type Color = z.infer<typeof ColorSchema>;
 

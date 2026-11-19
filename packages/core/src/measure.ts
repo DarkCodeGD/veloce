@@ -48,11 +48,20 @@ export type Rgba = readonly [r: number, g: number, b: number, a: number];
 
 const HEX = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const RGB_FN = /^rgba?\(\s*([^)]*)\)$/i;
+const SRGB_FN = /^color\(\s*srgb\s+([^)]*)\)$/i;
+
+/**
+ * Every CSS color function `parseCssColor` reads, for finding colors inside a longer value
+ * (a gradient's stops).
+ */
+export const CSS_COLOR_FN = /rgba?\([^)]*\)|color\(\s*srgb[^)]*\)/gi;
 
 /**
  * Parse the color formats browsers report from `getComputedStyle` and themes use:
- * `#rgb[a]`, `#rrggbb[aa]`, `rgb(r, g, b)`, `rgba(r, g, b, a)`, `rgb(r g b / a)`, `transparent`.
- * Returns `null` for anything else (named colors, `color(…)`, gradients).
+ * `#rgb[a]`, `#rrggbb[aa]`, `rgb(r, g, b)`, `rgba(r, g, b, a)`, `rgb(r g b / a)`,
+ * `color(srgb r g b / a)` (channels 0–1: what Chromium reports for `color-mix()`, i.e. a
+ * theme color at an opacity), `transparent`. Returns `null` for anything else (named colors,
+ * other color spaces, gradients).
  */
 export function parseCssColor(value: string): Rgba | null {
   const text = value.trim();
@@ -63,12 +72,15 @@ export function parseCssColor(value: string): Rgba | null {
     const n = (i: number) => Number.parseInt(full.slice(i, i + 2), 16);
     return [n(0), n(2), n(4), full.length === 8 ? n(6) / 255 : 1];
   }
-  const args = RGB_FN.exec(text)?.[1];
+  const srgb = SRGB_FN.exec(text)?.[1];
+  const args = srgb ?? RGB_FN.exec(text)?.[1];
   if (args === undefined) return null;
   const parts = args.split(/[\s,/]+/).filter(Boolean);
   if (parts.length < 3 || parts.length > 4) return null;
+  // rgb() channels are 0–255; color(srgb …) channels are 0–1. Both take percentages.
+  const unit = srgb === undefined ? 1 : 255;
   const channel = (s: string) =>
-    s.endsWith("%") ? (Number.parseFloat(s) / 100) * 255 : Number.parseFloat(s);
+    s.endsWith("%") ? (Number.parseFloat(s) / 100) * 255 : Number.parseFloat(s) * unit;
   const alpha = (s: string | undefined) =>
     s === undefined ? 1 : s.endsWith("%") ? Number.parseFloat(s) / 100 : Number.parseFloat(s);
   const rgba = [channel(parts[0] ?? ""), channel(parts[1] ?? ""), channel(parts[2] ?? "")];

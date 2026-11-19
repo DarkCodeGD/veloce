@@ -19,7 +19,7 @@ import { type ElementNode, isFreeLayer, type Layout, type Node } from "./schema/
 import { TextContentSchema, toPlainText } from "./schema/rich-text.js";
 import type { Theme } from "./schema/theme.js";
 import { suggest } from "./suggest.js";
-import { parseTokenRef, resolveToken } from "./tokens.js";
+import { parseColorToken, parseTokenRef, resolveToken } from "./tokens.js";
 
 export type LintSeverity = "error" | "warning" | "info";
 
@@ -296,10 +296,14 @@ function tokenRules(slide: Slide, theme: Theme): LintIssue[] {
   return issues;
 }
 
-/** Token references (`"$group.name"`) anywhere inside a JSON value. */
+/**
+ * Token references (`"$group.name"`) anywhere inside a JSON value. A color at an opacity
+ * (`"$color.primary/30"`) counts as its token, so a misspelled one is caught too.
+ */
 function tokenRefsIn(value: unknown, into = new Set<string>()): Set<string> {
   if (typeof value === "string") {
-    if (parseTokenRef(value)) into.add(value);
+    const ref = parseColorToken(value)?.token ?? (parseTokenRef(value) ? value : null);
+    if (ref) into.add(ref);
   } else if (Array.isArray(value)) {
     for (const item of value) tokenRefsIn(item, into);
   } else if (value !== null && typeof value === "object") {

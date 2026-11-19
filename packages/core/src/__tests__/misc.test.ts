@@ -3,8 +3,17 @@ import { assetRef, assetUsage, collectAssetRefs, parseAssetRef, sha256Hex } from
 import { createDeck, createSlide, element } from "../builders.js";
 import { DEFAULT_THEME } from "../default-theme.js";
 import { createId, ID_PATTERN, randomId } from "../ids.js";
+import { ColorSchema } from "../schema/primitives.js";
 import { notFoundHint, suggest } from "../suggest.js";
-import { parseTokenRef, resolveToken, themeToCssVariables, tokenCssVar } from "../tokens.js";
+import {
+  colorCss,
+  parseColorToken,
+  parseTokenRef,
+  resolveColor,
+  resolveToken,
+  themeToCssVariables,
+  tokenCssVar,
+} from "../tokens.js";
 import { validateDeck } from "../validate.js";
 import { fixtureDeck, IMAGE_ID } from "./fixtures.js";
 
@@ -46,6 +55,49 @@ describe("tokens", () => {
     expect(vars["--v-text-h1-font"]).toBe("var(--v-font-heading)");
     expect(vars["--v-shadow-sm"]).toBe("0px 2px 6px 0px #0000001a");
     expect(tokenCssVar("$text.h1", "size")).toBe("var(--v-text-h1-size)");
+  });
+
+  it("takes a theme color at an opacity: $color.name/NN", () => {
+    expect(parseColorToken("$color.secondary/30")).toEqual({
+      token: "$color.secondary",
+      name: "secondary",
+      opacity: 30,
+    });
+    expect(parseColorToken("$color.primary")?.opacity).toBe(100);
+    expect(parseColorToken("$color.primary/101")).toBeNull();
+    expect(parseColorToken("#4f46e5")).toBeNull();
+    expect(parseColorToken("$space.md")).toBeNull();
+    // Valid colors, for the schema too (and nothing looser).
+    for (const ok of ["$color.primary/0", "$color.on-primary/5", "$color.accent/100"]) {
+      expect(ColorSchema.safeParse(ok).success, ok).toBe(true);
+    }
+    for (const bad of [
+      "$color.primary/101",
+      "$color.primary/30%",
+      "$color.primary/",
+      "$space.md/30",
+    ]) {
+      expect(ColorSchema.safeParse(bad).success, bad).toBe(false);
+    }
+  });
+
+  it("renders a color at an opacity as the theme variable mixed with transparent", () => {
+    expect(colorCss("$color.secondary/30")).toBe(
+      "color-mix(in srgb, var(--v-color-secondary) 30%, transparent)",
+    );
+    expect(colorCss("$color.secondary/100")).toBe("var(--v-color-secondary)");
+    expect(colorCss("$color.secondary")).toBe("var(--v-color-secondary)");
+    expect(colorCss("#4f46e5")).toBe("#4f46e5");
+    expect(colorCss("transparent")).toBe("transparent");
+  });
+
+  it("resolves a color at an opacity to a concrete hex, keeping the theme color's alpha", () => {
+    expect(resolveColor(DEFAULT_THEME, "$color.primary")).toBe("#4f46e5");
+    expect(resolveColor(DEFAULT_THEME, "$color.primary/50")).toBe("#4f46e580");
+    const glassy = { ...DEFAULT_THEME, colors: { ...DEFAULT_THEME.colors, glass: "#ffffff80" } };
+    expect(resolveColor(glassy, "$color.glass/50")).toBe("#ffffff40"); // 50% of 50%
+    expect(resolveColor(DEFAULT_THEME, "$color.nope/50")).toBeUndefined();
+    expect(resolveColor(DEFAULT_THEME, "#123456")).toBe("#123456");
   });
 });
 

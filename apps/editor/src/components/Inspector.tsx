@@ -231,7 +231,7 @@ function SlideSection({ deck, slide }: { deck: Deck; slide: Slide }) {
  */
 function live(toCommand: (value: unknown) => Command | null) {
   return {
-    onPreview: (value: number | null) =>
+    onPreview: (value: unknown) =>
       setPreview(value === null ? null : (toCommand(value)?.ops ?? null)),
     onCommit: (value: unknown) => void run(toCommand(value)).finally(() => setPreview(null)),
   };
@@ -566,7 +566,7 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
           label="Fill"
           value={node.style?.fill}
           theme={deck.theme}
-          onCommit={setStyle("fill", "Change fill")}
+          {...liveStyle("fill", "Change fill")}
         />
         <LengthField
           label="Radius"
@@ -647,7 +647,15 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
             );
           case "color":
           case "paint":
-            return <ColorField key={field.key} {...common} value={value} theme={deck.theme} />;
+            return (
+              <ColorField
+                key={field.key}
+                {...common}
+                value={value}
+                theme={deck.theme}
+                {...live(toCommand)}
+              />
+            );
           case "length":
             return (
               <LengthField

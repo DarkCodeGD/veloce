@@ -38,6 +38,10 @@ describe("color math", () => {
     expect(parseCssColor("transparent")).toEqual([0, 0, 0, 0]);
     expect(parseCssColor("linear-gradient(red, blue)")).toBeNull();
     expect(parseCssColor("rgb(nope)")).toBeNull();
+    // What Chromium reports for color-mix(), i.e. a theme color at an opacity.
+    expect(parseCssColor("color(srgb 1 0.5 0 / 0.3)")).toEqual([255, 127.5, 0, 0.3]);
+    expect(parseCssColor("color(srgb 0 0 0)")).toEqual([0, 0, 0, 1]);
+    expect(parseCssColor("color(display-p3 1 0 0)")).toBeNull(); // another color space
   });
 
   it("computes WCAG contrast and composites translucent layers", () => {
@@ -213,12 +217,17 @@ describe("lint: theme tokens", () => {
           rootId: "root",
           background: "$color.backgrund",
           layout: { mode: "stack", gap: "$space.huge" },
-          children: [element("text", { content: "x", color: "$color.primary" }, { id: "ok" })],
+          children: [
+            element("text", { content: "x", color: "$color.primary/40" }, { id: "ok" }),
+            element("text", { content: "y", color: "$color.primarry/40" }, { id: "typo" }),
+          ],
         }),
       ],
     });
     const issues = lintDeck(deck);
-    expect(rules(issues)).toEqual(["unknown-token:", "unknown-token:root"]);
+    expect(rules(issues)).toEqual(["unknown-token:", "unknown-token:root", "unknown-token:typo"]);
+    // A color at an opacity is checked as its token.
+    expect(issues[2]?.fix).toBe('Did you mean "$color.primary"?');
     expect(issues[0]?.fix).toBe('Did you mean "$color.background"?');
     expect(issues[1]?.message).toMatch(/"\$space\.huge"/);
     expect(issues[1]?.fix).toMatch(/^Use one of: "\$space\.xs", /);

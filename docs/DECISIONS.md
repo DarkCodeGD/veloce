@@ -1160,3 +1160,37 @@ between the deck switcher and menus (left) and Follow AI / Live / Present (right
    undo, history and the AI's view of the deck need nothing new.
 4. **Narrow windows fold the tools into one menu,** so the bar never wraps or hides the AI
    controls (D53: AI activity is never hidden).
+
+## D63 — Colors at an opacity: `$color.name/NN`, rendered with `color-mix()`
+
+**Status:** Accepted (2026-11-19). Extends D47.
+
+Glows, glass panels and tinted cards need translucent colors. Until now the only way was a
+hex with alpha (`#818cf84d`), which stays behind on a theme switch. Any color token now
+takes an opacity in percent: `"$color.secondary/30"`.
+
+1. **A suffix on the token string, in percent (0–100), whole numbers only.** **Why:** a color
+   stays one string everywhere (props, paints, gradient stops, strokes, text runs), so no
+   schema grows an object form and every place that takes a color takes this too. It reads
+   like Tailwind's `primary/30`, which agents already know. Whole percents keep the JSON
+   Schema a plain `pattern` (MCP) and make typos like `/300` or `/30%` invalid, not clamped.
+   The value is additive and format v1 hasn't shipped, so there's no migration (D48 §4).
+2. **Rendered as `color-mix(in srgb, var(--v-color-x) 30%, transparent)`.** **Why:** it
+   stays on the theme variable, so a theme switch restyles without a re-render, like every
+   other token. Mixing with `transparent` multiplies the theme color's own alpha, so an 80%
+   theme color at 30% is 24%, the same rule `resolveColor` uses for swatches. Chromium
+   (the editor, the render page and Electron) has supported it since 111. Core's
+   `colorCss` is the one implementation; the plugin API's `cssColor` calls it.
+3. **Lint treats `$color.x/30` as `$color.x`** for unknown-token errors, so typos still get
+   "Did you mean". Contrast is measured on the rendered page, where Chromium reports
+   `color-mix()` as `color(srgb r g b / a)`. `parseCssColor` reads that form, and the
+   renderer finds it inside gradients (`CSS_COLOR_FN`), so translucent text, fills and
+   stops are flattened like any other alpha.
+4. **The editor: an opacity box next to every color field's hex, and the color keeps its
+   opacity.** **Why:** the system picker has no alpha (D47). Figma keeps a fill's opacity
+   when you change its color, so a swatch, a picked hex or "Use theme color" all keep the
+   current opacity (`keepOpacity`). On a raw hex the box edits the alpha byte, so the
+   control works the same on both kinds of color. 100% writes the plain form (`$color.x`,
+   `#rrggbb`). Scrubbing and arrow keys preview live, then commit one transaction. The text
+   toolbar's color menu shows tokens at an opacity but doesn't edit the opacity: that
+   happens on the layer, in the inspector.

@@ -5,6 +5,7 @@
  * Renderers set `themeToCssVariables(theme)` on the stage and plugins emit `var(--v-…)`
  * (see `tokenCssVar`), so a theme switch restyles everything without touching the DOM tree.
  */
+import { parseCssColor } from "./measure.js";
 import { TOKEN_GROUPS, type TokenGroup, type TokenRef } from "./schema/primitives.js";
 import type { Shadow, TextStyle, Theme } from "./schema/theme.js";
 
@@ -39,6 +40,55 @@ export function resolveToken(theme: Theme, ref: string): TokenValue | undefined 
   if (!parsed) return undefined;
   const table: Record<string, TokenValue> = theme[GROUP_TO_THEME_KEY[parsed.group]];
   return Object.hasOwn(table, parsed.name) ? table[parsed.name] : undefined;
+}
+
+// ── Colors at an opacity: `$color.secondary/30` ───────────────────────────────────────
+
+const COLOR_REF = /^\$color\.([a-zA-Z][a-zA-Z0-9-]*)(?:\/(\d{1,3}))?$/;
+
+/**
+ * A color token with its opacity: `"$color.primary/30"` → `{ token: "$color.primary",
+ * name: "primary", opacity: 30 }`. A plain token is opacity 100. Null for anything else
+ * (hex, `transparent`, an opacity above 100).
+ */
+export function parseColorToken(
+  value: unknown,
+): { token: TokenRef<"color">; name: string; opacity: number } | null {
+  if (typeof value !== "string") return null;
+  const match = COLOR_REF.exec(value);
+  if (!match?.[1]) return null;
+  const opacity = match[2] === undefined ? 100 : Number(match[2]);
+  if (opacity > 100) return null;
+  return { token: `$color.${match[1]}`, name: match[1], opacity };
+}
+
+/**
+ * CSS for a document color. Tokens become `var(--v-color-…)`, so a theme switch restyles
+ * without re-rendering; at an opacity, the variable is mixed with `transparent`, which keeps
+ * the theme color's own alpha too (an 80% theme color at 30% is 24%).
+ */
+export function colorCss(color: string): string {
+  const ref = parseColorToken(color);
+  if (!ref) return color;
+  const variable = tokenCssVar(ref.token);
+  return ref.opacity >= 100
+    ? variable
+    : `color-mix(in srgb, ${variable} ${ref.opacity}%, transparent)`;
+}
+
+/**
+ * The concrete color a document color shows in a theme (`#rrggbb` or `#rrggbbaa`), for
+ * swatches and pickers. Undefined for a token the theme lacks.
+ */
+export function resolveColor(theme: Theme, color: string): string | undefined {
+  const ref = parseColorToken(color);
+  if (!ref) return color;
+  const value = Object.hasOwn(theme.colors, ref.name) ? theme.colors[ref.name] : undefined;
+  if (value === undefined || ref.opacity >= 100) return value;
+  const rgba = parseCssColor(value);
+  if (!rgba) return value;
+  const hex = (n: number) => Math.round(n).toString(16).padStart(2, "0");
+  return `#${hex(rgba[0])}${hex(rgba[1])}${hex(rgba[2])}${hex(rgba[3] * (ref.opacity / 100) * 255)}`;
 }
 
 /** Sub-properties of a `$text.*` token, each exposed as its own CSS variable. */

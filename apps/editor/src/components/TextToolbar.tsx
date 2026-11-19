@@ -15,7 +15,7 @@
  */
 import type { Editor } from "@tiptap/core";
 import type { Mark, Node as PMNode } from "@tiptap/pm/model";
-import type { Theme } from "@veloce/core";
+import { resolveColor, type Theme } from "@veloce/core";
 import {
   AlignCenter,
   AlignJustify,
@@ -151,10 +151,9 @@ export function selectionFormat(editor: Editor, box: TextBox) {
   };
 }
 
-/** A color as the screen shows it: a `$color.*` token resolved through the theme. */
+/** A color as the screen shows it: a `$color.*` token (at its opacity) resolved through the theme. */
 function swatchColor(theme: Theme, color: string | undefined): string | undefined {
-  if (!color?.startsWith("$color.")) return color;
-  return theme.colors[color.slice(7)];
+  return color === undefined ? undefined : resolveColor(theme, color);
 }
 
 // ── The toolbar ─────────────────────────────────────────────────────────────────────────

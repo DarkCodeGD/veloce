@@ -3,9 +3,10 @@
  * or immediately (choices), and can reset to the default (`null` in the patch).
  * Token-aware: colors and lengths offer the theme's tokens first, raw values second.
  */
-import { primaryFamily, type Theme } from "@veloce/core";
+import { primaryFamily, resolveColor, type Theme } from "@veloce/core";
 import { RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { baseToken, isColorText, keepOpacity, opacityOf, withOpacity } from "../model/color.js";
 import { parseNumber } from "../model/scrub.js";
 import { nearestColorToken, toHex6 } from "../model/theme-edit.js";
 import { Select, type SelectOption } from "./Select.js";
@@ -368,47 +369,56 @@ export function LengthField({
 
 /**
  * Theme color swatches first, then any color (typed, or from the system picker behind the
- * chip). A raw color gets a one-click "use the closest theme color". Gradients and images
- * are kept, not edited.
+ * chip), and an opacity in percent next to it. A token at an opacity stays a token
+ * (`$color.secondary/30`), so glows and tints follow theme switches; a raw hex takes an alpha
+ * byte. Changing the color keeps the opacity (like Figma). A raw color gets a one-click "use
+ * the closest theme color". Gradients and images are kept, not edited.
  */
 export function ColorField({
   label,
   value,
   theme,
   onCommit,
+  onPreview,
 }: {
   label: string;
   value: unknown;
   theme: Theme;
   onCommit: Commit;
+  /** Show a color live while the opacity is scrubbed or nudged; `null` drops the preview. */
+  onPreview?: (color: string | null) => void;
 }) {
   const id = useId();
   const isObject = typeof value === "object" && value !== null;
-  const resolved =
-    typeof value === "string" && value.startsWith("$color.")
-      ? theme.colors[value.slice(7) as keyof typeof theme.colors]
-      : typeof value === "string"
-        ? value
-        : undefined;
-  const draft = useDraft(typeof value === "string" ? value : "", (text) => {
-    const t = text.trim();
+  const text = typeof value === "string" ? value : undefined;
+  const resolved = text === undefined ? undefined : resolveColor(theme, text);
+  /** Any new color, at the opacity the current one has. */
+  const pick = (color: string) => onCommit(keepOpacity(value, color));
+  const draft = useDraft(text ?? "", (typed) => {
+    const t = typed.trim();
     if (t === "") return onCommit(null);
-    if (
-      /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(t) ||
-      /^\$color\.[\w-]+$/.test(t) ||
-      t === "transparent"
-    ) {
-      onCommit(t);
-    }
+    if (isColorText(t)) onCommit(t);
   });
   const pickerValue = (resolved && toHex6(resolved)) ?? "#000000";
   const picker = useColorPicker(pickerValue, (hex) => {
-    if (hex !== pickerValue) onCommit(hex);
+    if (hex !== pickerValue) pick(hex);
+  });
+  const opacity = opacityOf(value);
+  const opacityControl = useNumberControl({
+    value: opacity ?? undefined,
+    min: 0,
+    max: 100,
+    integer: true,
+    onCommit: (pct) => {
+      if (text !== undefined) onCommit(withOpacity(text, pct ?? 100));
+    },
+    onPreview: (pct) => {
+      if (text !== undefined) onPreview?.(pct === null ? null : withOpacity(text, pct));
+    },
   });
   // A raw color (not a token): offer the closest theme color, so the slide stays on-theme and
   // follows the next theme switch.
-  const raw = typeof value === "string" && !value.startsWith("$") && value !== "transparent";
-  const snapToken = raw ? nearestColorToken(theme, value) : null;
+  const snapToken = text?.startsWith("#") ? nearestColorToken(theme, text) : null;
   const snap = snapToken
     ? { token: snapToken, name: snapToken.slice(7), hex: theme.colors[snapToken.slice(7)] }
     : null;
@@ -421,22 +431,33 @@ export function ColorField({
             swatch to replace it
           </span>
         ) : (
-          <div className="color-input">
-            {/* The chip opens the system picker, for a color outside the theme. */}
-            <label className="color-chip" style={{ background: resolved ?? "transparent" }}>
-              <span className="sr-only">{`${label}: custom color`}</span>
-              <input ref={picker} type="color" className="picker-input" />
-            </label>
-            <input id={id} type="text" spellCheck={false} placeholder="Default" {...draft} />
+          <div className="color-row">
+            <div className="color-input">
+              {/* The chip opens the system picker, for a color outside the theme. */}
+              <label
+                className="color-chip"
+                style={{ "--chip": resolved ?? "transparent" } as React.CSSProperties}
+              >
+                <span className="sr-only">{`${label}: custom color`}</span>
+                <input ref={picker} type="color" className="picker-input" />
+              </label>
+              <input id={id} type="text" spellCheck={false} placeholder="Default" {...draft} />
+            </div>
+            {opacity !== null && (
+              <div className="input-with-suffix color-opacity">
+                <input aria-label={`${label} opacity`} {...opacityControl.inputProps} />
+                <span className="suffix">%</span>
+              </div>
+            )}
           </div>
         )}
         {snap && (
-          <button type="button" className="color-snap" onClick={() => onCommit(snap.token)}>
+          <button type="button" className="color-snap" onClick={() => pick(snap.token)}>
             <span className="color-snap-dot" style={{ background: snap.hex }} />
             Use theme color “{snap.name}”
           </button>
         )}
-        <Swatches theme={theme} label={label} value={value} onPick={onCommit} />
+        <Swatches theme={theme} label={label} value={value} onPick={pick} />
       </div>
     </Field>
   );
@@ -466,14 +487,15 @@ export function Swatches({
     <div className="swatches">
       {Object.entries(theme.colors).map(([name, hex]) => {
         const token = `$color.${name}`;
+        const on = baseToken(value) === token; // at any opacity
         return (
           <button
             key={name}
             type="button"
-            className={`swatch${value === token ? " is-on" : ""}`}
+            className={`swatch${on ? " is-on" : ""}`}
             style={{ background: hex }}
             aria-label={`${label}: ${name}`}
-            aria-pressed={value === token}
+            aria-pressed={on}
             data-tip={`${name} · ${hex}`}
             onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
             onClick={() => onPick(token)}
