@@ -9,7 +9,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (347 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (360 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -59,7 +59,15 @@
   - **Round 4, Free frames (D50):** switching a stack/grid to Free pins its children (and its
     own content-fitted size) exactly where they were, in one undo step. Fixed a long-standing
     bug on the way: every layout mode switch dropped the frame's padding.
-  - **Next:** round 4, item 3: drag and drop in the Layers panel.
+  - **Round 4, Layers panel drag and drop (D51):** drag rows (or the whole selection) to
+    reorder, onto a frame to move inside it, or left past a frame's last child to pull out;
+    the canvas previews live, Escape cancels, layers dropped into Free frames stay put.
+    `tests/integration/phase3-layers.test.ts` covers it.
+  - **Round 4 and 5 grew (2026-11-19)** from an MCP-only agent run (a badge on an existing
+    deck, then a 5-slide deck from scratch): a padding patch bug agents hit, anchors for
+    free layers, opacity on color tokens, and a new round 5 for reusable components. Batch
+    previews, shape geometry and a cross-slide consistency lint went to Phases 4, 5 and 8.
+  - **Next:** round 4: fix padding patches, then group / ungroup (Ctrl+G / Ctrl+Shift+G).
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -260,22 +268,58 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       format changes
 - [x] Switching a frame to Free keeps everything where it is: children get their current
       rendered positions (and sizes where they were stretched), in one transaction
-- [ ] Layers panel drag and drop: reorder, and move layers into or out of frames (same ops as
+- [x] Layers panel drag and drop: reorder, and move layers into or out of frames (same ops as
       canvas drags; keyboard path stays Alt+↑/↓)
+- [ ] Fix: `node.update` can't switch `padding` to another form. Merge-patching
+      `{ x, y }` with `{ top, right, bottom, left }` yields `{ x, y, top, … }`, which matches
+      no padding shape and fails with a bare `set.layout.padding: Invalid input`. Replace a
+      padding object whole when the patch switches its form (like the layout `mode` rule in
+      `json.ts`, so undo inverses stay right), check other union-of-objects fields for the
+      same trap, and make any remaining error say how to fix the call
 - [ ] Group / ungroup (Ctrl+G / Ctrl+Shift+G): wrap the selection in a frame that keeps its
       layout, and unwrap it
 - [ ] Align and distribute for multi-selection (left/center/right, top/middle/bottom; space
       evenly), in free frames
+- [ ] Anchors for free layers: `anchor: { x: "start" | "center" | "end", y: … }` says which
+      edge of the frame `position` is measured from, so a badge pinned to a card's top-right
+      corner stays there when its text, the card's size or the padding changes (Figma
+      constraints). `position` keeps its one `{ x, y }` shape. Inspector anchor picker,
+      drags and nudges keep working, MCP docs + lint. Extends D49
 - [ ] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
       handles, guides and text editing stay correct at every zoom
 - [ ] Text toolbar: text color (theme tokens first), paragraph alignment, text style
       (`$text.*`)
+- [ ] Opacity on color tokens: `$color.secondary/30` (glows, bubbles, glass highlights) so
+      translucent colors follow theme switches instead of being hard-coded hex with alpha.
+      Token resolution, contrast lint (already flattens alpha), and an opacity control in the
+      editor's token color picker (the system picker has no alpha, D47)
 - [ ] Unused uploads are cleaned up: files uploaded but never registered with `asset.add`
       (a cancelled drop, a failed paste) are swept on save and on close
 
+**Round 5: reuse (components)**
+
+Agents rebuild the same card 4–8 times per slide and can't reuse a drawing they made from
+shapes, which means large, repetitive MCP payloads and drifting styles.
+
+- [ ] Components, step 1 (copy on insert): save any subtree as a named component with a few
+      declared params (e.g. `color`, `label`, `level`) that map to node fields. Inserting
+      makes a plain copy with fresh IDs, so the document never links to it: undo, morph and
+      export work as they do today. Stored per deck (`components` in `document.json`, a
+      format addition with its decision entry) and in a user library
+      (`~/.config/veloce/library/`). Pure data, no code, so safe to share
+- [ ] MCP: `save_component`, `list_components`, and `node.insert` with
+      `{ "use": "<name>", "with": { … } }`, expanded where MCP input is normalized, so core
+      ops and the undo log only ever see plain nodes (golden rule 1)
+- [ ] Editor: "Save as component" on a selection, and a library panel next to Layers to
+      insert from
+- [ ] Frame style presets in the theme (`$style.card` = fill + radius + padding, like
+      `$text.*` for text), decided together with components so there's one way to reuse
+      styling, not two
+
 **Done when:** a full deck can be built by hand, with layers placed exactly where you want
-them, including inside the AI's auto-layout slides; human and agent edit concurrently without
-conflicts; Ctrl+Z never undoes the agent's work.
+them, including inside the AI's auto-layout slides; an agent can define a card once and
+reuse it across the deck; human and agent edit concurrently without conflicts; Ctrl+Z never
+undoes the agent's work.
 
 ## Phase 4 — Motion
 
@@ -286,6 +330,8 @@ conflicts; Ctrl+Z never undoes the agent's work.
 - [ ] Slide transitions (fade, push, zoom) + **morph** (match nodes by id across slides)
 - [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window synced
 - [ ] MCP: `set_animations(slideId, steps)`, `render_preview` at a step/time
+- [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
+      sheet, so an agent reviews a whole deck in one call instead of one per slide
 - [ ] Determinism test: seek to the same step/time twice → identical screenshots
 
 **Done when:** decks animate in presenter mode and every frame is reproducible by seeking.
@@ -303,6 +349,9 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
       symbol characters as icons, and they render in a fallback font (Inter only covers text). Until
       this lands, the design docs tell agents not to use them.
 - [ ] `video`: seek-synced to the clock
+- [ ] More shape geometry: per-corner radius, and a `path`/`polygon` shape for custom
+      silhouettes (a tapered glass, a flat-topped container, arrows) that `icon` won't cover.
+      Path data gets a strict grammar validator before it reaches the SVG
 - [ ] `diagram` (Mermaid)
 - [ ] `three`: declarative scene (models, lights, camera, presets) + WebGL context manager (budget < 16 live contexts)
 - [ ] `custom-component`: AI/user-written code in a sandboxed iframe with a declared param schema → inspector knobs
@@ -340,6 +389,10 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
 - [ ] Claude skill `veloce-deck-design`: workflow (storyline → theme → batch build → lint → preview → fix) + design taste rules
 - [ ] `llms.txt` + human docs site for plugin developers
 - [ ] AI eval suite: fixed prompts → decks → lint score + screenshot review; run when tools change
+- [ ] Cross-slide consistency lint: flag titles/kickers in the same role whose position
+      drifts between content slides (usually `justify: "center"` with different content
+      heights). Until then, the layout docs tell agents to use `justify: "start"` on content
+      slides
 
 **Done when:** a fresh agent with only the MCP (no skill) can make a decent deck, and with the skill makes a great one.
 
@@ -364,5 +417,8 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
       default driver and GSAP ships as an optional plugin. **Resolve before Phase 4.**
 - [ ] **Name:** trademark search for "Veloce" in the software class.
 - [x] **Extension:** `.veloce` confirmed by the user (2026-11-18).
+- [ ] **Linked components** (a main component + instances with overrides, edits flow to
+      every copy): only if users ask for it after components step 1. Much harder: an
+      override model, invertible ops across instances, detach.
 - [ ] **Sync:** server op log now; move to Yjs only if cloud multi-user collaboration becomes a goal.
 - [ ] **Business:** hosted web viewer / cloud sync / plugin marketplace (post-launch).

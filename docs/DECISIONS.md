@@ -792,3 +792,38 @@ Agents switching a frame over MCP get no baking (they describe structure and set
 positions; lint's `ignored-position` and `off-canvas` catch mistakes).
 `tests/integration/phase3-free.test.ts` checks in Chromium that the frame and its children
 stay within 1px, in one undo step.
+
+## D51 — Layers panel drag and drop: pointer-driven, frozen panel, one move command
+
+**Status:** Accepted (2026-11-19).
+
+Rows in the Layers panel can be dragged to reorder layers, or to move them into and out of
+frames, by themselves or with the whole selection.
+
+1. **Pointer events, not HTML5 drag and drop.** **Why:** we need a live canvas preview, our
+   own indicator, Escape to cancel, and the same 4 px threshold as the canvas, so a click
+   still selects. Native DnD gives a ghost image and none of the rest.
+2. **Drop zones (`layerDropAt`, pure).** Ordinary rows split into halves: before or after.
+   Frame rows split into quarters: top = before, middle half = **into** (appended to its
+   children), bottom = after. Below an expanded frame, "after" means before its first
+   child, which is what's drawn right underneath. Below the last child of a frame, the
+   pointer's x picks the level, Figma-style: drag left to drop after the frame (or after
+   its own parent, and so on). Locked frames and a layer's own subtree refuse drops. A line
+   with a ring, indented to the drop's depth, or an outlined frame row, shows where the
+   layers go.
+3. **One command (`moveLayers`, pure).** It takes the top-level selected layers in document
+   order, and the target is "in parent P before sibling S", skipping past dragged siblings.
+   It replays the moves on plain child lists to get each `node.move` index, because every
+   move shifts the next one's. Layers that change frames follow the canvas rules (D43,
+   D49): entering a Free frame, they keep their spot on the slide (measured at the press);
+   entering a stack or grid, they drop `position`; and they always drop `positioning`.
+4. **The panel is frozen while dragging.** It keeps rendering the slide from the press,
+   while the canvas shows the live preview. **Why:** the preview reorders the document, and
+   rows moving under the pointer would make the target oscillate (D43 §3, same lesson).
+5. Panel order stays document order (first child on top), not Figma's paint order (last
+   child on top). **Why:** decks are mostly stacks, where document order _is_ top-to-bottom
+   on the slide.
+
+`model/layer-drop.test.ts` covers the zones and the move replay.
+`tests/integration/phase3-layers.test.ts` checks in Chromium: reorder, drop into a frame,
+pull out to the left, drop into a free frame without moving, Escape, and click-to-select.

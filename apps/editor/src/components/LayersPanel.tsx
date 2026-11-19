@@ -1,7 +1,8 @@
 /**
- * The layer tree of the current slide. Every canvas action has a path here too (keyboard and
- * pointer, no dragging needed): select, rename (double-click or F2), hide, lock, and reorder
- * with Alt+↑/↓ (handled by the app's shortcuts).
+ * The layer tree of the current slide. Every canvas action has a path here too: select,
+ * rename (double-click or F2), hide, lock, and move. Drag rows to reorder them or to move
+ * layers into or out of frames (useLayerDrag); Alt+↑/↓ reorders from the keyboard (handled
+ * by the app's shortcuts).
  */
 import type { Node, Slide } from "@veloce/core";
 import {
@@ -19,10 +20,11 @@ import {
   Square,
   Type,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { run } from "../actions.js";
 import { updateNode } from "../model/commands.js";
 import { nodeLabel } from "../model/slide-index.js";
+import { INDENT, ROW_PAD, useLayerDrag } from "./useLayerDrag.js";
 
 interface Props {
   slide: Slide;
@@ -31,9 +33,20 @@ interface Props {
   onHover(id: string | null): void;
 }
 
-export function LayersPanel({ slide, selection, onSelect, onHover }: Props) {
+export function LayersPanel({ slide: live, selection, onSelect, onHover }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const { drag, onPointerDown, suppressClick } = useLayerDrag({
+    list,
+    slide: live,
+    selection,
+    onSelect,
+  });
+  // While dragging, show the slide as it was at the press (the canvas shows the preview).
+  const slide = drag?.slide ?? live;
+  const dragged = new Set(drag?.ids ?? []);
+  const indicator = drag?.drop?.indicator;
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -56,16 +69,36 @@ export function LayersPanel({ slide, selection, onSelect, onHover }: Props) {
   }
 
   return (
-    <ul className="layers" aria-label="Layers" onPointerLeave={() => onHover(null)}>
-      {rows.map(({ node, depth }) => {
+    <ul
+      ref={list}
+      className={`layers${drag ? " is-dragging" : ""}`}
+      aria-label="Layers"
+      onPointerLeave={() => onHover(null)}
+    >
+      {rows.map(({ node, depth }, row) => {
         const selected = selection.includes(node.id);
         const label = nodeLabel(node);
+        const line = indicator?.kind === "line" && indicator.row === row ? indicator : null;
+        const classes = [
+          "layer",
+          selected && "is-selected",
+          node.hidden && "is-hidden",
+          dragged.has(node.id) && "is-dragged",
+          indicator?.kind === "into" && indicator.row === row && "is-drop-into",
+          line && `is-drop-${line.edge}`,
+        ];
         return (
           <li
             key={node.id}
-            className={`layer${selected ? " is-selected" : ""}${node.hidden ? " is-hidden" : ""}`}
-            style={{ paddingLeft: 8 + depth * 16 }}
-            onPointerEnter={() => onHover(node.id)}
+            data-layer-id={node.id}
+            data-depth={depth}
+            className={classes.filter(Boolean).join(" ")}
+            style={{
+              paddingLeft: ROW_PAD + depth * INDENT,
+              ...(line && { "--drop-indent": `${ROW_PAD + line.depth * INDENT + 18}px` }),
+            }}
+            onPointerEnter={() => !drag && onHover(node.id)}
+            onPointerDown={(e) => onPointerDown(e, node.id)}
           >
             {node.kind === "frame" && node.children.length > 0 ? (
               <button
@@ -98,7 +131,7 @@ export function LayersPanel({ slide, selection, onSelect, onHover }: Props) {
                 type="button"
                 className="layer-name"
                 aria-pressed={selected}
-                onClick={(e) => onSelect([node.id], e.shiftKey)}
+                onClick={(e) => !suppressClick.current && onSelect([node.id], e.shiftKey)}
                 onDoubleClick={() => setRenaming(node.id)}
                 onKeyDown={(e) => {
                   if (e.key === "F2") setRenaming(node.id);

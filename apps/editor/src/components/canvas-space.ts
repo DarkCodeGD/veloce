@@ -61,6 +61,35 @@ export class CanvasSpace {
     };
   }
 
+  /**
+   * Where a layer's unrotated top-left corner is on screen, measured from a frame's content
+   * box: the `position` that keeps it there once it's a child of that (absolute) frame.
+   */
+  positionIn(id: string, frameId: string): Point | null {
+    const rect = this.rect(id);
+    const size = this.size(id);
+    const frame = this.element(frameId);
+    if (!rect || !size || !frame) return null;
+    const content = this.#contentOf(frame, this.#rectOf(frame));
+    return {
+      x: Math.round(rect.x + rect.w / 2 - size.w / 2 - content.x),
+      y: Math.round(rect.y + rect.h / 2 - size.h / 2 - content.y),
+    };
+  }
+
+  /** A frame's box inside its padding, in slide pixels. */
+  #contentOf(el: HTMLElement, rect: Rect): Rect {
+    const style = getComputedStyle(el);
+    const pad = (side: "Top" | "Right" | "Bottom" | "Left") =>
+      Number.parseFloat(style[`padding${side}`]) || 0;
+    return {
+      x: rect.x + pad("Left"),
+      y: rect.y + pad("Top"),
+      w: Math.max(0, rect.w - pad("Left") - pad("Right")),
+      h: Math.max(0, rect.h - pad("Top") - pad("Bottom")),
+    };
+  }
+
   #rectOf(el: Element): Rect {
     const r = el.getBoundingClientRect();
     const tl = this.toSlide({ x: r.left, y: r.top });
@@ -76,20 +105,12 @@ export class CanvasSpace {
       const el = this.element(id);
       if (!el) continue;
       const rect = this.#rectOf(el);
-      const style = getComputedStyle(el);
-      const pad = (side: "Top" | "Right" | "Bottom" | "Left") =>
-        Number.parseFloat(style[`padding${side}`]) || 0;
       frames.push({
         id,
         parentId: at.parentId,
         depth: at.depth,
         rect,
-        content: {
-          x: rect.x + pad("Left"),
-          y: rect.y + pad("Top"),
-          w: Math.max(0, rect.w - pad("Left") - pad("Right")),
-          h: Math.max(0, rect.h - pad("Top") - pad("Bottom")),
-        },
+        content: this.#contentOf(el, rect),
         flow: flowOf(node.layout),
         locked: node.locked === true,
         children: node.children.flatMap((child) => {
