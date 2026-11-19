@@ -24,11 +24,13 @@ export const toastStore = {
   get: () => toasts,
 };
 
-export function showToast(toast: Omit<Toast, "id">, durationMs = 5000): void {
+/** Show a toast; returns its ID (to dismiss it early). */
+export function showToast(toast: Omit<Toast, "id">, durationMs = 5000): number {
   const id = nextId++;
   toasts = [...toasts.slice(-2), { ...toast, id }]; // at most three on screen
   emit();
   setTimeout(() => dismissToast(id), durationMs);
+  return id;
 }
 
 export function dismissToast(id: number): void {

@@ -14,9 +14,12 @@ import {
   frameAt,
   type Imported,
   insertImages,
+  keepOriginals,
+  optimizedMessage,
   type Rect,
   replaceAsset,
   splitImports,
+  swapAssets,
 } from "./asset-insert.js";
 import type { Command } from "./commands.js";
 import { indexSlide } from "./slide-index.js";
@@ -156,6 +159,67 @@ describe("asset insertion", () => {
     expect(drop.ops.map((o) => o.op)).toEqual(["node.update", "asset.remove"]);
     deck = apply(deck, drop);
     expect(Object.keys(deck.assets)).toEqual([sha("b")]);
+  });
+
+  it("keeps the originals of optimized imports: every use, one undo step (D67)", () => {
+    // "a" and "b" were optimized from big PNGs "d" (A) and "e" (B).
+    const optimized = (c: string, original: Imported): Imported => ({
+      ...png(c, 800, 600, `${c}.webp`),
+      info: { mime: "image/webp", bytes: 100_000, width: 800, height: 600, name: `${c}.webp` },
+      optimization: { original, method: "webp", quality: 85, resized: false },
+    });
+    const A = png("d", 800, 600, "beach.png");
+    const B = png("e", 800, 600, "sunset.png");
+    A.info.bytes = 3_600_000;
+    B.info.bytes = 1_400_000;
+    const a = optimized("a", A);
+    const b = optimized("b", B);
+    let deck = makeDeck();
+    const placed = insertImages(indexOf(deck), [a, b], new Set(), {
+      parentId: "root",
+      parentRect: STAGE,
+    });
+    deck = apply(deck, placed);
+    // "a" is also a frame's fill, and the slide's background with "b" in another layer.
+    deck = apply(deck, {
+      label: "fills",
+      ops: [
+        {
+          op: "node.update",
+          id: "inner",
+          set: { style: { fill: { type: "image", asset: `asset:${sha("a")}`, fit: "tile" } } },
+        },
+        {
+          op: "slide.update",
+          id: "s1",
+          set: { background: { type: "image", asset: `asset:${sha("b")}`, fit: "cover" } },
+        },
+      ],
+    });
+
+    expect(optimizedMessage([a])).toBe(
+      "beach.png optimized: 3.4 MB → 98 KB (−97%), looks the same",
+    );
+    expect(optimizedMessage([a, b, png("c")])).toBe(
+      "2 images optimized: 4.8 MB → 195 KB (−96%), looks the same",
+    );
+    expect(optimizedMessage([png("c")])).toBeNull();
+
+    const keep = keepOriginals(deck, [a, b, a]);
+    expect(keep?.label).toBe("Keep original images");
+    deck = apply(deck, keep);
+    expect(Object.keys(deck.assets).sort()).toEqual([sha("d"), sha("e")]);
+    const refs = JSON.stringify(deck.slides);
+    expect(refs).not.toMatch(new RegExp(`${sha("a")}|${sha("b")}`));
+    expect(refs.match(new RegExp(sha("d"), "g"))).toHaveLength(2); // the image and the fill
+    expect(deck.slides[0]?.background).toEqual({
+      type: "image",
+      asset: `asset:${sha("e")}`,
+      fit: "cover",
+    });
+    // Already swapped (or deleted meanwhile): nothing to do.
+    expect(keepOriginals(deck, [a, b])).toBeNull();
+    expect(swapAssets(deck, new Map([[sha("d"), A]]), "same")).toBeNull();
   });
 
   it("registers fonts on their own, once", () => {

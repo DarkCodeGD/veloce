@@ -157,9 +157,10 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
 
   /**
    * POST /api/decks/:id/assets, the raw file as the body (file name in `x-veloce-filename`,
-   * URI-encoded). The server works out what the file is; the reply is `{ id, info }` for an
-   * `asset.add` op, or `{ error }` saying what's wrong. Stores the bytes only: the document
-   * changes when the client applies `asset.add` in a transaction, like every other change.
+   * URI-encoded). The server works out what the file is and optimizes big photos (D67); the
+   * reply is `{ id, info, optimization? }` for an `asset.add` op, or `{ error }` saying
+   * what's wrong. Stores the bytes only: the document changes when the client applies
+   * `asset.add` in a transaction, like every other change.
    */
   async function receiveAsset(req: IncomingMessage, res: ServerResponse, deckId: string) {
     if (req.headers[UPLOAD_HEADER] !== "1") {
@@ -177,9 +178,15 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
     const encodedName = req.headers["x-veloce-filename"];
     const fileName = typeof encodedName === "string" ? safeDecode(encodedName) : null;
     const deck = await options.workspace.get(deckId);
-    const result = await deck.importAsset(body, fileName ?? undefined);
+    // "x-veloce-optimize: 0": bytes already in a deck (a copy between decks) stay as they are.
+    const optimize = req.headers["x-veloce-optimize"] !== "0";
+    const result = await deck.importAsset(body, fileName ?? undefined, { optimize });
     if (!result.ok) return sendJson(res, 415, { error: result.message });
-    sendJson(res, 201, { id: result.id, info: result.info });
+    sendJson(res, 201, {
+      id: result.id,
+      info: result.info,
+      ...(result.optimization && { optimization: result.optimization }),
+    });
   }
 
   async function serveStatic(res: ServerResponse, path: string): Promise<void> {

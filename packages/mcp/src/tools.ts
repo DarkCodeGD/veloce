@@ -30,7 +30,7 @@ import {
   VeloceError,
   walkNodes,
 } from "@veloce/core";
-import type { OpenDeck, RenderService, Workspace } from "@veloce/doc-server";
+import type { OpenDeck, Optimization, RenderService, Workspace } from "@veloce/doc-server";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { z } from "zod";
 import { docTopics, getDocs, paletteLine } from "./docs.js";
@@ -452,13 +452,20 @@ const setTheme = defineTool({
   },
 });
 
+const optimizeInput = z
+  .boolean()
+  .optional()
+  .describe("false: keep this file's exact bytes (default: big photos are made smaller)");
+
 const AssetFileInput = z.union([
   z.strictObject({
     path: z.string().min(1).describe("Absolute path of a local file"),
+    optimize: optimizeInput,
   }),
   z.strictObject({
     data: z.string().min(1).describe("The file's bytes, base64-encoded"),
     name: z.string().max(255).describe('File name, e.g. "logo.svg"'),
+    optimize: optimizeInput,
   }),
 ]);
 
@@ -488,8 +495,19 @@ async function readAssetInput(input: z.infer<typeof AssetFileInput>, at: string)
   return { bytes: new Uint8Array(await readFile(input.path)), name: basename(input.path) };
 }
 
+const kb = (bytes: number) =>
+  bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+
+/** "optimized from 3.6 MB PNG 5120×2880": what the agent should know it got (D67). */
+function describeOptimization(info: AssetInfo, o: Optimization): string {
+  const from = o.original.info;
+  const format = from.mime.replace("image/", "").toUpperCase();
+  const resized = o.resized && from.width && from.height ? ` ${from.width}×${from.height}` : "";
+  return `; optimized from ${kb(from.bytes)} ${format}${resized} to ${kb(info.bytes)}, looking the same`;
+}
+
 /** One line per added file: the reference to use, and how. */
-function describeAsset(id: string, info: AssetInfo): string {
+function describeAsset(id: string, info: AssetInfo, optimization?: Optimization): string {
   const ref = `"asset:${id}"`;
   const label = info.name ? `${info.name}: ` : "";
   if (assetKind(info.mime) === "font") {
@@ -501,20 +519,23 @@ function describeAsset(id: string, info: AssetInfo): string {
     return `${label}font family "${family}" (${w}${style === "italic" ? ", italic" : ""}). Use it in the theme: set_theme({ "theme": { "fonts": { "heading": ${JSON.stringify(fontStackFor(family))} } } }).`;
   }
   const size = info.width && info.height ? `, ${info.width}×${info.height}` : "";
-  return `${label}${ref} (${info.mime}${size}). Use it as an image: { "type": "image", "props": { "asset": ${ref}, "alt": "…" } }, or as a frame background: "style": { "fill": { "type": "image", "asset": ${ref} } }.`;
+  const saved = optimization ? describeOptimization(info, optimization) : "";
+  return `${label}${ref} (${info.mime}${size}${saved}). Use it as an image: { "type": "image", "props": { "asset": ${ref}, "alt": "…" } }, or as a frame background: "style": { "fill": { "type": "image", "asset": ${ref} } }.`;
 }
 
 const addAsset = defineTool({
   name: "add_asset",
   title: "Add images or fonts",
-  description: `Add image files (PNG, JPEG, GIF, WebP, AVIF, SVG) or fonts (TTF, OTF, WOFF, WOFF2) to the current deck, up to ${MAX_ASSET_BYTES / 1024 ** 2} MiB each. Give a local file path, or base64 data with a file name. Returns the "asset:<id>" reference for each image, and the family name for each font. Remote URLs aren't fetched: decks stay self-contained.`,
+  description: `Add image files (PNG, JPEG, GIF, WebP, AVIF, SVG) or fonts (TTF, OTF, WOFF, WOFF2) to the current deck, up to ${MAX_ASSET_BYTES / 1024 ** 2} MiB each. Give a local file path, or base64 data with a file name. Returns the "asset:<id>" reference for each image, and the family name for each font. Big JPEG, PNG and WebP photos are made smaller on import (at most 3840 px, WebP that looks the same); set optimize: false on a file to keep it exact. Remote URLs aren't fetched: decks stay self-contained.`,
   input: z.strictObject({ files: z.array(AssetFileInput).min(1).max(20) }),
   async run({ files }, ctx) {
     const open = await currentDeck(ctx);
-    const added: Array<{ id: string; info: AssetInfo }> = [];
+    const added: Array<{ id: string; info: AssetInfo; optimization?: Optimization }> = [];
     for (const [i, file] of files.entries()) {
       const { bytes, name } = await readAssetInput(file, `files[${i}]`);
-      const result = await open.importAsset(bytes, name);
+      const result = await open.importAsset(bytes, name, {
+        ...(file.optimize !== undefined && { optimize: file.optimize }),
+      });
       if (!result.ok) {
         throw new ToolError({
           message: `${name ?? `files[${i}]`}: ${result.message}`,
@@ -536,7 +557,9 @@ const addAsset = defineTool({
         fresh.map(({ id, info }) => ({ op: "asset.add", id, asset: info })),
       );
     }
-    return text(...added.map(({ id, info }) => describeAsset(id, info)));
+    return text(
+      ...added.map(({ id, info, optimization }) => describeAsset(id, info, optimization)),
+    );
   },
 });
 

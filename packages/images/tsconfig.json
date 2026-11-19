@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Sources import each other as `./x.ts`, so the worker thread can run them directly
+    // (Node strips types); the build rewrites them to `./x.js`.
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/__tests__"]
+}

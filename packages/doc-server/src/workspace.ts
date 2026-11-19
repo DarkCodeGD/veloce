@@ -26,7 +26,7 @@ import {
 } from "@veloce/core";
 import { FILE_EXTENSION, inspectVeloce, readVeloce, writeVeloce } from "@veloce/format";
 import { atomicWriteFile, slugify } from "./fs.js";
-import { type DeckChange, OpenDeck, UPLOAD_GRACE_MS } from "./open-deck.js";
+import { type DeckChange, type ImageOptimizer, OpenDeck, UPLOAD_GRACE_MS } from "./open-deck.js";
 
 export interface WorkspaceOptions {
   /** Folder holding the .veloce files (created if missing). */
@@ -44,6 +44,10 @@ export interface WorkspaceOptions {
   sweepIntervalMs?: number;
   /** The clock (ms since the epoch) open decks use, for tests. */
   now?: () => number;
+  /** Optimize imported images (D67). Default true. */
+  optimizeImages?: boolean;
+  /** What optimizes them (tests swap it). Default: a worker thread. */
+  optimizer?: ImageOptimizer;
   log?: (message: string) => void;
 }
 
@@ -224,7 +228,7 @@ export class Workspace {
     assets: ReadonlyMap<string, Uint8Array>,
     createdAt: Date,
   ): OpenDeck {
-    const { context, now } = this.#options;
+    const { context, now, optimizeImages, optimizer } = this.#options;
     const open = new OpenDeck({
       deck,
       path,
@@ -232,6 +236,8 @@ export class Workspace {
       createdAt,
       ...(context && { context }),
       ...(now && { now }),
+      ...(optimizeImages !== undefined && { optimizeImages }),
+      ...(optimizer && { optimizer }),
     });
     open.subscribe((change) => {
       this.#scheduleSave(open);

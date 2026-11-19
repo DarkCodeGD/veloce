@@ -13,21 +13,34 @@
 import {
   type AssetInfo,
   assetKind,
+  assetRef,
   assetUsage,
   type Deck,
   type ElementNode,
   element,
+  isPlainObject,
   type Op,
   type Point,
   parseAssetRef,
+  walkNodes,
 } from "@veloce/core";
 import type { Command } from "./commands.js";
 import { chainOf, type SlideIndex } from "./slide-index.js";
+
+/** How the server made an uploaded image smaller (D67). */
+export interface ImportOptimization {
+  /** The file as uploaded: the server keeps it a while, so the user can choose it instead. */
+  original: { id: string; info: AssetInfo };
+  method: "webp" | "webp-lossless";
+  quality?: number;
+  resized: boolean;
+}
 
 /** An uploaded file, as the server described it. */
 export interface Imported {
   id: string;
   info: AssetInfo;
+  optimization?: ImportOptimization;
 }
 
 export interface Rect {
@@ -194,4 +207,130 @@ export function addFonts(
         : `Add ${plural(families.length, "font")}`,
     ops,
   };
+}
+
+// ── Swapping files everywhere ───────────────────────────────────────────────────────────
+
+/** asset ID → the asset ID to use instead. */
+type Swaps = ReadonlyMap<string, string>;
+
+/** `value` with every swapped reference changed (the same value if none was). */
+function swapRefs(value: unknown, swaps: Swaps): unknown {
+  const id = parseAssetRef(value);
+  if (id) {
+    const to = swaps.get(id);
+    return to ? assetRef(to) : value;
+  }
+  if (Array.isArray(value)) {
+    const next = value.map((item) => swapRefs(item, swaps));
+    return next.some((item, i) => item !== value[i]) ? next : value;
+  }
+  if (isPlainObject(value)) {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      next[key] = swapRefs(item, swaps);
+      if (next[key] !== item) changed = true;
+    }
+    return changed ? next : value;
+  }
+  return value;
+}
+
+/**
+ * The top-level fields of `record` with swapped references, or null if none. Whole fields,
+ * since `node.update` merges objects (a paint is always written whole).
+ */
+function swappedFields(record: object, swaps: Swaps) {
+  const set: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const next = swapRefs(value, swaps);
+    if (next !== value) set[key] = next;
+  }
+  return Object.keys(set).length > 0 ? set : null;
+}
+
+/**
+ * Use other files instead of some, everywhere in the deck (images, image fills, slide
+ * backgrounds): register the new files, repoint every reference, drop the old ones. One
+ * undo step. `replacements` maps a file the deck has to the file to use instead; files the
+ * deck no longer has are skipped. Null when there's nothing to swap.
+ */
+export function swapAssets(
+  deck: Pick<Deck, "assets" | "slides">,
+  replacements: ReadonlyMap<string, Imported>,
+  label: string,
+): Command | null {
+  const live = [...replacements].filter(([from, to]) => deck.assets[from] && from !== to.id);
+  if (live.length === 0) return null;
+  const swaps: Swaps = new Map(live.map(([from, to]) => [from, to.id]));
+  const ops: Op[] = assetAddOps(
+    live.map(([, to]) => to),
+    new Set(Object.keys(deck.assets)),
+  );
+  for (const slide of deck.slides) {
+    const background = swapRefs(slide.background, swaps);
+    if (background !== slide.background) {
+      ops.push({ op: "slide.update", id: slide.id, set: { background } });
+    }
+    for (const { node } of walkNodes(slide.root)) {
+      if (node.kind === "frame") {
+        const style = swappedFields(node.style ?? {}, swaps);
+        if (style) ops.push({ op: "node.update", id: node.id, set: { style } });
+      } else {
+        const props = swappedFields(node.props, swaps);
+        if (props) ops.push({ op: "node.update", id: node.id, set: { props } });
+      }
+    }
+  }
+  const added = new Set(live.map(([, to]) => to.id));
+  for (const [from] of live) if (!added.has(from)) ops.push({ op: "asset.remove", id: from });
+  return { label, ops };
+}
+
+/** The optimized files among `files` (each once). */
+export function optimizedImports(files: readonly Imported[]): Imported[] {
+  const seen = new Set<string>();
+  return files.filter((f) => {
+    if (!f.optimization || seen.has(f.id)) return false;
+    seen.add(f.id);
+    return true;
+  });
+}
+
+/** "Keep original" (D67): the uploaded originals instead of their optimized versions. */
+export function keepOriginals(
+  deck: Pick<Deck, "assets" | "slides">,
+  files: readonly Imported[],
+): Command | null {
+  const optimized = optimizedImports(files);
+  const replacements = new Map<string, Imported>();
+  for (const f of optimized) {
+    if (f.optimization) replacements.set(f.id, f.optimization.original);
+  }
+  const label = optimized.length === 1 ? "Keep original image" : "Keep original images";
+  return swapAssets(deck, replacements, label);
+}
+
+const size = (bytes: number) =>
+  bytes >= 1024 ** 2
+    ? `${(bytes / 1024 ** 2).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+/** "beach.png optimized: 3.6 MB → 220 KB (−94%)…", or the total for several. */
+export function optimizedMessage(files: readonly Imported[]): string | null {
+  const optimized = optimizedImports(files);
+  if (optimized.length === 0) return null;
+  let before = 0;
+  let after = 0;
+  for (const f of optimized) {
+    before += f.optimization?.original.info.bytes ?? 0;
+    after += f.info.bytes;
+  }
+  const saved = Math.round((1 - after / before) * 100);
+  const what =
+    optimized.length === 1
+      ? (optimized[0]?.optimization?.original.info.name ?? "Image")
+      : `${optimized.length} images`;
+  return `${what} optimized: ${size(before)} → ${size(after)} (−${saved}%), looks the same`;
 }

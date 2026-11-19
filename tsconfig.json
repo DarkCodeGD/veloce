@@ -17,6 +17,9 @@
       "path": "./packages/renderer"
     },
     {
+      "path": "./packages/images"
+    },
+    {
       "path": "./packages/doc-server"
     },
     {

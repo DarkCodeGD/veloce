@@ -1306,3 +1306,64 @@ picker in the color popover (D64).
 8. **Later:** on-canvas gradient handles (drag the ends of a linear gradient, the center of
    a radial one on the slide). That's canvas tool work, so it waits for round 5's tool bar
    (D62).
+
+## D67 — Image optimization on import: the smallest file that still looks the same
+
+**Status:** Accepted (2026-11-20).
+
+A phone photo is 4–12 MB at 4000–8000 px, and a slide is 1920 px wide: decks got huge for
+pixels nobody sees. Imports now work like TinyPNG, but per image: Veloce measures how much
+each photo can lose before it shows.
+
+1. **Resize to at most 3840 px** on the long side (twice the stage: sharp when zoomed in
+   and in 4K exports), never up. This is most of the saving: a 5K wallpaper went
+   3.8 MB → 128 KB.
+2. **Quality searched per image, measured with SSIM.** Six 256 px tiles at full resolution
+   (the five most detailed plus the smoothest non-flat one, where banding shows) are
+   encoded, decoded and scored; a binary search over q55–95 finds the lowest quality that
+   still scores 0.94. The score blends the mean with the worst 1% of windows, so one
+   damaged patch (text on an empty slide) fails it. The 0.94 bar was checked by eye at 2×
+   zoom on real photos and UI screenshots: grainy photos land around q88, clean ones
+   around q75, and subpixel text stays identical. **Why:** one fixed quality smears grain
+   in some photos and wastes bytes in others; searching on tiles costs ~0.8 s instead of
+   ~8 s for full-size tries.
+3. **WebP only, lossy or lossless, whichever is smaller.** Lossless WebP competes only for
+   lossless sources (PNG, lossless WebP): screenshots and logos stay exact when that's
+   smaller. Sharp RGB→YUV is used for those (crisp colored edges), not for photos.
+   **Why:** every Veloce renderer is Chromium, so WebP always shows. MozJPEG was measured
+   too, and at the same score WebP was 20–40% smaller on 6 of 7 photos while doubling the
+   search time. AVIF encodes 5–10× slower in WebAssembly. GIF, SVG, AVIF, animated PNG or
+   WebP, CMYK JPEGs and files under 32 KB (unless oversized) are left alone.
+4. **Only clearly smaller results are used:** at least 10% smaller, or resized and smaller.
+   Otherwise the original stays. Rotation from EXIF is applied to the pixels; the ICC color
+   profile is copied into the new file (Display P3 photos keep their colors); EXIF itself
+   (camera data, GPS location) and thumbnails are dropped, which is a privacy bonus. The
+   name follows the format (`beach.png` → `beach.webp`).
+5. **Keep original.** The server stores both files and returns
+   `{ id, info, optimization: { original, method, quality, resized } }`. The editor adds the
+   optimized file and shows "beach.png optimized: 3.4 MB → 98 KB (−97%), looks the same ·
+   Keep original" for 12 s. Keep original swaps every reference deck-wide (images, fills,
+   backgrounds), adds the original and removes the optimized file in one undo step
+   (`swapAssets`). Whichever file isn't used is swept after the 10-minute grace (D65).
+   Agents get the savings in `add_asset`'s reply and can pass `optimize: false` per file.
+   A copy between decks (`x-veloce-optimize: 0`) is never optimized again. The same file
+   uploaded twice reuses the first result.
+6. **New package `@veloce/images`** (Node only, no Veloce dependencies), used by
+   `doc-server`. Codecs are jSquash's WebAssembly builds of MozJPEG, libwebp, the PNG codec
+   and the Lanczos resizer (Apache-2.0 wrappers around BSD/MIT/Apache code; no native
+   binaries per OS). libimagequant (TinyPNG's palette PNGs) is GPL-3, so it's out, and so
+   is `libimagequant-wasm`, which is labelled MIT but wraps it. SSIM, tile sampling and the
+   container work (EXIF, ICC, animation and CMYK detection) are our own code.
+7. **Off the main thread:** a 4K photo takes 1.5–4 s of CPU, which would freeze sync and MCP
+   for everyone. One worker thread handles images one at a time (bursts queue up instead
+   of competing for cores and memory). It starts on the first image and stops after 30 s
+   idle to give back its WebAssembly memory, which only grows. A crash or a run over 60 s
+   keeps the original: optimizing never makes an import fail. The package imports its
+   own files as `./x.ts` (`rewriteRelativeImportExtensions` turns them into `.js` when
+   built) so the worker runs the TypeScript source directly under Node's type stripping
+   in tests and dev (Node 22.18+, where stripping is on by default: `engines` says so). The
+   `ImageData` stand-in the codecs need is installed only when
+   they load, so it lives in the worker and the server's globals stay untouched.
+8. **Packaging (Phase 6):** the Electron build must ship `@jsquash/*`'s `.wasm` files and
+   `@veloce/images/dist/worker.js` as real files (unpacked from asar, not bundled into
+   one file), because the worker is started from its own URL.

@@ -24,10 +24,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
+- **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (518 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (537 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -147,7 +147,12 @@
     Solid, Linear, Radial, Angular (a new `conic-gradient` paint) and Image. Stops are added,
     dragged and removed on a bar and colored with theme tokens at any opacity; image fills are
     uploaded or reused, with a fit. Each gesture is one undo step, files included.
-  - **Next:** round 4: image optimization on import.
+  - **Image optimization (D67):** imported photos are resized to 3840 px and re-encoded as
+    WebP at the lowest quality that still looks identical (SSIM, searched per image), in a
+    worker thread. A 5K wallpaper went 3.8 MB → 105 KB in ~2 s. A toast shows the saving with
+    "Keep original"; agents see it in `add_asset` and can pass `optimize: false`. New package
+    `@veloce/images` (jSquash WebAssembly codecs, Apache-2.0). Round 4 is done.
+  - **Next:** round 5: the tool bar (D62).
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -193,6 +198,7 @@ veloce/
 ├── packages/
 │   ├── core/            Zod schemas, ops, transactions, undo, theme tokens, lint rules (pure TS, no DOM)
 │   ├── format/          .veloce zip read/write, manifest, content-hashed assets, migrations
+│   ├── images/          image optimization on import (WebAssembly codecs, SSIM, worker thread)
 │   ├── plugin-api/      Plugin contract types, registry, conformance test kit
 │   ├── renderer/        Deck → DOM, stage scaling, plugin host, timeline clock, measurement
 │   ├── doc-server/      Open documents, apply transactions, versioning, WebSocket sync, autosave
@@ -389,10 +395,12 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       tile). Each drag is one undo step (D41). Diamond and video fills are skipped (no CSS
       equivalent; video belongs to the video plugin). On-canvas gradient handles wait for
       round 5's tool bar (D66)
-- [ ] Image optimization on import: photos far larger than the stage are downscaled, and
-      heavy formats re-encoded (WebP/AVIF, keeping PNG where transparency or sharp edges
-      need it), so a phone photo doesn't add 40 MB to a deck. The original is never needed
-      again; the user is told what was done
+- [x] Image optimization on import (D67): photos are resized to at most 3840 px and
+      re-encoded as WebP at the lowest quality whose SSIM still reads as identical (searched
+      per image on full-resolution tiles); lossless WebP for screenshots and logos when it's
+      smaller. Rotation applied, color profile kept, EXIF/GPS dropped. Runs in a worker
+      thread. The user sees the saving with "Keep original" (one undo step, deck-wide);
+      agents get it in `add_asset` and can opt out per file
 
 **Round 5: app shell (D53)**
 
@@ -506,7 +514,9 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
       launch, so it asks for a restart; on Linux the launcher sets the PRIME environment)
       and hardware acceleration on/off
 - [ ] "Connect AI" panel: copy-paste config for Claude Code / Claude Desktop / Cursor; stdio shim for clients that need it
-- [ ] Packaging: AppImage + deb + rpm, NSIS (Windows), dmg (macOS); electron-updater
+- [ ] Packaging: AppImage + deb + rpm, NSIS (Windows), dmg (macOS); electron-updater. Ship
+      the image codecs' `.wasm` files and the optimizer's `worker.js` as real files (asar
+      unpacked, not bundled): the worker starts from its own URL (D67 §8)
 
 **Done when:** installs on all 3 OSes, double-clicking a `.veloce` opens it, and Claude Code connects.
 

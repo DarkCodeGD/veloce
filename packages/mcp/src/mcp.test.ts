@@ -11,7 +11,7 @@ import {
   toPlainText,
   walkNodes,
 } from "@veloce/core";
-import { type RenderService, Workspace } from "@veloce/doc-server";
+import { type ImageOptimizer, type RenderService, Workspace } from "@veloce/doc-server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { agentOrigin, VeloceMcp } from "./server.js";
 import { TOOLS, toolInputSchema } from "./tools.js";
@@ -46,11 +46,28 @@ let dir: string;
 let workspace: Workspace;
 let client: Client;
 
+/** A 1×1 lossless WebP: what the stand-in optimizer "makes" (the real one has its own tests). */
+const TINY_WEBP = Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==", "base64");
+
+/** Stands in for the image optimizer (D67): every photo becomes TINY_WEBP. */
+const fakeOptimizer: ImageOptimizer = async (_bytes, size) => ({
+  optimized: {
+    bytes: new Uint8Array(TINY_WEBP),
+    mime: "image/webp",
+    width: 1,
+    height: 1,
+    method: "webp",
+    quality: 82,
+    ...(size.width && size.width > 3840 && { resizedFrom: { width: size.width, height: 1 } }),
+  },
+});
+
 async function connect(render: RenderService | null = fakeRender) {
   workspace = await Workspace.open({
     dir,
     context: createBuiltinRegistry().applyContext(),
     autosaveDelayMs: 5,
+    optimizer: fakeOptimizer,
   });
   const mcp = new VeloceMcp({
     workspace,
@@ -367,6 +384,29 @@ describe("themes, docs, previews and decks", () => {
     await writeFile(notes, "secret notes");
     const junk = await call("add_asset", { files: [{ path: notes }] });
     expect(junk.text).toMatch(/notes\.txt: Unsupported file type[\s\S]*At: files\[0\]/);
+  });
+
+  it("reports how much smaller a big photo was made, and keeps exact files when asked", async () => {
+    await connect();
+    await call("create_deck", { title: "Photos" });
+    // A PNG header (5000×2000) padded to 200 KB: big in bytes and in pixels.
+    const png = new Uint8Array(200 * 1024);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(png.buffer).setUint32(16, 5000);
+    new DataView(png.buffer).setUint32(20, 2000);
+    const data = Buffer.from(png).toString("base64");
+    const added = await call("add_asset", { files: [{ data, name: "hero.png" }] });
+    expect(added.text).toMatch(
+      /hero\.webp: "asset:[0-9a-f]{64}" \(image\/webp, 1×1; optimized from 200 KB PNG 5000×2000 to 0 KB, looking the same\)/,
+    );
+    const exact = await call("add_asset", { files: [{ data, name: "hero.png", optimize: false }] });
+    expect(exact.text).toMatch(/hero\.png: "asset:[0-9a-f]{64}" \(image\/png, 5000×2000\)/);
+    const deck = (await workspace.get(workspace.activeDeckId ?? "")).deck;
+    expect(
+      Object.values(deck.assets)
+        .map((a) => a.mime)
+        .sort(),
+    ).toEqual(["image/png", "image/webp"]);
   });
 
   it("applies built-in themes and brand overrides", async () => {

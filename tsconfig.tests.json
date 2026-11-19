@@ -8,6 +8,8 @@
     "declarationMap": false,
     "noEmit": true,
     "customConditions": ["@veloce/source"],
+    // @veloce/images imports its own files as `./x.ts` (its worker thread runs the source).
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },

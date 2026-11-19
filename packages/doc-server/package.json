@@ -17,6 +17,7 @@
   ],
   "dependencies": {
     "@veloce/core": "workspace:*",
-    "@veloce/format": "workspace:*"
+    "@veloce/format": "workspace:*",
+    "@veloce/images": "workspace:*"
   }
 }

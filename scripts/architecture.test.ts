@@ -15,6 +15,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ALLOWED: Record<string, readonly string[]> = {
   "@veloce/core": [], // the foundation: zero internal deps, ever
   "@veloce/format": ["@veloce/core"],
+  // Image optimization on import (D67): Node-only codecs, no Veloce dependencies.
+  "@veloce/images": [],
   "@veloce/plugin-api": ["@veloce/core"],
   // The built-in plugin set; apps use it instead of each listing the plugins.
   "@veloce/builtins": [
@@ -24,7 +26,7 @@ const ALLOWED: Record<string, readonly string[]> = {
     "@veloce/plugin-image",
   ],
   "@veloce/renderer": ["@veloce/core", "@veloce/plugin-api"],
-  "@veloce/doc-server": ["@veloce/core", "@veloce/format"],
+  "@veloce/doc-server": ["@veloce/core", "@veloce/format", "@veloce/images"],
   "@veloce/mcp": ["@veloce/core", "@veloce/doc-server", "@veloce/plugin-api"],
   "@veloce/server": ["@veloce/doc-server", "@veloce/mcp", "@veloce/core", "@veloce/builtins"],
   "@veloce/editor": [

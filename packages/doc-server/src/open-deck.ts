@@ -14,12 +14,57 @@ import {
   type TransactionResult,
 } from "@veloce/core";
 import type { DeckBundle } from "@veloce/format";
+import {
+  MAX_EDGE,
+  type Method,
+  MIN_BYTES,
+  type OptimizeResult,
+  optimizeInWorker,
+} from "@veloce/images";
 import { inspectAsset } from "./asset-import.js";
+
+/** How an image was made smaller on import (D67). */
+export interface Optimization {
+  /** The file as it arrived: still stored, so the user can keep it instead (D65 grace). */
+  original: { id: string; info: AssetInfo };
+  method: Method;
+  /** The quality the search settled on (lossy WebP). */
+  quality?: number;
+  /** True if it was scaled down to MAX_EDGE on its long side. */
+  resized: boolean;
+}
 
 /** An imported file: its asset ID and what the server found it to be. */
 export type ImportResult =
-  | { ok: true; id: string; info: AssetInfo }
+  | { ok: true; id: string; info: AssetInfo; optimization?: Optimization }
   | { ok: false; message: string };
+
+export interface ImportOptions {
+  /** Optimize an image (D67). Default: the deck's `optimizeImages` setting (on). */
+  optimize?: boolean;
+}
+
+/** Optimizes one image file; never throws (`optimizeInWorker` by default). */
+export type ImageOptimizer = (
+  bytes: Uint8Array,
+  size: { width?: number; height?: number },
+) => Promise<OptimizeResult>;
+
+const OPTIMIZABLE = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** Worth sending to the optimizer: a photo format, and big in bytes or in pixels. */
+function worthOptimizing(info: AssetInfo): boolean {
+  if (!OPTIMIZABLE.has(info.mime)) return false;
+  const oversized = Math.max(info.width ?? 0, info.height ?? 0) > MAX_EDGE;
+  return oversized || info.bytes >= MIN_BYTES;
+}
+
+/** "photo.jpg" → "photo.webp" (the name follows the format). */
+function renamed(name: string | undefined, extension: string): string | undefined {
+  if (!name) return undefined;
+  const dot = name.lastIndexOf(".");
+  return `${dot > 0 ? name.slice(0, dot) : name}.${extension}`;
+}
 
 export interface DeckChange {
   deckId: string;
@@ -54,6 +99,10 @@ export interface OpenDeckOptions {
   createdAt?: Date;
   /** The clock (ms since the epoch), for tests. */
   now?: () => number;
+  /** Optimize imported images (D67). Default true. */
+  optimizeImages?: boolean;
+  /** What optimizes them (tests swap it). Default: a worker thread. */
+  optimizer?: ImageOptimizer;
 }
 
 export class OpenDeck {
@@ -68,6 +117,13 @@ export class OpenDeck {
   /** When each asset's bytes last arrived (upload or store), for the sweep's grace period. */
   readonly #arrived = new Map<string, number>();
   readonly #now: () => number;
+  readonly #optimizeImages: boolean;
+  readonly #optimizer: ImageOptimizer;
+  /**
+   * What each uploaded original became (null: kept as it was), so the same file dropped
+   * twice isn't optimized twice. Entries go when the sweep drops either file.
+   */
+  readonly #optimized = new Map<string, Extract<ImportResult, { ok: true }> | null>();
   readonly #listeners = new Set<(change: DeckChange) => void>();
   #modifiedAt = new Date();
   /** Who changed each slide last (this session only), so agents don't clobber human work. */
@@ -84,6 +140,8 @@ export class OpenDeck {
     this.#doc = new DeckDocument(options.deck, options.context ? { context: options.context } : {});
     this.#assets = new Map(options.assets);
     this.#now = options.now ?? Date.now;
+    this.#optimizeImages = options.optimizeImages ?? true;
+    this.#optimizer = options.optimizer ?? optimizeInWorker;
     this.#emitted = this.#doc.deck;
   }
 
@@ -138,13 +196,59 @@ export class OpenDeck {
    * Import a file (an upload from the editor, or an agent's `add_asset`): the server works
    * out what it is from the bytes, stores them (content-addressed) and returns the ID and info
    * to put in an `asset.add` op. Nothing changes in the document until that op is applied.
+   *
+   * Big photos are optimized first (D67, in a worker thread: seconds of CPU never block
+   * the server). The result is what's returned to add; the original is stored too, under
+   * `optimization.original`, so the user can keep it instead. Whichever isn't added is
+   * swept after the grace period, like any unused upload (D65).
    */
-  async importAsset(bytes: Uint8Array, fileName?: string): Promise<ImportResult> {
+  async importAsset(
+    bytes: Uint8Array,
+    fileName?: string,
+    options: ImportOptions = {},
+  ): Promise<ImportResult> {
     const inspected = inspectAsset(bytes, fileName);
     if (!inspected.ok) return inspected;
     const id = await this.storeAsset(bytes);
     this.#inspected.set(id, inspected.info);
-    return { ok: true, id, info: inspected.info };
+    const plain = { ok: true as const, id, info: inspected.info };
+    if (!(options.optimize ?? this.#optimizeImages) || !worthOptimizing(inspected.info)) {
+      return plain;
+    }
+
+    const known = this.#optimized.get(id);
+    if (known === null) return plain;
+    if (known && this.#assets.has(known.id)) {
+      await this.storeAsset(this.#assets.get(known.id) as Uint8Array); // restart its grace
+      return known;
+    }
+    const { width, height } = inspected.info;
+    const result = await this.#optimizer(bytes, {
+      ...(width && { width }),
+      ...(height && { height }),
+    });
+    if (!("optimized" in result)) {
+      this.#optimized.set(id, null);
+      return plain;
+    }
+    const o = result.optimized;
+    const checked = inspectAsset(o.bytes, renamed(inspected.info.name, "webp"));
+    if (!checked.ok) return plain; // never happens: our own WebP
+    const optimizedId = await this.storeAsset(o.bytes);
+    this.#inspected.set(optimizedId, checked.info);
+    const imported = {
+      ok: true as const,
+      id: optimizedId,
+      info: checked.info,
+      optimization: {
+        original: { id, info: inspected.info },
+        method: o.method,
+        ...(o.quality !== undefined && { quality: o.quality }),
+        resized: o.resizedFrom !== undefined,
+      },
+    };
+    this.#optimized.set(id, imported);
+    return imported;
   }
 
   /** Store trusted asset bytes as they are (content-addressed); returns the asset ID. */
@@ -176,6 +280,14 @@ export class OpenDeck {
       this.#inspected.delete(id);
       this.#arrived.delete(id);
       dropped.push(id);
+    }
+    if (dropped.length > 0) {
+      const gone = new Set(dropped);
+      for (const [originalId, result] of this.#optimized) {
+        if (gone.has(originalId) || (result && gone.has(result.id))) {
+          this.#optimized.delete(originalId);
+        }
+      }
     }
     return dropped;
   }

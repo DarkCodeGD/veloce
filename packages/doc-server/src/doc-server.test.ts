@@ -1,6 +1,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { crc32, deflateSync } from "node:zlib";
 import { createBuiltinRegistry } from "@veloce/builtins";
 import {
   createSlide,
@@ -9,7 +10,8 @@ import {
   type ServerMessage,
   type SlideMeasurement,
 } from "@veloce/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { optimizeInWorker, stopOptimizer } from "@veloce/images";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { atomicWriteFile, slugify } from "./fs.js";
 import { HISTORY_LIMIT, UPLOAD_GRACE_MS } from "./open-deck.js";
 import { CachedRenderService, type RenderService } from "./render.js";
@@ -35,6 +37,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
+afterAll(() => stopOptimizer());
 
 describe("fs helpers", () => {
   it("writes atomically without leaving temp files, and slugifies titles", async () => {
@@ -139,6 +142,133 @@ describe("Workspace", () => {
     const junk = await deck.importAsset(new TextEncoder().encode("#!/bin/sh"));
     expect(junk).toEqual({ ok: false, message: expect.stringContaining("Unsupported file type") });
     await ws.close();
+  });
+
+  describe("optimizing imported images (D67)", { timeout: 60_000 }, () => {
+    /** A photo-like PNG (gradients and grain), big enough to be worth optimizing. */
+    const photoPng = (width: number, height: number) => {
+      const raw = new Uint8Array((width * 3 + 1) * height);
+      let seed = 7;
+      for (let y = 0; y < height; y++) {
+        const row = y * (width * 3 + 1); // filter byte 0 (none) first
+        for (let x = 0; x < width; x++) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const grain = (seed % 25) - 12;
+          raw.set(
+            [60 + (150 * x) / width + grain, 90 + (100 * y) / height + grain, 140 + grain],
+            row + 1 + x * 3,
+          );
+        }
+      }
+      const chunk = (type: string, data: Uint8Array) => {
+        const out = new Uint8Array(12 + data.length);
+        const view = new DataView(out.buffer);
+        view.setUint32(0, data.length);
+        out.set(new TextEncoder().encode(type), 4);
+        out.set(data, 8);
+        view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+        return out;
+      };
+      const ihdr = new Uint8Array(13);
+      new DataView(ihdr.buffer).setUint32(0, width);
+      new DataView(ihdr.buffer).setUint32(4, height);
+      ihdr.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
+      const parts = [
+        Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk("IHDR", ihdr),
+        chunk("IDAT", deflateSync(raw)),
+        chunk("IEND", new Uint8Array(0)),
+      ];
+      return Uint8Array.from(parts.flatMap((part) => [...part]));
+    };
+
+    it("stores the smaller WebP to add, and the original to keep instead", async () => {
+      let calls = 0;
+      const ws = await Workspace.open({
+        dir,
+        context,
+        autosaveDelayMs: 5,
+        optimizer: (bytes, size) => {
+          calls++;
+          return optimizeInWorker(bytes, size);
+        },
+      });
+      const deck = await ws.create({ title: "Photos" });
+      const png = photoPng(1200, 700);
+      const imported = await deck.importAsset(png, "shots/beach.png");
+      if (!imported.ok) throw new Error(imported.message);
+      expect(imported.info).toMatchObject({ mime: "image/webp", name: "beach.webp", width: 1200 });
+      expect(imported.info.bytes).toBeLessThan(png.length / 2);
+      const original = imported.optimization?.original;
+      expect(original?.info).toMatchObject({
+        mime: "image/png",
+        name: "beach.png",
+        bytes: png.length,
+      });
+      expect(imported.optimization).toMatchObject({
+        method: expect.stringMatching(/^webp/),
+        resized: false,
+      });
+      // Both are stored and either can be added: "Keep original" swaps one for the other.
+      expect(deck.assetBytes(imported.id)?.length).toBe(imported.info.bytes);
+      expect(deck.assetBytes(original?.id ?? "")).toEqual(png);
+      const keep = deck.apply({
+        origin: "user",
+        label: "Keep original",
+        ops: [{ op: "asset.add", id: original?.id, asset: original?.info }],
+      });
+      expect(keep.ok).toBe(true);
+      // The same file again: the earlier result, not another few seconds of CPU.
+      expect(await deck.importAsset(png, "shots/beach.png")).toEqual(imported);
+      expect(calls).toBe(1);
+      // Asked not to (an agent that needs exact bytes, a copy between decks): as it is.
+      const exact = await deck.importAsset(png, "beach.png", { optimize: false });
+      expect(exact).toMatchObject({ ok: true, id: original?.id, info: { mime: "image/png" } });
+      expect(exact.ok && exact.optimization).toBeUndefined();
+      await ws.close();
+    });
+
+    it("skips small files and other formats without starting the optimizer", async () => {
+      const ws = await Workspace.open({
+        dir,
+        context,
+        autosaveDelayMs: 5,
+        optimizer: () => {
+          throw new Error("not for these");
+        },
+      });
+      const deck = await ws.create({ title: "Small" });
+      const small = await deck.importAsset(photoPng(40, 30), "icon.png");
+      expect(small).toMatchObject({ ok: true, info: { mime: "image/png" } });
+      const gif = Uint8Array.from([...new TextEncoder().encode("GIF89a"), 3, 0, 2, 0, 0, 0]);
+      expect(await deck.importAsset(gif)).toMatchObject({ ok: true, info: { mime: "image/gif" } });
+      await ws.close();
+      // Turned off for the whole workspace: big files are left alone too.
+      const off = await Workspace.open({ dir, context, optimizeImages: false });
+      const big = await (await off.create({ title: "Off" })).importAsset(photoPng(1200, 700));
+      expect(big).toMatchObject({ ok: true, info: { mime: "image/png" } });
+      await off.close();
+    });
+
+    it("measures a sideways phone photo as shown (EXIF orientation)", async () => {
+      // A JPEG frame header (SOF0) of 64×32, after an EXIF block saying "rotate 90°".
+      // biome-ignore format: TIFF header (big-endian), one IFD entry: 0x0112 SHORT = 6
+      const tiff = [0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0];
+      const exif = [..."Exif\0\0"].map((c) => c.charCodeAt(0)).concat(tiff);
+      const jpeg = Uint8Array.from([
+        0xff,
+        0xd8,
+        ...[0xff, 0xe1, 0, exif.length + 2, ...exif],
+        ...[0xff, 0xc0, 0, 11, 8, 0, 32, 0, 64, 1, 1, 0x11, 0],
+        ...[0xff, 0xd9],
+      ]);
+      const ws = await open();
+      const result = await (await ws.create({ title: "Phone" })).importAsset(jpeg, "IMG.jpg", {
+        optimize: false,
+      });
+      expect(result).toMatchObject({ ok: true, info: { width: 32, height: 64 } });
+      await ws.close();
+    });
   });
 
   describe("sweeping unused asset bytes (D65)", () => {

@@ -1,7 +1,7 @@
 /**
  * Phase 3 acceptance (assets): images dropped on the canvas or pasted (screenshots), copied
- * between decks with the clipboard, replaced from the inspector; fonts dropped in and used by
- * the theme. Every import is one transaction (`asset.add` + the layers), undone in one step.
+ * between decks with the clipboard, replaced from the inspector; big photos optimized, with
+ * "Keep original" (D67); fonts dropped in and used by the theme. Every import is one transaction (`asset.add` + the layers), undone in one step.
  * Real Chromium against the real server; the files go through the real upload route.
  */
 import { readFileSync } from "node:fs";
@@ -19,7 +19,32 @@ let page: Page;
 // ── Real files, made here ───────────────────────────────────────────────────────────────
 
 /** A valid RGB PNG of one color. */
-function png(width: number, height: number, [r, g, b]: [number, number, number]): Buffer {
+function png(width: number, height: number, rgb: [number, number, number]): Buffer {
+  return pngOf(width, height, () => rgb);
+}
+
+/** A photo-like PNG: gradients and film grain (seeded), big enough to be optimized. */
+function photo(width: number, height: number): Buffer {
+  let seed = 42;
+  const grain = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return (((t ^ (t >>> 14)) >>> 0) / 4294967296 - 0.5) * 24;
+  };
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return pngOf(width, height, (x, y) => {
+    const n = grain();
+    return [clamp(60 + (150 * x) / width + n), clamp(90 + (100 * y) / height + n), clamp(170 + n)];
+  });
+}
+
+/** A valid RGB PNG, pixel by pixel. */
+function pngOf(
+  width: number,
+  height: number,
+  pixel: (x: number, y: number) => [number, number, number],
+): Buffer {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length);
@@ -32,8 +57,10 @@ function png(width: number, height: number, [r, g, b]: [number, number, number])
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
   header.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
-  const row = [0, ...Array.from({ length: width }, () => [r, g, b]).flat()];
-  const pixels = Buffer.from(Array.from({ length: height }, () => row).flat());
+  const pixels = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) pixels.set(pixel(x, y), y * (width * 3 + 1) + 1 + x * 3);
+  }
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", header),
@@ -368,6 +395,39 @@ describe.skipIf(problem !== null)("Phase 3: assets", { timeout: 60_000 }, () => 
     expect(await page.evaluate(() => document.fonts.check('700 80px "Zora"'))).toBe(true);
     await undo();
     await undo();
+    expect(deck().assets).toEqual({});
+  });
+
+  it("optimizes a big photo on import, and keeps the original when asked (D67)", async () => {
+    const PHOTO = photo(1400, 800);
+    const before = h.userTransactions();
+    await dropFiles([{ name: "beach.png", type: "image/png", bytes: PHOTO }]);
+    await expect.poll(() => images().length, { timeout: 30_000 }).toBe(1);
+    expect(h.userTransactions()).toBe(before + 1);
+    const optimized = deck().assets[assetOf(images()[0]).slice(6)];
+    expect(optimized).toMatchObject({ mime: "image/webp", name: "beach.webp", width: 1400 });
+    expect(optimized?.bytes).toBeLessThan(PHOTO.length / 2);
+    expect(images()[0]).toMatchObject({ name: "beach" });
+    await expect
+      .poll(toast)
+      .toMatch(/^beach\.png optimized: \d\.\d MB → \d+ KB \(−\d+%\), looks the same/);
+    await h.synced();
+    // Shown from the WebP the server made.
+    const shown = page.locator(`.editor-canvas [data-node-id="${images()[0]?.id}"] img`);
+    await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1400);
+
+    await page.getByRole("button", { name: "Keep original" }).click();
+    await expect.poll(() => deck().assets[assetOf(images()[0]).slice(6)]?.mime).toBe("image/png");
+    expect(h.userTransactions()).toBe(before + 2);
+    expect(h.changes.at(-1)?.label).toBe("Keep original image");
+    expect(Object.values(deck().assets)).toEqual([
+      { mime: "image/png", bytes: PHOTO.length, name: "beach.png", width: 1400, height: 800 },
+    ]);
+    await h.synced();
+    await undo(); // back to the optimized file
+    expect(deck().assets[assetOf(images()[0]).slice(6)]?.mime).toBe("image/webp");
+    await undo();
+    expect(images()).toHaveLength(0);
     expect(deck().assets).toEqual({});
   });
 

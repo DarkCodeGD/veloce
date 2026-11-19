@@ -10,6 +10,7 @@
  */
 import { brotliDecompressSync, inflateSync } from "node:zlib";
 import { type AssetInfo, MAX_ASSET_BYTES } from "@veloce/core";
+import { displaySize, jpegOrientation } from "@veloce/images";
 
 export type InspectResult = { ok: true; info: AssetInfo } | { ok: false; message: string };
 
@@ -94,7 +95,13 @@ function sniffImage(bytes: Uint8Array): ImageInfo | null {
     if (r.startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
       return { mime: "image/png", ...(r.has(16, 8) && size(r.u32(16), r.u32(20))) };
     }
-    if (r.startsWith([0xff, 0xd8, 0xff])) return { mime: "image/jpeg", ...jpegSize(r) };
+    if (r.startsWith([0xff, 0xd8, 0xff])) {
+      // As shown: a phone photo stored sideways says "turn it" in EXIF, and browsers do.
+      const stored = jpegSize(r);
+      if (!stored.width || !stored.height) return { mime: "image/jpeg" };
+      const shown = displaySize(stored.width, stored.height, jpegOrientation(bytes));
+      return { mime: "image/jpeg", ...shown };
+    }
     if (r.startsWith(ascii("GIF87a")) || r.startsWith(ascii("GIF89a"))) {
       return { mime: "image/gif", ...(r.has(6, 4) && size(r.u16le(6), r.u16le(8))) };
     }
