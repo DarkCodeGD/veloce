@@ -2,7 +2,8 @@
  * Phase 3, round 4 acceptance (free positioning per layer): a layer in a stack can leave the
  * flow and sit at its own position on top of it, from the inspector (Position: Free) or by
  * Ctrl-dragging it, without jumping. Free layers then move by position; the flow closes up
- * around them and ignores them as reorder slots. Real Chromium against the real server;
+ * around them and ignores them as reorder slots. Switching a whole frame to Free keeps its
+ * children (and its own size) exactly where they were. Real Chromium against the real server;
  * every gesture is exactly one transaction.
  */
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -40,7 +41,6 @@ async function build(agent: Client) {
           {
             id: "card",
             name: "Card",
-            height: 240,
             layout: { mode: "stack", direction: "row", gap: 24, padding: 24 },
             style: { fill: "$color.surface" },
             children: [text("left", "Left"), text("right", "Right")],
@@ -200,6 +200,34 @@ describe.skipIf(problem !== null)("Phase 3: free positioning", { timeout: 60_000
     expect(h.childIds(rootId())).toEqual(["card", "foot", "title", "badge"]);
     await undo();
     expect(h.childIds(rootId())).toEqual(["title", "card", "foot", "badge"]);
+  });
+
+  it("switching a frame to Free keeps its children and its size where they were", async () => {
+    await select("Card");
+    const before = { card: await box("card"), left: await box("left"), right: await box("right") };
+    const sent = h.userTransactions();
+    await page.getByRole("combobox", { name: "Mode" }).click();
+    await page.getByRole("option", { name: /Free/ }).click();
+    await expect.poll(() => h.userTransactions()).toBe(sent + 1); // one undo step
+    await h.synced();
+
+    const card = h.stored("card");
+    expect(card.layout).toEqual({ mode: "absolute", padding: 24 });
+    expect(typeof card.height).toBe("number"); // it hugged its content: now pinned
+    expect(card.width).toBeUndefined(); // still stretched across the column
+    expect(h.stored("left").position).toEqual({ x: 0, y: 0 });
+    expect((h.stored("right").position as Point).x).toBeGreaterThan(100);
+    for (const id of ["card", "left", "right"] as const) {
+      const now = await box(id);
+      for (const k of ["x", "y", "width", "height"] as const) {
+        expect(Math.abs(now[k] - before[id][k]), `${id}.${k}`).toBeLessThan(1);
+      }
+    }
+
+    await undo();
+    expect(h.stored("card").layout).toMatchObject({ mode: "stack", direction: "row" });
+    expect(h.stored("card").height).toBeUndefined();
+    expect(h.stored("left").position).toBeUndefined();
   });
 
   it("produces no page errors", () => {

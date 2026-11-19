@@ -762,3 +762,33 @@ and sit at its own position on top of it, like Figma's "ignore auto layout".
 of the flow. Inspector Free doesn't move the layer by a pixel, and the flow closes up. Ctrl-drag
 pulls a layer out. Free layers move by position without reordering, and reorders skip them.
 Every gesture is one undo step.
+
+## D50 — Switching a frame to Free pins everything where it was
+
+**Status:** Accepted (2026-11-19). Builds on D49.
+
+Switching a stack or grid to Free (absolute) used to pile every child at 0,0, and a frame
+that hugged its content collapsed. Now nothing on screen moves.
+
+1. **One transaction: `switchLayout`** (in `model/manipulate.ts`). It contains the layout
+   change and the ops from `freezeFrameOps`. Each child gets its measured layout offset as
+   `position`, plus `freeSizing` for what the flow was stretching (D49 §3). Children that
+   were already `"free"` keep their position and drop the flag, which is redundant in an
+   absolute frame. Hidden children can't be measured, so they're left as they are.
+2. **The frame keeps its own size.** Free children don't size their frame. So on each axis
+   where the frame was fitting its content (`hug`, or `auto` that its parent doesn't stretch,
+   `stretchedBy`), its rendered pixels are baked. Stretched or fixed axes stay, and the
+   root always fills the stage.
+3. **The new layout is sent whole.** Core replaces a layout object when its `mode` changes
+   (the discriminator rule, json.ts). The old editor-side `replacePatch` only sent the keys
+   that changed, so every mode switch silently **lost the frame's padding**. Padding now
+   always carries over, and gap carries over between stack and grid. `replacePatch` is
+   removed.
+4. **Going back to a stack or grid** removes the positions the flow would ignore (D49 §6).
+   Sizes that were baked stay baked. Undo is the way back to the exact earlier layout.
+   **Why:** guessing which pixel widths were "really" `fill` would be wrong as often as right.
+
+Agents switching a frame over MCP get no baking (they describe structure and set their own
+positions; lint's `ignored-position` and `off-canvas` catch mistakes).
+`tests/integration/phase3-free.test.ts` checks in Chromium that the frame and its children
+stay within 1px, in one undo step.

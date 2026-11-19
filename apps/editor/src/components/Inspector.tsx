@@ -17,14 +17,14 @@ import { ArrowDown, ArrowRight, Copy, LayoutGrid, Move, Rows3, Trash } from "luc
 import { run } from "../actions.js";
 import { registry, resolvedSizing } from "../editor-context.js";
 import { replaceAsset } from "../model/asset-insert.js";
+import { type Command, deleteNodes, duplicateNodes, updateNode } from "../model/commands.js";
 import {
-  type Command,
-  deleteNodes,
-  duplicateNodes,
-  replacePatch,
-  updateNode,
-} from "../model/commands.js";
-import { freeSizing, placeFreely, placeInFlow } from "../model/manipulate.js";
+  freeSizing,
+  type Measured,
+  placeFreely,
+  placeInFlow,
+  switchLayout,
+} from "../model/manipulate.js";
 import { propFields } from "../model/schema-fields.js";
 import { parseNumber } from "../model/scrub.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
@@ -93,7 +93,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
           parentLayout={parentNode?.kind === "frame" ? parentNode.layout : null}
         />
         {node.kind === "frame" ? (
-          <FrameSections deck={deck} node={node} />
+          <FrameSections deck={deck} index={index} node={node} />
         ) : (
           <PropsSection deck={deck} node={node} />
         )}
@@ -340,41 +340,27 @@ function LayerSection({
 const ALIGN = ["start", "center", "end", "stretch"];
 const JUSTIFY = ["start", "center", "end", "space-between", "space-around", "space-evenly"];
 
-function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
+/** Measure a layer on the main canvas, for edits that must keep it where it is. */
+function measureOnCanvas(index: SlideIndex): (id: string) => Measured | null {
+  const space = mainCanvasSpace();
+  return (id) => {
+    const node = index.nodes.get(id)?.node;
+    const position = space?.offsetInParent(id);
+    const size = space?.size(id);
+    if (!node || !position || !size) return null;
+    return { position, rendered: size, sizing: resolvedSizing(node) };
+  };
+}
+
+function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; node: FrameNode }) {
   const layout = node.layout;
   const setLayout =
     (key: string, label: string): Commit =>
     (value) =>
       void run(updateNode(node.id, { layout: { [key]: value } }, label));
   const switchMode = (mode: string | null) => {
-    if (!mode || mode === layout.mode) return;
-    const keep = {
-      ...("gap" in layout &&
-        layout.gap !== undefined &&
-        mode !== "absolute" && { gap: layout.gap }),
-      ...(layout.padding !== undefined && { padding: layout.padding }),
-    };
-    const next: Record<string, unknown> =
-      mode === "grid"
-        ? { mode, columns: 2, ...keep }
-        : mode === "stack"
-          ? { mode, ...keep }
-          : { mode, ...keep };
-    const change = updateNode(
-      node.id,
-      { layout: replacePatch(layout as Record<string, unknown>, next) },
-      `Change layout to ${mode}`,
-    );
-    // Into a stack or grid: positions the flow now ignores go (lint would flag them), except
-    // on layers that are explicitly free. Same transaction, so one undo restores them.
-    if (layout.mode === "absolute") {
-      for (const child of node.children) {
-        if (child.position && child.positioning !== "free") {
-          change.ops.push({ op: "node.update", id: child.id, set: { position: null } });
-        }
-      }
-    }
-    void run(change);
+    if (mode !== "stack" && mode !== "grid" && mode !== "absolute") return;
+    void run(switchLayout(index, node.id, mode, measureOnCanvas(index)));
   };
   const setStyle =
     (key: string, label: string): Commit =>

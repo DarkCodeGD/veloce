@@ -17,7 +17,6 @@ import {
   moveSlide,
   moveSlideTo,
   reorderNode,
-  replacePatch,
 } from "./commands.js";
 import {
   editableText,
@@ -129,15 +128,6 @@ describe("commands produce valid, undoable ops", () => {
     expect(reorderNode(index, "card", -1)).toBeNull();
     const after = apply(deck, reorderNode(index, "card", 1)?.ops ?? []);
     expect(after.slides[0]?.root.children.map((c) => c.id)).toEqual(["footer", "card", "locked"]);
-  });
-
-  it("builds replace patches that drop keys a new shape doesn't have", () => {
-    expect(
-      replacePatch(
-        { mode: "stack", direction: "row", gap: 8, padding: { x: 1 } },
-        { mode: "grid", columns: 2, gap: 8, padding: { x: 2 } },
-      ),
-    ).toEqual({ direction: null, mode: "grid", columns: 2, padding: { x: 2 } });
   });
 
   it("adds, duplicates, moves and deletes slides", () => {

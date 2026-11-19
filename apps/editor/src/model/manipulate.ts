@@ -144,32 +144,128 @@ export function rotateTo(index: SlideIndex, id: string, degrees: number): Comman
 export type ResolvedSizing = Sizing | "auto";
 
 /**
+ * Whether `parent` stretches its child along `axis` when the child's sizing is `"auto"`: a
+ * stack's cross axis with `align: "stretch"`, a grid cell's width, a grid row's height
+ * (unless aligned). Absolute frames never stretch anything.
+ */
+export function stretchedBy(parent: Layout, axis: "width" | "height"): boolean {
+  if (parent.mode === "absolute") return false;
+  const align = parent.align ?? "stretch";
+  if (parent.mode === "grid") return axis === "width" || align === "stretch";
+  const main = (parent.direction ?? "column") === "row" ? "width" : "height";
+  return axis !== main && align === "stretch";
+}
+
+/**
  * The sizes a layer needs to keep its on-screen size once it leaves its stack/grid flow.
  * Outside the flow nothing stretches it any more, so whatever was stretched is baked to the
- * rendered pixels: `"fill"`, and `"auto"` where the parent stretched it (a stack's cross
- * axis with `align: "stretch"`, a grid cell's width, a grid row's height). `"auto"` that was
- * fitting its content becomes `"hug"`, which is what it was doing. Fixed and hug sizes stay.
+ * rendered pixels: `"fill"`, and `"auto"` where the parent stretched it (`stretchedBy`).
+ * `"auto"` that was fitting its content becomes `"hug"`, which is what it was doing. Fixed
+ * and hug sizes stay.
  */
 export function freeSizing(
   parent: Layout,
   sizing: { width: ResolvedSizing; height: ResolvedSizing },
   rendered: { w: number; h: number },
 ): { width?: Sizing; height?: Sizing } {
-  const stretched = (axis: "width" | "height"): boolean => {
-    if (parent.mode === "grid")
-      return axis === "width" || (parent.align ?? "stretch") === "stretch";
-    if (parent.mode !== "stack") return false;
-    const main = (parent.direction ?? "column") === "row" ? "width" : "height";
-    return axis !== main && (parent.align ?? "stretch") === "stretch";
-  };
   const out: { width?: Sizing; height?: Sizing } = {};
   for (const axis of ["width", "height"] as const) {
     const v = sizing[axis];
     const px = Math.max(1, Math.round(axis === "width" ? rendered.w : rendered.h));
     if (v === "fill") out[axis] = px;
-    else if (v === "auto") out[axis] = stretched(axis) ? px : "hug";
+    else if (v === "auto") out[axis] = stretchedBy(parent, axis) ? px : "hug";
   }
   return out;
+}
+
+/** A layer as measured on the canvas when an edit starts. */
+export interface Measured {
+  /** Where its layout box sits in its parent's content box (slide pixels). */
+  position: Point;
+  rendered: { w: number; h: number };
+  sizing: { width: ResolvedSizing; height: ResolvedSizing };
+}
+
+/**
+ * The extra ops that keep everything in place when a stack or grid frame becomes absolute
+ * ("Free"): each child gets its measured position and the sizes the flow was stretching
+ * (`freeSizing`); children that were already free keep their position and drop the now
+ * redundant flag. The frame itself gets its pixel size wherever it was fitting its content,
+ * since free children no longer give it any. Children that can't be measured (hidden ones)
+ * are left alone. Empty for the root, absolute frames, and frames that aren't there.
+ */
+export function freezeFrameOps(
+  index: SlideIndex,
+  frameId: string,
+  measure: (id: string) => Measured | null,
+): Op[] {
+  const frame = index.nodes.get(frameId)?.node;
+  if (frame?.kind !== "frame" || frame.layout.mode === "absolute") return [];
+  const ops: Op[] = [];
+
+  const parent = parentFrame(index, frameId);
+  const self = parent ? measure(frameId) : null;
+  if (parent && self) {
+    const set: Record<string, unknown> = {};
+    for (const axis of ["width", "height"] as const) {
+      const v = self.sizing[axis];
+      const fits = v === "hug" || (v === "auto" && !stretchedBy(parent.layout, axis));
+      if (fits)
+        set[axis] = Math.max(1, Math.round(axis === "width" ? self.rendered.w : self.rendered.h));
+    }
+    if (Object.keys(set).length > 0) ops.push({ op: "node.update", id: frameId, set });
+  }
+
+  for (const child of frame.children) {
+    if (isFreeLayer(child, frame.layout)) {
+      ops.push({ op: "node.update", id: child.id, set: { positioning: null } });
+      continue;
+    }
+    const m = measure(child.id);
+    if (!m) continue;
+    const set: Record<string, unknown> = { position: roundPoint(m.position) };
+    for (const [key, value] of Object.entries(freeSizing(frame.layout, m.sizing, m.rendered))) {
+      if (child[key as keyof Node] !== value) set[key] = value;
+    }
+    ops.push({ op: "node.update", id: child.id, set });
+  }
+  return ops;
+}
+
+/**
+ * Change a frame's layout mode as one transaction. The new layout is sent whole: core
+ * replaces a layout object whose `mode` changes (the discriminator rule in json.ts), so a
+ * partial patch would lose `padding`. Padding carries over, and gap too between stack and
+ * grid. Into absolute ("Free"), everything stays where it was (`freezeFrameOps`). Out of
+ * absolute, the positions the flow now ignores are removed (except on free layers).
+ */
+export function switchLayout(
+  index: SlideIndex,
+  frameId: string,
+  mode: Layout["mode"],
+  measure: (id: string) => Measured | null,
+): Command | null {
+  const frame = index.nodes.get(frameId)?.node;
+  if (frame?.kind !== "frame" || frame.layout.mode === mode) return null;
+  const from = frame.layout;
+  const padding = from.padding === undefined ? {} : { padding: from.padding };
+  const gap = from.mode !== "absolute" && from.gap !== undefined ? { gap: from.gap } : {};
+  const layout: Layout =
+    mode === "grid"
+      ? { mode, columns: 2, ...gap, ...padding }
+      : mode === "stack"
+        ? { mode, ...gap, ...padding }
+        : { mode, ...padding };
+  const ops: Op[] = [{ op: "node.update", id: frameId, set: { layout } }];
+  if (mode === "absolute") ops.push(...freezeFrameOps(index, frameId, measure));
+  if (from.mode === "absolute") {
+    for (const child of frame.children) {
+      if (child.position && child.positioning !== "free") {
+        ops.push({ op: "node.update", id: child.id, set: { position: null } });
+      }
+    }
+  }
+  return { label: `Change layout to ${mode}`, ops };
 }
 
 /**

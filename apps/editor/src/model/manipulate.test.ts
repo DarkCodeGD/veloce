@@ -5,12 +5,15 @@ import {
   ancestorRotation,
   dropInto,
   freeSizing,
+  freezeFrameOps,
   isFree,
+  type Measured,
   moveTo,
   placeFreely,
   placeInFlow,
   resizeTo,
   rotateTo,
+  switchLayout,
 } from "./manipulate.js";
 import { indexSlide } from "./slide-index.js";
 
@@ -247,5 +250,113 @@ describe("free positioning in stacks and grids", () => {
     expect(childIds(after, "card")).toEqual(["badge", "inner"]);
     expect(nodeOf(after, "badge")?.positioning).toBeUndefined();
     expect(nodeOf(after, "badge")?.position).toBeUndefined();
+  });
+});
+
+describe("switching a frame to Free", () => {
+  /** root (column) > list (column, auto size) > [one (text), two (text, 300 wide), pin (free)] */
+  const listDeck = createDeck({
+    title: "t",
+    slides: [
+      createSlide({
+        id: "s1",
+        rootId: "root",
+        children: [
+          frame({
+            id: "list",
+            layout: { mode: "stack", padding: 20 },
+            children: [
+              text("one"),
+              text("two", { width: 300 }),
+              text("pin", { positioning: "free", position: { x: 5, y: 6 } }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+  const lx = indexSlide(listDeck.slides[0] as (typeof listDeck.slides)[0]);
+  const textSizing = { width: "fill", height: "hug" } as const;
+  const measured: Record<string, Measured> = {
+    list: {
+      position: { x: 0, y: 0 },
+      rendered: { w: 1760, h: 180.6 },
+      sizing: { width: "auto", height: "auto" },
+    },
+    one: { position: { x: 0, y: 0 }, rendered: { w: 1720, h: 60 }, sizing: textSizing },
+    two: {
+      position: { x: 0, y: 70.004 },
+      rendered: { w: 300, h: 60 },
+      sizing: { width: 300, height: "hug" },
+    },
+  };
+  const measure = (id: string) => measured[id] ?? null;
+
+  it("pins children where they are, and the frame at the size its content gave it", () => {
+    expect(freezeFrameOps(lx, "list", measure)).toEqual([
+      // Stretched across the root column: still stretched as a free frame. Its height came
+      // from its content, which free children don't give it: baked.
+      { op: "node.update", id: "list", set: { height: 181 } },
+      { op: "node.update", id: "one", set: { position: { x: 0, y: 0 }, width: 1720 } },
+      { op: "node.update", id: "two", set: { position: { x: 0, y: 70 } } },
+      // Already free: position kept, the flag is redundant in an absolute frame.
+      { op: "node.update", id: "pin", set: { positioning: null } },
+    ]);
+  });
+
+  it("does nothing for absolute frames, and leaves unmeasurable children alone", () => {
+    expect(freezeFrameOps(index, "free", measure)).toEqual([]);
+    const ops = freezeFrameOps(lx, "list", (id) => (id === "two" ? null : measure(id)));
+    expect(ops.map((o) => (o.op === "node.update" ? o.id : ""))).toEqual(["list", "one", "pin"]);
+    // The root fills the stage: only its children get pinned.
+    expect(freezeFrameOps(lx, "root", measure)).toEqual([
+      {
+        op: "node.update",
+        id: "list",
+        set: { position: { x: 0, y: 0 }, width: 1760, height: "hug" },
+      },
+    ]);
+  });
+
+  it("switches modes keeping padding and gap, and keeps the switch reversible", () => {
+    const applyTo = (deck: typeof listDeck, command: Command | null) => {
+      if (!command) throw new Error("no command");
+      const result = applyTransaction(deck, {
+        origin: "user",
+        label: command.label,
+        ops: command.ops,
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      return result.deck;
+    };
+    const gapped = applyTo(listDeck, {
+      label: "gap",
+      ops: [{ op: "node.update", id: "list", set: { layout: { gap: 12 } } }],
+    });
+    const gx = indexSlide(gapped.slides[0] as (typeof gapped.slides)[0]);
+    expect(switchLayout(gx, "list", "stack", measure)).toBeNull(); // already a stack
+
+    // To grid: gap and padding survive (regression: a partial patch dropped padding).
+    const grid = switchLayout(gx, "list", "grid", measure);
+    const asGrid = indexSlide(applyTo(gapped, grid).slides[0] as (typeof gapped.slides)[0]);
+    expect(asGrid.nodes.get("list")?.node).toMatchObject({
+      layout: { mode: "grid", columns: 2, gap: 12, padding: 20 },
+    });
+
+    // To Free: padding survives, gap doesn't apply, the children are pinned.
+    const free = switchLayout(gx, "list", "absolute", measure);
+    expect(free?.label).toBe("Change layout to absolute");
+    const freed = applyTo(gapped, free);
+    const fx2 = indexSlide(freed.slides[0] as (typeof freed.slides)[0]);
+    expect(fx2.nodes.get("list")?.node).toMatchObject({
+      layout: { mode: "absolute", padding: 20 },
+    });
+    expect(fx2.nodes.get("one")?.node.position).toEqual({ x: 0, y: 0 });
+
+    // And back to a stack: the positions the flow would ignore go.
+    const back = applyTo(freed, switchLayout(fx2, "list", "stack", measure));
+    const bx = indexSlide(back.slides[0] as (typeof back.slides)[0]);
+    expect(bx.nodes.get("list")?.node).toMatchObject({ layout: { mode: "stack", padding: 20 } });
+    for (const id of ["one", "two", "pin"]) expect(bx.nodes.get(id)?.node.position).toBeUndefined();
   });
 });

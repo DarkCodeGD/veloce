@@ -82,32 +82,6 @@ export function updateNode(id: string, set: Record<string, unknown>, label: stri
   return { label, ops: [{ op: "node.update", id, set }] };
 }
 
-/**
- * A JSON merge patch that turns `before` into `after`: changed values, plus `null` for removed
- * keys. Needed when a value's shape changes (e.g. layout stack → grid drops `direction`).
- */
-export function replacePatch(
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
-): Record<string, unknown> {
-  const patch: Record<string, unknown> = {};
-  for (const key of Object.keys(before)) if (!(key in after)) patch[key] = null;
-  for (const [key, value] of Object.entries(after)) {
-    const old = before[key];
-    if (isPlainObject(old) && isPlainObject(value)) {
-      const nested = replacePatch(old, value);
-      if (Object.keys(nested).length > 0) patch[key] = nested;
-    } else if (JSON.stringify(old) !== JSON.stringify(value)) {
-      patch[key] = value;
-    }
-  }
-  return patch;
-}
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
 // ── Slides ──────────────────────────────────────────────────────────────────────────
 
 export function addSlide(afterIndex: number): Command {

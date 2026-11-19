@@ -9,7 +9,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (344 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (347 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -56,7 +56,10 @@
     then moves, nudges and snaps by position while the flow closes up beneath it. Agents get
     `positioning: "free"`, a "Free layers" docs section and an `ignored-position` lint.
     `tests/integration/phase3-free.test.ts` covers it.
-  - **Next:** round 4, item 2: switching a frame to Free keeps its children in place.
+  - **Round 4, Free frames (D50):** switching a stack/grid to Free pins its children (and its
+    own content-fitted size) exactly where they were, in one undo step. Fixed a long-standing
+    bug on the way: every layout mode switch dropped the frame's padding.
+  - **Next:** round 4, item 3: drag and drop in the Layers panel.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -255,7 +258,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       (Position: Auto / Free) and dragging a layer out of its stack; it keeps its on-screen
       spot. Same option for agents over MCP (schema + docs + lint), with a migration if the
       format changes
-- [ ] Switching a frame to Free keeps everything where it is: children get their current
+- [x] Switching a frame to Free keeps everything where it is: children get their current
       rendered positions (and sizes where they were stretched), in one transaction
 - [ ] Layers panel drag and drop: reorder, and move layers into or out of frames (same ops as
       canvas drags; keyboard path stays Alt+↑/↓)
