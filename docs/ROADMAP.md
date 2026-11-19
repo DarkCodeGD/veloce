@@ -26,149 +26,25 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (551 tests, including real-Chromium lint, preview and editor tests).
-  Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
-  A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
-  Midnight theme).
-  - **First real Claude Code run:** a 5-slide deck. Its five hiccups are fixed and tested (D37).
-  - **Second trial:** found the restart overwrite gap, false overflow on wrapped text, radial
-    gradient edges and icon glyphs. All fixed or documented (D38).
-  - **Phase 3, round 1 (D39):** selection with Figma-style drill-in, hover and selection
-    outlines, a layers panel, a schema-generated inspector, slide add/duplicate/delete,
-    editable notes, undo/redo with undo toasts, and keyboard shortcuts. Verified by driving
-    real Chromium (select → recolor → delete → Undo → new slide, no console errors).
-  - **Polish pass (D40–D41):** custom dropdowns, quiet scrollbars, toggle switches, styled
-    tooltips with shortcuts, auto-growing text fields, and scrubbable number fields with live
-    previews (one transaction per gesture, verified by `tests/integration/phase3-editor.test.ts`).
-    Scrubbing is infinite (pointer lock + a wrapping virtual cursor, D42).
-  - **Round 2, direct manipulation (D43):** drag to move (free frames: by position with
-    snapping guides; stacks/grids: live reorder; drop into other frames), resize and rotate
-    handles that follow rotated layers, arrow-key nudging. Every gesture is one transaction
-    (`tests/integration/phase3-canvas.test.ts`).
-  - **Round 2, typing on the slide (D44):** double-click or Enter edits a text layer in place
-    with TipTap, pixel-identical to the render; the layout reflows live; formatting toolbar
-    (marks, lists, links). One transaction per session (`tests/integration/phase3-text.test.ts`).
-  - **Round 3 (D45):** marquee selection, spacing indicators (while dragging, and Alt + hover),
-    dragging slides in the rail, and copy/cut/paste through the system clipboard (between
-    slides and decks; text from other apps becomes a text layer).
-    `tests/integration/phase3-structure.test.ts` covers the rail and the clipboard.
-  - **History panel (D46):** every change by you and the AI, grouped by author, with the
-    slides it touched; the server keeps the log, so it includes what the AI did before the
-    editor opened.
-  - **Themes (D47):** theme cards, palette editing with the system color picker and contrast
-    warnings, font pickers over six bundled fonts (two new themes, Paper and Studio, use
-    them), font previews in dropdowns, and "snap to the nearest theme color".
-    `tests/integration/phase3-theme.test.ts` covers it.
-  - **Assets (D48):** drop or paste images and fonts onto the canvas, "Replace…" an image in
-    the inspector, "Add font file…" in the theme, and images that travel with layers pasted
-    between decks. Agents get `add_asset`. The server sniffs every file. Fonts are named
-    from their own `name` table and offered in the theme's font pickers.
-    `tests/integration/phase3-assets.test.ts` covers it.
-  - **Phase 3 reopened (2026-11-19):** the decks agents build are stacks and grids all the way
-    down, so dragging a layer only reorders it; there's no way to place one freely, and
-    switching a frame to Free collapses its children. Round 4 (below) fixes that and adds the
-    basics people expect from Figma/Keynote before Motion, which needs freely placed layers.
-  - **Round 4, free positioning (D49):** any layer in a stack or grid can go Free
-    (inspector Position: Auto / Free, or Ctrl/Cmd-drag it out) without moving a pixel; it
-    then moves, nudges and snaps by position while the flow closes up beneath it. Agents get
-    `positioning: "free"`, a "Free layers" docs section and an `ignored-position` lint.
-    `tests/integration/phase3-free.test.ts` covers it.
-  - **Round 4, Free frames (D50):** switching a stack/grid to Free pins its children (and its
-    own content-fitted size) exactly where they were, in one undo step. Fixed a long-standing
-    bug on the way: every layout mode switch dropped the frame's padding.
-  - **Round 4, Layers panel drag and drop (D51):** drag rows (or the whole selection) to
-    reorder, onto a frame to move inside it, or left past a frame's last child to pull out;
-    the canvas previews live, Escape cancels, layers dropped into Free frames stay put.
-    `tests/integration/phase3-layers.test.ts` covers it.
-  - **Round 4 and 5 grew (2026-11-19)** from an MCP-only agent run (a badge on an existing
-    deck, then a 5-slide deck from scratch): a padding patch bug agents hit, anchors for
-    free layers, opacity on color tokens, and a round for reusable components. Batch
-    previews, shape geometry and a cross-slide consistency lint went to Phases 4, 5 and 8.
-  - **Product shape and the 1.0 line (D53, 2026-11-19):** Blender-style workspaces with
-    Figma-clean panels; a new round 5 (app shell: menu bar, workspaces, Preferences, command
-    palette, snapshots) before Motion. The roadmap now holds only 1.0 work; the rest waits
-    in "After 1.0".
-  - **Round 4, group / ungroup (D54):** Ctrl+G (or the inspector's Group button) wraps the
-    selection in a frame and Ctrl+Shift+G dissolves it, one undo step each, without moving
-    anything: flow layers get a frame with their parent's flow, free layers an absolute frame
-    cut to their box (rotation included). `tests/integration/phase3-group.test.ts` covers it.
-  - **Round 4, align and distribute (D55):** an alignment bar in the inspector and Figma's
-    keys (Alt+A/H/D, Alt+W/V/S, Alt+Shift+H/V) for free layers, across frames; a single
-    layer aligns within its frame. `tests/integration/phase3-align.test.ts` covers it.
-  - **Layers panel multi-select (D56):** Shift+click selects a range of rows, Ctrl/Cmd+click
-    toggles one (it was Shift = toggle only, so selecting ten layers took ten clicks).
-  - **Round 4, anchors (D57):** free layers can be pinned to any edge or the middle of their
-    frame (`anchor: { x, y }`; inspector Pin X / Pin Y), so a badge stays in a card's corner
-    whatever the card's size or its own text. Drags, resizes, nudges, align, group and paste
-    all move anchored layers correctly; switching the pin never moves the layer. Agents get
-    the field, docs, an outline marker and lint. `tests/integration/phase3-anchor.test.ts`.
-  - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
-    replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
-    says how to write it.
-  - **Agent feedback round 1 (D58):** from an MCP agent run against anchors. Free layers
-    are now measured from the frame's edges (Figma's way), not inside its padding, so a
-    pinned badge survives padding changes. Strokes are drawn inside without taking room.
-    Lint: `ignored-padding`, a balanced `empty-space`, and free-layer `overlap` advice.
-    Docs: negative offsets, `fill`, theme docs that name their deck. The user's decks were
-    migrated (3 layers in 2 decks).
-  - **Agent feedback round 2 (D59):** the retest needed no workarounds. A frame's `overflow`
-    now counts only its flow children: free layers hanging past an edge are deliberate,
-    and `off-canvas` still catches them leaving the slide. Docs: the slide root is centered
-    top-to-bottom only (`align: "center"` for hug-width content), rotation (around the
-    centre, the upright box is what `position` describes), strokes drawn inside, and
-    `get_slide` bounds of rotated nodes. Acknowledging intentional lint findings went to
-    Phase 8.
-  - **Canvas zoom and pan (D60):** Ctrl/Cmd + wheel and pinch zoom at the pointer (10% to
-    1600%). The wheel pans (Shift: sideways), and so do Space + drag and middle-drag.
-    Keys: Mod+= / Mod+- step, Shift+1 fit, Shift+0 100%, Shift+2 selection. There's a zoom
-    pill in the canvas corner. Zoom is view state, never an op.
-  - **Text toolbar (D61):** a Style menu (the theme's `$text.*` styles), a Color menu (theme
-    swatches first, then the system picker) and an Align menu (also Ctrl+Shift+L/E/R/J).
-    None of them take the focus from the text. Formatting that covers the whole text moves
-    to the layer's own `style` / `color` / `align` when typing ends, so the inspector and
-    agents see it there. Styled paragraphs now get the whole style, letter-spacing and case
-    included.
-  - **Colors at an opacity (D63):** any color token takes an opacity in percent,
-    `"$color.secondary/30"`, which keeps following theme switches. It renders as
-    `color-mix()` on the theme variable, and contrast lint measures it (text, fills and
-    gradient stops). Color fields get an opacity box next to the hex; picking another color
-    keeps the opacity. A raw hex takes it as its alpha byte.
-  - **Own color picker (D64):** the browser's color popup opened off-screen on Wayland, so the
-    editor draws its own: square, hue, opacity, eyedropper, hex. It sits beside the inspector,
-    always inside the window, and inline in the text toolbar's Color menu. Palette colors can
-    be translucent now.
-  - **Unused uploads (D65):** uploads that are never added (a cancelled drop, an agent's
-    batch that failed halfway) and assets removed so long ago that undo can't restore them
-    are dropped from memory after each save and every 10 minutes. Uploads get 10 minutes
-    to be added. Files never held them.
-  - **Paint picker (D66):** gradients and image fills were MCP-only; the inspector could only
-    replace them. Fills and backgrounds now get Figma's paint tabs in the color popover:
-    Solid, Linear, Radial, Angular (a new `conic-gradient` paint) and Image. Stops are added,
-    dragged and removed on a bar and colored with theme tokens at any opacity; image fills are
-    uploaded or reused, with a fit. Each gesture is one undo step, files included.
-  - **Image optimization (D67):** imported photos are resized to 3840 px and re-encoded as
-    WebP at the lowest quality that still looks identical (SSIM, searched per image), in a
-    worker thread. A 5K wallpaper went 3.8 MB → 105 KB in ~2 s. A toast shows the saving with
-    "Keep original"; agents see it in `add_asset` and can pass `optimize: false`. New package
-    `@veloce/images` (jSquash WebAssembly codecs, Apache-2.0). Round 4 is done.
-  - **Agent feedback round 3 (D68, D69):** a 15-slide MCP test deck covering all of round 4.
-    Each agent session now keeps its own deck (the user switching decks in the editor had
-    sent an agent's slide into another deck). Translucent slide backgrounds sit on the theme,
-    links follow the text color, contrast lint samples gradients under the text, empty-space
-    and off-canvas count painted frames, clearer errors (opacity range, anchors, tiles),
-    serif/mono font fallbacks, decimal sizes and fuller docs.
-  - **Fix-check retest (D70):** 8 of 9 fixes confirmed. Follow-ups: apply_ops errors no longer
-    hide behind "node.kind", element errors point at a path instead of a generated ID,
-    gradient-aware contrast hints, list_decks shows when the user watches the agent's deck.
-  - **Next:** round 5: the tool bar (D62).
-  - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
-    server must be running first. Register it with
-    `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
-    the README; Electron will start the server automatically.
-  - **Still open:** the "current slide ±1" plugin-mount policy, now a Phase 5 item (thumbnails
-    are live and lazily mounted for now; it matters once heavy plugins arrive).
-  - `desktop` is still a placeholder.
+- **Next:** round 5 from the top: the "Parity with agents" checklist, then the tool bar (D62).
+- **State:** `pnpm check` is green (551 tests, including real-Chromium lint, preview and editor
+  tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
+- **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
+  - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
+    MCP and a view-only editor. The first real Claude Code runs' issues are fixed (D37, D38).
+  - Phase 3, rounds 1–3: selection, inspector, polish, direct manipulation, text editing,
+    marquee, clipboard, history, themes and assets (D39–D48).
+  - Round 4: free layers, Free frames, layer drag and drop, group, align, anchors, zoom, text
+    toolbar, color opacity, own color picker, upload cleanup, paint picker and image
+    optimization (D49–D67).
+  - Agent feedback rounds 1–3 and a fix-check retest: lint accuracy, clearer errors, and
+    per-session decks for agents (D58, D59, D68–D70).
+- **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
+  server must be running first. Register it with
+  `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
+  the README; Electron will start the server automatically.
+- **Still open:** the "current slide ±1" plugin-mount policy (Phase 5); `desktop` is a
+  placeholder.
 
 ---
 
@@ -232,184 +108,50 @@ plain Three.js inside the 3D plugin (plugins are framework-agnostic).
 
 ## Phase 0 — Repo setup ✅ (2026-11-18)
 
-- [x] `git init` (branch `main`), `.gitignore`, `.editorconfig`, `.nvmrc`, `README.md`
-- [x] License: Apache-2.0 (`LICENSE` + `NOTICE`)
-- [x] pnpm workspace with `apps/*`, `packages/*`, `plugins/*`
-- [x] Shared `tsconfig.base.json` (strict, ES2023, NodeNext, project references); per-package `lib`/`types` per runtime
-- [x] Vitest + Biome at root; `pnpm build`, `typecheck`, `test`, `lint`, `format`, `check` scripts
-- [x] Empty packages created with correct dependency directions, guarded by `scripts/architecture.test.ts`
-- [x] CI workflow (GitHub Actions): install, lint, typecheck, test
-
-**Done when:** `pnpm install && pnpm build && pnpm test` passes on an empty-but-wired monorepo. ✅
+- [x] Git, license (Apache-2.0), pnpm workspace, strict shared tsconfig, Vitest + Biome, scripts
+- [x] Package dependency directions guarded by `scripts/architecture.test.ts`; CI on GitHub Actions
 
 ## Phase 1 — Foundation (`core`, `format`, `plugin-api`) ✅ (2026-11-18)
 
-**Schema (`core`)**: `packages/core/src/schema/`
+- [x] Schema: deck, slides, auto-layout frames (stack, grid, absolute), elements, rich text,
+      theme tokens, stage (D17)
+- [x] 12 invertible ops, merge-patch updates, atomic transactions, per-origin undo,
+      actionable errors (D18, D19)
+- [x] `.veloce` zip format: content-hashed assets, migrations, hardened reader (D21)
+- [x] Plugin contract, registry, CSS helpers, conformance kit; built-in text, shape and image
+      plugins (D22)
 
-- [x] IDs: stable strings; callers may choose readable IDs, builders generate `nd_…`/`sl_…`; slides and nodes share one namespace (D17)
-- [x] `Deck`: id, formatVersion, meta (title, description, authors, language), stage, theme, slides[], assets registry. Plugin requirements are derived at save time (`registry.lockFor`), not stored
-- [x] `Slide`: id, name, background, notes, hidden, root frame. (Timeline is added in Phase 4 as an optional field; no stub)
-- [x] `Frame` auto-layout: `stack` (direction, gap, padding, align, justify, wrap), `grid` (columns, gap, rowGap), `absolute`; frame style (fill, stroke, radius, shadow, clip)
-- [x] `Element`: id, `type`, `props`, width/height (`number | "hug" | "fill"`), position, rotation, opacity, locked, hidden, name
-- [x] Rich text model (paragraphs → runs with marks, lists, links). Own model; the TipTap mapping comes in Phase 3
-- [x] Theme tokens: colors, fonts, text styles, space, radius, shadow; refs like `$color.primary`; `themeToCssVariables`
-- [x] Stage: 1920×1080 default, configurable per deck
-
-**Ops & transactions (`core`)**: `ops/`, `transaction.ts`, `document.ts`
-
-- [x] 12 ops: `slide.insert/remove/move/update`, `node.insert/remove/move/update`, `deck.updateMeta`, `deck.setTheme`, `asset.add/remove`
-- [x] Pure `applyOp` with exact inverse; immutable path copying (untouched subtrees shared)
-- [x] Updates use JSON Merge Patch + discriminator rule; prototype-pollution keys dropped (D18)
-- [x] Transactions `{ id, origin, label, ops }`: validated, atomic
-- [x] `DeckDocument`: per-origin undo/redo, conflicting undo fails cleanly and is dropped, history cap (D19)
-- [x] Actionable errors: codes, paths, "Did you mean…" (closest only), slide/node mix-up hints
-
-**File format (`format`)**
-
-- [x] `.veloce` zip: manifest (first, stored), document, theme, plugins.lock, `assets/<sha256>.<ext>`, `fallbacks/<id>.png`, preview
-- [x] Works in Node and browser (fflate + Web Crypto, no Node/DOM APIs)
-- [x] `formatVersion` + migration registry (`migrateDocument`), TOO_NEW error for files from newer versions
-- [x] Content-addressed assets, hash-verified on read and write; never base64 in JSON
-- [x] Hardened reader: path traversal, entry/size caps (declared + actual), unknown entries skipped (D21)
-- [x] Writer refuses invalid decks / mismatched assets; reproducible output for a fixed timestamp
-
-**Plugin contract (`plugin-api`)**
-
-- [x] `ElementDefinition`: type, title, description, `propsSchema` (zod), `defaultProps`, `defaultSize`, `deterministic`, `aiDocs`, `mount()` (D22)
-- [x] `ElementInstance`: `update`, `seek(seconds)`, `dispose` (idempotent), optional `renderStatic`
-- [x] `PluginRegistry`: register (manifest + namespacing checks), `validateElement` → core, `describe()` with JSON Schema, `lockFor(deck)`
-- [x] CSS helpers: tokens → `var(--v-…)`, paints, borders, shadows
-- [x] Conformance kit: lifecycle, container ownership, determinism, leaks (listeners incl. window/AbortSignal/once, timers, rAF, DOM). WebGL-context tracking is added with the `three` plugin (Phase 5)
-- [x] Built-in plugins `@veloce/plugin-text` (XSS-safe, semantic lists), `@veloce/plugin-shape`, `@veloce/plugin-image` (assets only, alt required)
-
-**Done when:** a test builds a deck purely through transactions, saves `.veloce`, loads it back
-identically, and per-origin undo/redo works. Built-in plugins pass the conformance kit.
 ✅ `tests/integration/phase1.test.ts`
 
-## Phase 2 — See it + let the AI in (`renderer`, `doc-server`, `mcp`, view-only `editor`)
+## Phase 2 — See it + let the AI in ✅
 
-> Notes from Phase 1:
-> - Load SVG assets only via `<img>` (scripts in SVG must never run).
-> - The MCP server (Node) needs plugin schemas + `aiDocs` but not `mount()` (DOM). If importing plugins into Node gets awkward, split each plugin into a DOM-free definition module and a render module.
-> - Allow `apps/*` to depend on `@veloce/plugin-*` in `scripts/architecture.test.ts` when wiring them.
-
-**Renderer**
-
-- [x] Deck → DOM; frames map to CSS flexbox; stage scaled to fit via CSS transform
-- Plugin host mount policy (current slide ±1): moved to Phase 5, where heavy plugins arrive
-- [x] Theme tokens → CSS variables; font loading (await fonts before measuring)
-- [x] Measurement pass: computed bounds per node, text overflow detection → reported to server
-
-**Doc server**
-
-- [x] Open/create/save documents; versioned; transactions applied in order
-- [x] WebSocket sync protocol: client sends transaction → server applies → broadcasts patch + version; rejects stale/invalid with reason
-- [x] Atomic autosave (write temp file → rename)
-- [x] Render worker for screenshots/measurement without a user window (Playwright in dev/web; hidden BrowserWindow in Electron later)
-
-**Lint (`core` rules + renderer measurements)**
-
-- [x] Rules: text overflow, overlap, off-canvas, low contrast (WCAG), empty slide, too much text, missing alt text (+ small text, unknown token)
-- [x] Output structured JSON with node ids and suggested fixes
-
-**MCP (`mcp`, Streamable HTTP at `http://localhost:<port>/mcp`)**
-
-- [x] Server `instructions` (core workflow + rules: the fallback for agents without the skill)
-- [x] Tools (keep the set small, ~10):
-  - `get_deck_summary` (compact: slides, node ids, types, bounds; no blobs)
-  - `get_slide(slideId)`
-  - `upsert_slide(slide)` (whole slide in one call)
-  - `apply_ops(ops, label)` (batch transaction)
-  - `list_element_types` (from plugin registry, with prop schemas)
-  - `set_theme` (built-in name or brand overrides; the error and `get_docs("theme")` list themes, so no `list_themes`)
-  - `lint(slideId?)`
-  - `render_preview(slideId)` → image content block (`step` arrives with Phase 4 motion)
-  - `undo_agent_changes(count?)`
-  - `get_docs(topic)` (on-demand docs: core, layout, theme, each plugin's aiDocs)
-  - added: `create_deck`, `list_decks`, `open_deck` (D33)
-- [x] Resources: `deck://current/summary`, `deck://current/theme`
-- [x] All inputs validated with Zod; errors are actionable (`isError: true` + how to fix)
-
-**Editor (view-only)**
-
-- [x] Slide list + stage + live updates from server
-
-- [x] `apps/server`: one local port for the editor, `/ws`, `/mcp` and assets; Host/Origin checks (D34)
-
-**Done when:** in Claude Code, "make a 5-slide pitch deck about X" produces a good-looking deck
-live in the browser; the agent runs `lint` + `render_preview` and fixes its own issues.
-Then: review agent transcripts and redesign any tool the agent struggled with.
+- [x] Renderer: deck → DOM, theme variables, font loading, measurement pass
+- [x] Doc server: WebSocket sync, atomic autosave, headless render worker
+- [x] Lint: overflow, overlap, off-canvas, contrast, empty slide, too much text, alt text,
+      small text, unknown tokens; structured issues with fixes
+- [x] MCP over Streamable HTTP: instructions, 14 tools, 2 resources, Zod-validated input,
+      actionable errors (D33)
+- [x] View-only editor and `apps/server` on one local port with Host/Origin checks (D34)
 
 ## Phase 3 — Manual editor
 
-- [x] Selection (click, shift-click, marquee), hover outlines, layers panel (D39, D45)
-- [x] Move/resize/rotate; snapping guides + spacing indicators (D43, D45)
-- [x] Auto-layout-aware drag (reorder within frame, drop into frames)
-- [x] Text editing with TipTap, mapped to the core rich text model (D44)
-  - Moved to round 4: toolbar controls for text color, paragraph alignment and style.
-- [x] Inspector panel auto-generated from each plugin's `propsSchema`
-- [x] Slide panel: add, duplicate, delete, reorder (drag, or Alt+↑/↓) (D45)
-- [x] Theme picker + token-aware color/font pickers (D47)
-- [x] Asset import (drag & drop or paste images/fonts → content-hashed assets; MCP `add_asset`) (D48)
-- [x] Clipboard (copy/paste within and between decks, images included), keyboard shortcuts (D45, D48)
-- [x] Undo/redo for the `user` origin only; history panel shows agent transactions too (D46)
+- [x] Rounds 1–3: selection, hover, layers panel, move/resize/rotate, snapping, auto-layout
+      drag, TipTap text editing, schema-generated inspector, slide panel, themes, assets,
+      clipboard, shortcuts, per-origin undo and a history panel (D39–D48)
 
-**Round 4: free positioning and pro-tool basics**
+**Round 4: free positioning and pro-tool basics** ✅
 
-- [x] Free positioning per layer: a layer inside a stack or grid can leave the flow and sit
-      at its own `x`/`y` on top of it (Figma's "ignore auto layout"). Inspector toggle
-      (Position: Auto / Free) and dragging a layer out of its stack; it keeps its on-screen
-      spot. Same option for agents over MCP (schema + docs + lint), with a migration if the
-      format changes
-- [x] Switching a frame to Free keeps everything where it is: children get their current
-      rendered positions (and sizes where they were stretched), in one transaction
-- [x] Layers panel drag and drop: reorder, and move layers into or out of frames (same ops as
-      canvas drags; keyboard path stays Alt+↑/↓)
-- [x] Fix: `node.update` can't switch `padding` to another form. Merge-patching
-      `{ x, y }` with `{ top, right, bottom, left }` yields `{ x, y, top, … }`, which matches
-      no padding shape and fails with a bare `set.layout.padding: Invalid input`. Replace a
-      padding object whole when the patch switches its form (like the layout `mode` rule in
-      `json.ts`, so undo inverses stay right), check other union-of-objects fields for the
-      same trap, and make any remaining error say how to fix the call
-- [x] Group / ungroup (Ctrl+G / Ctrl+Shift+G): wrap the selection in a frame that keeps its
-      layout, and unwrap it (D54)
-- [x] Align and distribute for multi-selection (left/center/right, top/middle/bottom; space
-      evenly), in free frames (D55)
-- [x] Layers panel multi-select like Figma: Shift+click selects a range of rows,
-      Ctrl/Cmd+click toggles one (D56)
-- [x] Anchors for free layers: `anchor: { x: "start" | "center" | "end", y: … }` says which
-      edge of the frame `position` is measured from, so a badge pinned to a card's top-right
-      corner stays there when its text, the card's size or the padding changes (Figma
-      constraints). `position` keeps its one `{ x, y }` shape. Inspector anchor picker,
-      drags and nudges keep working, MCP docs + lint. Extends D49 (D57)
-- [x] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
-      handles, guides and text editing stay correct at every zoom
-- [x] Text toolbar: text color (theme tokens first), paragraph alignment, text style
-      (`$text.*`) (D61)
-- [x] Opacity on color tokens: `$color.secondary/30` (glows, bubbles, glass highlights) so
-      translucent colors follow theme switches instead of being hard-coded hex with alpha.
-      Token resolution, contrast lint (already flattens alpha), and an opacity control in the
-      editor's token color picker (the system picker has no alpha, D47) (D63)
-- [x] Unused uploads are cleaned up: files uploaded but never registered with `asset.add`
-      (a cancelled drop, a failed paste) are swept on save and on close. Saves never wrote
-      them; now their memory is freed after each save and on a timer, keeping what undo can
-      bring back (D65)
-- [x] Paint picker: fills get Figma's paint tabs in the color popover, Solid | Linear |
-      Radial | Angular | Image, so humans can make and edit what agents already write
-      (golden rule 1; the inspector could only replace a gradient or image fill). A stop
-      bar (click to add, drag to move, drag off or Delete to remove; each stop is edited with
-      the same picker, tokens and `/NN` included), angle for linear and angular, center for
-      radial and angular. Angular is new in the schema (`conic-gradient`, additive; format
-      v1 hasn't shipped). Image tab: upload or reuse a deck image, fit (cover, contain, fill,
-      tile). Each drag is one undo step (D41). Diamond and video fills are skipped (no CSS
-      equivalent; video belongs to the video plugin). On-canvas gradient handles wait for
-      round 5's tool bar (D66)
-- [x] Image optimization on import (D67): photos are resized to at most 3840 px and
-      re-encoded as WebP at the lowest quality whose SSIM still reads as identical (searched
-      per image on full-resolution tiles); lossless WebP for screenshots and logos when it's
-      smaller. Rotation applied, color profile kept, EXIF/GPS dropped. Runs in a worker
-      thread. The user sees the saving with "Keep original" (one undo step, deck-wide);
-      agents get it in `add_asset` and can opt out per file
+- [x] Free layers in stacks and grids (D49), and Free frames that keep every child in place (D50)
+- [x] Layers panel drag and drop (D51) and multi-select (D56)
+- [x] Padding form switches patch cleanly (D52)
+- [x] Group / ungroup (D54), align and distribute (D55)
+- [x] Anchors for free layers (D57)
+- [x] Canvas zoom and pan (D60)
+- [x] Text toolbar: color, alignment, text style (D61)
+- [x] Opacity on color tokens: `$color.x/30` (D63)
+- [x] Unused uploads cleaned up (D65)
+- [x] Paint picker: solid, linear, radial, angular and image fills (D66)
+- [x] Image optimization on import (D67)
 
 **Round 5: app shell (D53)**
 
@@ -520,7 +262,8 @@ never undoes the agent's work.
 
 ## Phase 5 — Plugins
 
-Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
+Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes. Security: SVG
+assets (icons, logos) load only through `<img>`, never inlined, so scripts in an SVG can't run.
 
 - [ ] Plugin host mount policy: mount the current slide ±1 only; others show static thumbnails
 - [ ] `chart` (ECharts): bar/line/pie/area/scatter, data in props, animated entry
@@ -540,6 +283,8 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
 ## Phase 6 — Desktop app (Electron)
 
 - [ ] Main process hosts doc-server + MCP; window loads the editor
+- [ ] Render worker (previews, lint measurements) in a hidden BrowserWindow instead of
+      Playwright's Chromium, so the app needs no separate browser download
 - [ ] Security: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, minimal preload IPC
 - [ ] `.veloce` file associations (Windows registry, macOS UTI/Info.plist, Linux .desktop + shared-mime-info), `open-file` handling, single-instance lock
 - [ ] `veloce://` protocol handler
