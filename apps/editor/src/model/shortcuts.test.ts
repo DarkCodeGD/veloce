@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ariaShortcut, SHORTCUTS, shortcutKeys } from "./shortcuts.js";
+import { ariaShortcut, proseMirrorKey, SHORTCUTS, shortcutKeys } from "./shortcuts.js";
 
 describe("shortcut labels", () => {
   it("shows platform keys", () => {
@@ -13,5 +13,11 @@ describe("shortcut labels", () => {
     expect(ariaShortcut(SHORTCUTS.undo, "other")).toBe("Control+Z");
     expect(ariaShortcut(SHORTCUTS.undo, "mac")).toBe("Meta+Z");
     expect(ariaShortcut(SHORTCUTS.moveDown, "other")).toBe("Alt+ArrowDown");
+  });
+
+  it("maps to ProseMirror keymap names for the text editor", () => {
+    expect(proseMirrorKey(SHORTCUTS.textAlignCenter)).toBe("Mod-Shift-e");
+    expect(proseMirrorKey("Mod+B")).toBe("Mod-b");
+    expect(proseMirrorKey("Alt+ArrowUp")).toBe("Alt-ArrowUp");
   });
 });

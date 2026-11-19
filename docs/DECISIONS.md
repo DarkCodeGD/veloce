@@ -525,8 +525,8 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
    above the layer, outside the `aria-hidden` overlay, `role="toolbar"`. Buttons keep focus in
    the editor. Links use an inline field, not `window.prompt` (Electron has none). Bare
    addresses are completed (`veloce.dev` → `https://…`, `a@b.co` → `mailto:`) and other
-   schemes are refused. Text color and per-paragraph style/alignment round-trip but have no
-   toolbar controls yet.
+   schemes are refused. Text color and per-paragraph style/alignment round-trip; their
+   toolbar controls came later (D61).
 6. **TipTap is a lazy chunk** (~122 KB gzip). It's prefetched as soon as a text layer is
    selected, so the main bundle grew only ~4 KB. **Why:** most sessions never type on the
    slide, and startup matters more than the first keystroke after a double-click.
@@ -1096,3 +1096,40 @@ it was intended, so the final lint run never came back clean.
    document is the deck and the view is per viewer.
 6. **The overlay needs no zoom-specific code.** It already measures the rendered DOM, so
    outlines, handles, guides and the text editor stay exact at every zoom.
+
+## D61 — Text toolbar: style, color and alignment; whole-text formatting lives on the layer
+
+**Status:** Accepted (2026-11-19).
+
+1. **Three menus in the typing toolbar:** Style (the theme's `$text.*` styles, each shown in
+   its own font with its size and weight), Color (the theme's swatches first, then the
+   system picker) and Align (left, center, right, justify; Ctrl/Cmd+Shift+L/E/R/J, Google
+   Docs' keys). Style and alignment format whole paragraphs, color formats the selected
+   text. Each control shows the selection's effective value (its own format, else the
+   layer's), or "Mixed".
+2. **The menus never take the focus.** They're plain buttons in a popup that cancel their
+   mousedown, not the inspector's `Select`. **Why:** the text selection stays visible while
+   you pick, and the next keystroke keeps typing (D44's toolbar rule). Esc closes an open
+   menu before it ends the session. The system color picker is the one exception (it needs
+   focus); picking hands it back to the text.
+3. **Formatting that covers the whole text moves to the layer** when the session ends
+   (`model/text-box.ts`): every paragraph h2 → the layer's `style: "$text.h2"`, every plain
+   run accent → `color`, every paragraph centered → `align`. Overrides that only repeat the
+   layer's value are dropped. **Why:** the inspector shows the layer's props, so "select
+   all, center" must change what it shows, and an agent reading the deck should see one
+   `style`, not the same override on every paragraph. The same rich text otherwise has many
+   spellings, and the shortest one is the one people and agents can read.
+4. **Every rewrite is visually a no-op,** and the unit tests pin each rule:
+   - A paragraph style beats the layer's font overrides (`fontSize`, `font`…), because it's
+     set on the paragraph. So hoisting a style clears those overrides, and a paragraph style
+     equal to the layer's is only redundant when the layer has none.
+   - Links are colored by the browser, not by the layer, so a link's own color never moves
+     to the layer and is never dropped.
+   - Typing previews the text as typed. Only the commit hoists, so the toolbar keeps reading
+     paragraphs against the layer as it was when typing started. A no-op session still sends
+     nothing (both sides are compared after the same treatment).
+5. **A styled paragraph gets the whole text style,** letter-spacing and case included. Before
+   this, only font, size, weight and line-height applied, so a "display" paragraph inside a
+   body layer didn't match a "display" layer. Core's `TEXT_STYLE_CSS` / `textStyleCss` is now
+   the one list that the text plugin and the editor's typing surface both apply. **Why:** the
+   two had drifted apart once already, and that caused this bug.

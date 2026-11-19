@@ -42,6 +42,17 @@ describe("text element", () => {
     expect(box.textContent).toBe("Hello");
   });
 
+  it("gives a paragraph with its own style the whole style, letter-spacing and case included", () => {
+    const container = mount({
+      content: [{ runs: [{ text: "Big" }], style: "$text.display" }, { runs: [{ text: "Body" }] }],
+    });
+    const [styled, plain] = [...container.querySelectorAll("p")];
+    expect(styled?.style.fontSize).toBe("var(--v-text-display-size)");
+    expect(styled?.style.letterSpacing).toBe("var(--v-text-display-letter-spacing)");
+    expect(styled?.style.textTransform).toBe("var(--v-text-display-transform)");
+    expect(plain?.getAttribute("style")).toBe("margin: 0px;"); // inherits the layer's style
+  });
+
   it("never interprets content as HTML (XSS)", () => {
     const container = mount({ content: '<img src=x onerror="alert(1)"><script>alert(2)</script>' });
     expect(container.querySelector("img, script")).toBeNull();

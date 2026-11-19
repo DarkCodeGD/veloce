@@ -29,6 +29,7 @@ import { ancestorRotation } from "../model/manipulate.js";
 import { editableText, pick, pickTarget } from "../model/selection.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { type Measure, measureBetween } from "../model/spacing.js";
+import { textBoxOf } from "../model/text-box.js";
 import { marqueeDrag, moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
 import { CanvasSpace } from "./canvas-space.js";
 import {
@@ -436,6 +437,8 @@ export function EditorCanvas({
           stage={view.current.stage}
           nodeId={editing.id}
           content={textContentOf(index, editing.id)}
+          box={textBoxOf(propsOf(index, editing.id))}
+          theme={deck.theme}
           label={labelFor(editing.id)}
           caret={editing.caret}
           // Above the layer, like its name tag (hidden while typing).
@@ -459,6 +462,12 @@ export function EditorCanvas({
       )}
     </div>
   );
+}
+
+/** A layer's stored props (none for frames). */
+function propsOf(index: SlideIndex, id: string): Readonly<Record<string, unknown>> {
+  const node = index.nodes.get(id)?.node;
+  return node?.kind === "element" ? node.props : {};
 }
 
 /** A text layer's stored content ("" if it has none yet). */

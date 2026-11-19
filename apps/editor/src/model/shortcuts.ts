@@ -31,6 +31,11 @@ export const SHORTCUTS = {
   zoomToFit: "Shift+1",
   zoomTo100: "Shift+0",
   zoomToSelection: "Shift+2",
+  // Paragraph alignment while typing (Google Docs' keys), matched on the letter.
+  textAlignLeft: "Mod+Shift+L",
+  textAlignCenter: "Mod+Shift+E",
+  textAlignRight: "Mod+Shift+R",
+  textAlignJustify: "Mod+Shift+J",
 } as const;
 
 export type ShortcutSpec = string;
@@ -66,4 +71,15 @@ export function ariaShortcut(spec: ShortcutSpec, platform: Platform): string {
     .split("+")
     .map((key) => (key === "Mod" ? (platform === "mac" ? "Meta" : "Control") : key))
     .join("+");
+}
+
+/**
+ * For ProseMirror's keymap (the text editor): "Mod+Shift+L" → "Mod-Shift-l". Letters go
+ * lowercase: the keymap matches Shift + a letter by its base key.
+ */
+export function proseMirrorKey(spec: ShortcutSpec): string {
+  return spec
+    .split("+")
+    .map((key) => (key.length === 1 ? key.toLowerCase() : key))
+    .join("-");
 }

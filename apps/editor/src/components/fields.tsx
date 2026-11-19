@@ -383,7 +383,6 @@ export function ColorField({
   onCommit: Commit;
 }) {
   const id = useId();
-  const tokens = Object.entries(theme.colors);
   const isObject = typeof value === "object" && value !== null;
   const resolved =
     typeof value === "string" && value.startsWith("$color.")
@@ -437,25 +436,51 @@ export function ColorField({
             Use theme color “{snap.name}”
           </button>
         )}
-        <div className="swatches">
-          {tokens.map(([name, hex]) => {
-            const token = `$color.${name}`;
-            return (
-              <button
-                key={name}
-                type="button"
-                className={`swatch${value === token ? " is-on" : ""}`}
-                style={{ background: hex }}
-                aria-label={`${label}: ${name}`}
-                aria-pressed={value === token}
-                data-tip={`${name} · ${hex}`}
-                onClick={() => onCommit(token)}
-              />
-            );
-          })}
-        </div>
+        <Swatches theme={theme} label={label} value={value} onPick={onCommit} />
       </div>
     </Field>
+  );
+}
+
+/**
+ * The theme's colors as round swatches; picking one sets its token (`$color.primary`), so the
+ * color follows theme switches. Shared by the inspector and the text toolbar.
+ */
+export function Swatches({
+  theme,
+  label,
+  value,
+  onPick,
+  keepFocus = false,
+}: {
+  theme: Theme;
+  /** Names each swatch for screen readers: "<label>: primary". */
+  label: string;
+  /** The current color: its swatch shows as picked. */
+  value: unknown;
+  onPick(token: string): void;
+  /** Pressing a swatch leaves the focus where it is (the text being typed into). */
+  keepFocus?: boolean;
+}) {
+  return (
+    <div className="swatches">
+      {Object.entries(theme.colors).map(([name, hex]) => {
+        const token = `$color.${name}`;
+        return (
+          <button
+            key={name}
+            type="button"
+            className={`swatch${value === token ? " is-on" : ""}`}
+            style={{ background: hex }}
+            aria-label={`${label}: ${name}`}
+            aria-pressed={value === token}
+            data-tip={`${name} · ${hex}`}
+            onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
+            onClick={() => onPick(token)}
+          />
+        );
+      })}
+    </div>
   );
 }
 

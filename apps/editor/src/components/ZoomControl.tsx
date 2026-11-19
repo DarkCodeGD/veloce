@@ -63,7 +63,7 @@ export function ZoomControl({
       >
         <Plus size={14} />
       </button>
-      <span className="zoom-divider" aria-hidden="true" />
+      <span className="toolbar-divider" aria-hidden="true" />
       <button
         type="button"
         className="icon-button"

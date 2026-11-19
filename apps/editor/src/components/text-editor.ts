@@ -9,19 +9,21 @@
  */
 import { Editor, Extension, Mark, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import { isTokenRef, type TextContent, tokenCssVar } from "@veloce/core";
+import { isTokenRef, type TextContent, textStyleCss } from "@veloce/core";
 import { cssColor } from "@veloce/plugin-api";
 import { DOC, type DocNode, toDoc } from "../model/rich-text-doc.js";
+import { proseMirrorKey, SHORTCUTS } from "../model/shortcuts.js";
 
 const SAFE_LINK = /^(?:https?:\/\/|mailto:)/i;
 const ALIGNS = ["left", "center", "right", "justify"];
-/** CSS set by a paragraph's text style: the same properties the text plugin sets. */
-const PARAGRAPH_STYLE_PROPS = [
-  ["font-family", "font"],
-  ["font-size", "size"],
-  ["font-weight", "weight"],
-  ["line-height", "line-height"],
-] as const;
+
+/** Paragraph alignment shortcuts (model/shortcuts.ts, shown in the toolbar's tooltips). */
+const ALIGN_KEYS = {
+  left: SHORTCUTS.textAlignLeft,
+  center: SHORTCUTS.textAlignCenter,
+  right: SHORTCUTS.textAlignRight,
+  justify: SHORTCUTS.textAlignJustify,
+} as const;
 
 /** Paragraph alignment and text style (`$text.h2`), as in the core Paragraph. */
 const ParagraphAttributes = Extension.create({
@@ -42,15 +44,23 @@ const ParagraphAttributes = Extension.create({
             renderHTML: (attrs) => {
               const ref = attrs.textStyle;
               if (typeof ref !== "string" || !isTokenRef(ref)) return {};
-              const style = PARAGRAPH_STYLE_PROPS.map(
-                ([prop, part]) => `${prop}: ${tokenCssVar(ref, part)}`,
-              ).join("; ");
+              // The same CSS the text plugin gives a styled paragraph (core TEXT_STYLE_CSS).
+              const style = Object.entries(textStyleCss(ref))
+                .map(([prop, value]) => `${prop}: ${value}`)
+                .join("; ");
               return { "data-v-style": ref, style };
             },
           },
         },
       },
     ];
+  },
+  addKeyboardShortcuts() {
+    const align = (value: string) => () =>
+      this.editor.commands.updateAttributes(DOC.paragraph, { align: value });
+    return Object.fromEntries(
+      Object.entries(ALIGN_KEYS).map(([value, spec]) => [proseMirrorKey(spec), align(value)]),
+    );
   },
 });
 

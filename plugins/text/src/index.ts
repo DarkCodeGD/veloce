@@ -11,6 +11,7 @@ import {
   TextContentSchema,
   type TextRun,
   type TokenRef,
+  textStyleCss,
   tokenCssVar,
   tokenRefSchema,
   toParagraphs,
@@ -45,7 +46,7 @@ const AI_DOCS = `# text
 Headings, body copy, captions and bullet lists. Size and font come from theme text styles. Use \`style\` and avoid raw font sizes.
 
 **Props**
-- \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [{ text, bold?, italic?, color?, link? }], list?: "bullet" | "number", level?, align? }]\`
+- \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [{ text, bold?, italic?, color?, link? }], list?: "bullet" | "number", level?, align?, style? }]\` (a paragraph \`style\` overrides the layer's for that paragraph)
 - \`style\`: \`"$text.display" | "$text.h1" | "$text.h2" | "$text.h3" | "$text.body" | "$text.small" | "$text.caption" | "$text.code"\` (default body)
 - \`color\`: a color token such as \`"$color.muted"\` (default \`"$color.text"\`)
 - \`align\`, \`verticalAlign\`
@@ -161,10 +162,11 @@ function paragraphElement(tag: "p" | "li", paragraph: Paragraph): HTMLElement {
   el.style.margin = "0";
   if (paragraph.align) el.style.textAlign = paragraph.align;
   if (paragraph.style) {
-    el.style.fontFamily = tokenCssVar(paragraph.style, "font");
-    el.style.fontSize = tokenCssVar(paragraph.style, "size");
-    el.style.fontWeight = tokenCssVar(paragraph.style, "weight");
-    el.style.lineHeight = tokenCssVar(paragraph.style, "line-height");
+    // The whole style (letter-spacing and case too), so a "display" paragraph inside a body
+    // layer looks exactly like a "display" layer.
+    for (const [prop, value] of Object.entries(textStyleCss(paragraph.style))) {
+      el.style.setProperty(prop, value);
+    }
   }
   if (paragraph.runs.length === 0 || paragraph.runs.every((r) => r.text === "")) {
     el.append(document.createElement("br")); // keep empty lines one line tall

@@ -62,6 +62,25 @@ export function tokenCssVar(ref: TokenRef, part?: TextStylePart): string {
   return `var(${tokenCssVarName(parsed.group, parsed.name, part)})`;
 }
 
+/**
+ * Everything a `$text.*` style sets, as [CSS property, token part]. The text plugin (on a
+ * paragraph with its own style) and the editor's typing surface both apply exactly this list,
+ * so a styled paragraph looks the same in both, and like a layer with that style.
+ */
+export const TEXT_STYLE_CSS: ReadonlyArray<readonly [string, TextStylePart]> = [
+  ["font-family", "font"],
+  ["font-size", "size"],
+  ["font-weight", "weight"],
+  ["line-height", "line-height"],
+  ["letter-spacing", "letter-spacing"],
+  ["text-transform", "transform"],
+];
+
+/** CSS declarations for a text style token: `{ "font-size": "var(--v-text-h1-size)", … }`. */
+export function textStyleCss(ref: TokenRef): Record<string, string> {
+  return Object.fromEntries(TEXT_STYLE_CSS.map(([prop, part]) => [prop, tokenCssVar(ref, part)]));
+}
+
 export function shadowToCss(shadow: Shadow): string {
   return `${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.spread ?? 0}px ${shadow.color}`;
 }

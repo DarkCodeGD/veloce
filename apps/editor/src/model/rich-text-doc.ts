@@ -174,7 +174,7 @@ const sameFormat = (a: TextRun, b: TextRun) =>
   FLAG_MARKS.every((flag) => !a[flag] === !b[flag]) && a.link === b.link && a.color === b.color;
 
 /** Adjacent runs with the same formatting become one (ProseMirror may split them). */
-function mergeRuns(runs: TextRun[]): TextRun[] {
+export function mergeRuns(runs: TextRun[]): TextRun[] {
   const out: TextRun[] = [];
   for (const run of runs) {
     const last = out.at(-1);

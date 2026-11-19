@@ -102,6 +102,58 @@ async function clickAway() {
   await page.mouse.click(slide.x + slide.width * 0.9, slide.y + slide.height * 0.9);
 }
 
+/** Click inside the text being edited, on `word` (ProseMirror places the caret there at once). */
+async function clickInText(id: string, word: string, clicks = 1) {
+  const at = await page.evaluate(
+    ({ id, word }) => {
+      const root = document.querySelector(
+        `.editor-canvas [data-node-id="${id}"] .text-edit-content`,
+      );
+      const walker = root && document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker?.nextNode(); node; node = walker?.nextNode()) {
+        const i = node.textContent?.indexOf(word) ?? -1;
+        if (i < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + word.length);
+        const r = range.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+      return null;
+    },
+    { id, word },
+  );
+  if (!at) throw new Error(`"${word}" isn't in the text being edited`);
+  await page.mouse.click(at.x, at.y, { clickCount: clicks });
+  await caretSettled();
+}
+
+/**
+ * ProseMirror reads a native selection change (a word double-click, Home, arrows) from the
+ * browser's `selectionchange` a tick later; a test is faster than that. Wait until the
+ * editor's own selection matches the screen's, as it does long before a person moves on.
+ */
+const caretSettled = () =>
+  expect
+    .poll(() =>
+      page.evaluate(() => {
+        type View = { posAtDOM(node: Node, offset: number): number };
+        type Ed = { view: View; state: { selection: { anchor: number; head: number } } };
+        const dom = document.querySelector(".editor-canvas .ProseMirror") as
+          | (Element & { editor?: Ed })
+          | null;
+        const ed = dom?.editor;
+        const s = getSelection();
+        if (!ed || !s?.anchorNode || !s.focusNode) return false;
+        const { anchor, head } = ed.state.selection;
+        return (
+          ed.view.posAtDOM(s.anchorNode, s.anchorOffset) === anchor &&
+          ed.view.posAtDOM(s.focusNode, s.focusOffset) === head
+        );
+      }),
+    )
+    .toBe(true);
+
 /** Run `action`; expect it to send exactly one transaction, then wait for the editor. */
 async function oneTransaction(action: () => Promise<void>) {
   const before = h.userTransactions();
@@ -243,6 +295,117 @@ describe.skipIf(problem !== null)("Phase 3: typing on the slide", { timeout: 60_
     await oneTransaction(() => page.keyboard.press("Escape"));
     expect(content("footer")).toEqual([{ runs: [{ text: "Footer", link: "https://veloce.dev" }] }]);
     await undo();
+  });
+
+  // ── The text toolbar: style, color, alignment (D61) ──
+  const styleMenu = () => page.getByRole("button", { name: /^Text style:/ });
+  const colorMenu = () => page.getByRole("button", { name: /^Text color:/ });
+  const alignMenu = () => page.getByRole("button", { name: /^Alignment:/ });
+  const popups = () => page.locator(".toolbar-popup").count();
+
+  it("styles one paragraph from the Style menu, exactly like the render", async () => {
+    await startTyping("body");
+    await clickInText("body", "Intro"); // the caret in the first paragraph
+    expect(await styleMenu().getAttribute("aria-label")).toBe("Text style: body");
+    await styleMenu().click();
+    await page.getByRole("menuitemradio", { name: /^h2/ }).click();
+    expect(await editorFocused()).toBe(true); // the menu never takes the focus
+    expect(await popups()).toBe(0);
+    expect(await styleMenu().getAttribute("aria-label")).toBe("Text style: h2");
+    // The live render underneath (hidden) and the editor agree glyph for glyph: the paragraph
+    // style is mirrored whole (letter-spacing and case included).
+    await expect
+      .poll(async () => (await glyphs(".editor-canvas [data-node-id='body'] .v-text"))[0]?.y)
+      .toBeCloseTo(
+        (await glyphs(".editor-canvas [data-node-id='body'] .text-edit-content"))[0]?.y ?? 0,
+        0,
+      );
+    const [rendered, typed] = [
+      await glyphs(".editor-canvas [data-node-id='body'] .v-text"),
+      await glyphs(".editor-canvas [data-node-id='body'] .text-edit-content"),
+    ];
+    expect(typed.length).toBe(rendered.length);
+    typed.forEach((g, i) => {
+      expect(Math.abs(g.x - (rendered[i]?.x ?? 0)), g.text).toBeLessThan(0.5);
+      expect(Math.abs(g.y - (rendered[i]?.y ?? 0)), g.text).toBeLessThan(0.5);
+    });
+    await oneTransaction(() => page.keyboard.press("Escape"));
+    expect(content("body")).toEqual([{ ...BODY[0], style: "$text.h2" }, BODY[1], BODY[2]]);
+    expect(h.stored("body").props?.style).toBe("$text.body"); // not the whole text: per paragraph
+    await undo();
+    expect(content("body")).toEqual(BODY);
+  });
+
+  it("moves a style picked for the whole text to the layer itself", async () => {
+    await startTyping("title");
+    await page.keyboard.press("Control+a");
+    await styleMenu().click();
+    await page.getByRole("menuitemradio", { name: /^h3/ }).click();
+    await oneTransaction(() => page.keyboard.press("Escape"));
+    expect(h.stored("title").props?.style).toBe("$text.h3");
+    expect(content("title")).toBe("Hello world"); // still plain text
+    await undo();
+    expect(h.stored("title").props?.style).toBe("$text.h1");
+  });
+
+  it("aligns with the Align menu and Ctrl+Shift+E; the whole text's alignment goes on the layer", async () => {
+    await startTyping("footer");
+    await page.keyboard.press("Control+Shift+E");
+    expect(await alignMenu().getAttribute("aria-label")).toBe("Alignment: center");
+    await oneTransaction(() => page.keyboard.press("Escape"));
+    expect(h.stored("footer").props?.align).toBe("center");
+    expect(content("footer")).toBe("Footer");
+    await undo();
+    expect(h.stored("footer").props?.align).toBeUndefined();
+
+    await startTyping("body");
+    await clickInText("body", "Second");
+    await alignMenu().click();
+    await page.getByRole("menuitemradio", { name: "Align right" }).click();
+    expect(await editorFocused()).toBe(true);
+    await oneTransaction(() => page.keyboard.press("Escape"));
+    expect(content("body")).toEqual([BODY[0], BODY[1], { ...BODY[2], align: "right" }]);
+    await undo();
+  });
+
+  it("colors text with theme swatches; Esc closes the menu before it ends typing", async () => {
+    await startTyping("title");
+    await clickInText("title", "world", 2); // selects the word
+    await colorMenu().click();
+    expect(await popups()).toBe(1);
+    await page.keyboard.press("Escape"); // closes the menu only
+    expect(await popups()).toBe(0);
+    expect(await editorFocused()).toBe(true);
+    await colorMenu().click();
+    await page.getByRole("button", { name: "Text color: accent" }).click();
+    expect(await editorFocused()).toBe(true);
+    expect(await colorMenu().getAttribute("aria-label")).toBe("Text color: accent");
+    await oneTransaction(() => page.keyboard.press("Escape"));
+    expect(content("title")).toEqual([
+      { runs: [{ text: "Hello " }, { text: "world", color: "$color.accent" }] },
+    ]);
+    await undo();
+    expect(content("title")).toBe("Hello world");
+  });
+
+  it("colors the whole text from the system picker, and that color goes on the layer", async () => {
+    await startTyping("footer");
+    await page.keyboard.press("Control+a");
+    await colorMenu().click();
+    // What closing the system picker does: the input changes, then fires "change".
+    await page.locator("input[aria-label='Custom text color']").evaluate((el) => {
+      const input = el as HTMLInputElement;
+      input.value = "#ff3366";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect.poll(editorFocused).toBe(true); // the text gets the focus back
+    expect(await popups()).toBe(0);
+    await oneTransaction(() => page.keyboard.press("Escape"));
+    expect(h.stored("footer").props?.color).toBe("#ff3366");
+    expect(content("footer")).toBe("Footer");
+    await undo();
+    expect(h.stored("footer").props?.color).toBeUndefined();
   });
 
   it("sends nothing when the text didn't change, and never edits locked text", async () => {

@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (448 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (467 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -123,7 +123,13 @@
     1600%). The wheel pans (Shift: sideways), and so do Space + drag and middle-drag.
     Keys: Mod+= / Mod+- step, Shift+1 fit, Shift+0 100%, Shift+2 selection. There's a zoom
     pill in the canvas corner. Zoom is view state, never an op.
-  - **Next:** round 4: text toolbar.
+  - **Text toolbar (D61):** a Style menu (the theme's `$text.*` styles), a Color menu (theme
+    swatches first, then the system picker) and an Align menu (also Ctrl+Shift+L/E/R/J).
+    None of them take the focus from the text. Formatting that covers the whole text moves
+    to the layer's own `style` / `color` / `align` when typing ends, so the inspector and
+    agents see it there. Styled paragraphs now get the whole style, letter-spacing and case
+    included.
+  - **Next:** round 4: opacity on color tokens (`$color.secondary/30`).
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -345,8 +351,8 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       drags and nudges keep working, MCP docs + lint. Extends D49 (D57)
 - [x] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
       handles, guides and text editing stay correct at every zoom
-- [ ] Text toolbar: text color (theme tokens first), paragraph alignment, text style
-      (`$text.*`)
+- [x] Text toolbar: text color (theme tokens first), paragraph alignment, text style
+      (`$text.*`) (D61)
 - [ ] Opacity on color tokens: `$color.secondary/30` (glows, bubbles, glass highlights) so
       translucent colors follow theme switches instead of being hard-coded hex with alpha.
       Token resolution, contrast lint (already flattens alpha), and an opacity control in the
