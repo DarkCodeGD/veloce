@@ -24,6 +24,11 @@ describe("mergePatch (RFC 7386)", () => {
       type: "radial-gradient",
       stops: [],
     });
+    // Conic (angular) gradients are a variant too: the linear one's angle doesn't leak in.
+    expect(mergePatch(linear, { type: "conic-gradient", stops: [] })).toEqual({
+      type: "conic-gradient",
+      stops: [],
+    });
   });
 
   it("replaces padding when a patch switches its form (shape rule)", () => {

@@ -148,6 +148,23 @@ describe("css helpers", () => {
         url,
       ),
     ).toBe("radial-gradient(ellipse farthest-side at 50% 50%, #fff 0%, transparent 100%)");
+    // Conic (Figma's angular): starts at the angle, around the center, clockwise.
+    expect(
+      cssPaint(
+        {
+          type: "conic-gradient",
+          angle: 45,
+          center: { x: 0.25, y: 0.5 },
+          stops: [
+            { offset: 0, color: "$color.primary/30" },
+            { offset: 1, color: "#fff" },
+          ],
+        },
+        url,
+      ),
+    ).toBe(
+      "conic-gradient(from 45deg at 25% 50%, color-mix(in srgb, var(--v-color-primary) 30%, transparent) 0%, #fff 100%)",
+    );
     expect(
       cssPaint({ type: "image", asset: `asset:${"ab".repeat(32)}`, fit: "contain" }, url),
     ).toBe('url("blob:abab") center / contain no-repeat');

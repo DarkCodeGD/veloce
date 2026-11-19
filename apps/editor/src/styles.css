@@ -1507,7 +1507,7 @@ html.is-scrubbing * {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 40;
+  z-index: 80;
   display: grid;
   pointer-events: none;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
@@ -1560,9 +1560,9 @@ html.is-scrubbing * {
   height: 14px;
   border-radius: 3px;
   transform: translateY(-50%);
-  /* The color over a checkerboard, so an opacity shows. */
+  /* The color (or a paint: gradient, image) over a checkerboard, so an opacity shows. */
   background:
-    linear-gradient(var(--chip), var(--chip)),
+    var(--chip-paint, linear-gradient(var(--chip), var(--chip))),
     repeating-conic-gradient(#8a8f98 0 25%, #d6d9de 0 50%) 0 0 / 8px 8px;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15) inset;
 }
@@ -1928,7 +1928,8 @@ html.is-scrubbing * {
 
 .tooltip {
   position: fixed;
-  z-index: 30;
+  /* Above everything, the color picker popover (60) included. */
+  z-index: 70;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2351,6 +2352,22 @@ html.is-scrubbing * {
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
 }
 
+/* "Fill  ✕": what's being edited, and a way out (like Figma's picker header). */
+.color-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -6px -6px 8px 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.color-popover-head .icon-button {
+  width: 24px;
+  height: 24px;
+}
+
 .color-picker {
   display: grid;
   gap: 10px;
@@ -2431,4 +2448,290 @@ html.is-scrubbing * {
 .color-picker-percent {
   flex: none;
   width: 60px;
+}
+
+/* ── Paint picker (D66) ────────────────────────────────────────────────────────────── */
+
+/* A gradient or image in a fill row: its kind, styled like the text box beside a color. */
+.paint-name {
+  width: 100%;
+  height: 30px;
+  padding: 0 6px 0 25px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.paint-name:hover {
+  border-color: var(--text-muted);
+}
+
+.paint-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.paint-picker [role="tabpanel"] {
+  min-width: 0;
+}
+
+.paint-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.paint-tabs button {
+  display: grid;
+  place-items: center;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+}
+
+.paint-tabs button:hover {
+  background: var(--hover);
+}
+
+.paint-tabs button[aria-selected="true"] {
+  background: var(--panel-raised);
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+}
+
+/* Small pictures of each kind, in the text color. */
+.paint-tab-icon {
+  --ink: var(--text-muted);
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--ink) inset;
+}
+
+[aria-selected="true"] > .paint-tab-icon {
+  --ink: var(--text);
+}
+
+.paint-tab-icon.is-solid {
+  background: var(--ink);
+}
+
+.paint-tab-icon.is-linear {
+  background: linear-gradient(90deg, var(--ink), transparent);
+}
+
+.paint-tab-icon.is-radial {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--ink), transparent);
+}
+
+.paint-tab-icon.is-conic {
+  border-radius: 50%;
+  background: conic-gradient(var(--ink), transparent);
+}
+
+.paint-tab-icon.is-image {
+  background:
+    linear-gradient(135deg, transparent 55%, var(--ink) 55%) 0 0 / 100% 100%,
+    radial-gradient(circle at 35% 35%, var(--ink) 18%, transparent 20%);
+}
+
+.paint-gradient,
+.paint-image {
+  display: grid;
+  gap: 10px;
+}
+
+/* The stop bar: the stops left to right over a checkerboard, handles riding on it. Inset so
+   a stop at 0% or 100% stays whole. */
+.paint-stops {
+  min-width: 0;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+}
+
+.paint-stop-rail {
+  position: relative;
+  height: 16px;
+  border-radius: 4px;
+  background:
+    var(--bar),
+    repeating-conic-gradient(#8a8f98 0 25%, #d6d9de 0 50%) 0 0 / 8px 8px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: copy;
+  touch-action: none;
+}
+
+.paint-stop {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background:
+    linear-gradient(to right, var(--stop), var(--stop)),
+    repeating-conic-gradient(#8a8f98 0 25%, #d6d9de 0 50%) 0 0 / 6px 6px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 3px rgb(0 0 0 / 0.4);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+}
+
+.paint-stop.is-selected {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 1px 3px rgb(0 0 0 / 0.4);
+  z-index: 1;
+}
+
+.paint-stop.is-removing {
+  opacity: 0.35;
+}
+
+.paint-stop:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.paint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.paint-row:empty {
+  display: none;
+}
+
+.paint-row .icon-button {
+  flex: none;
+}
+
+/* "Angle [135 °]": a scrubbable short label and a compact box. */
+.paint-number {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.paint-number-label {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  user-select: none;
+}
+
+.paint-number-label.is-scrubbable {
+  cursor: ew-resize;
+}
+
+.paint-number .input-with-suffix {
+  flex: 1;
+  min-width: 0;
+}
+
+.paint-number .input-with-suffix input {
+  padding: 0 14px 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.paint-number .suffix {
+  right: 5px;
+  font-size: 11px;
+}
+
+.paint-image-preview {
+  display: grid;
+  place-items: center;
+  height: 110px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.paint-image-preview.is-empty {
+  background: repeating-conic-gradient(#2a2e38 0 25%, #20232b 0 50%) 0 0 / 10px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.paint-fits {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.paint-fits button {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.paint-fits button[aria-pressed="true"] {
+  background: var(--panel-raised);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+}
+
+.paint-fits button:disabled {
+  opacity: 0.5;
+}
+
+.paint-upload {
+  justify-content: center;
+}
+
+.paint-image-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-height: 120px;
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  border: 0;
+}
+
+.paint-image-option {
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  background: repeating-conic-gradient(#2a2e38 0 25%, #20232b 0 50%) 0 0 / 8px 8px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+
+.paint-image-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.paint-image-option.is-on {
+  box-shadow: 0 0 0 2px var(--accent);
 }

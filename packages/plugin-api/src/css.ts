@@ -47,6 +47,10 @@ export function cssPaint(paint: Paint, assetUrl: AssetUrlResolver): string {
       // an ellipse shape's outline (CSS's default, farthest-corner, ends outside it).
       return `radial-gradient(ellipse farthest-side at ${x * 100}% ${y * 100}%, ${gradientStops(paint.stops)})`;
     }
+    case "conic-gradient": {
+      const { x, y } = paint.center ?? { x: 0.5, y: 0.5 };
+      return `conic-gradient(from ${paint.angle ?? 0}deg at ${x * 100}% ${y * 100}%, ${gradientStops(paint.stops)})`;
+    }
     case "image": {
       const url = cssUrl(assetUrl(paint.asset.slice("asset:".length)));
       const fit = paint.fit ?? "cover";

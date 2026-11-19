@@ -57,6 +57,7 @@ One layer that should sit on top of an auto-layout frame (a badge on a card, a s
 
 ## Frame style (\`style\`)
 \`{ "fill": color | gradient | image, "stroke": { "color", "width" }, "radius": "$radius.lg", "shadow": "$shadow.md", "clip": true }\`
+Paints (a frame's or slide's \`fill\`/\`background\`, a shape's \`fill\`): a color; a gradient, \`{ "type": "linear-gradient", "angle"?: 180, "stops": [{ "offset": 0, "color": "$color.primary" }, { "offset": 1, "color": "$color.secondary/40" }] }\` (angle: 0 = towards the top, 90 = right), \`"radial-gradient"\` (\`center\`: \`{ "x": 0.5, "y": 0.5 }\` as fractions of the box; offset 1 reaches the box sides) or \`"conic-gradient"\` (an angular sweep: \`angle\` where offset 0 starts, clockwise from the top, and \`center\`; repeat the first color last for a seamless wheel); or an image, \`{ "type": "image", "asset": "asset:<sha256>", "fit"?: "cover" | "contain" | "fill" | "tile" }\`. 2–16 stops, offsets 0–1.
 Strokes are drawn inside the frame's edge and take no room: adding one never moves the content or the free layers (still measured from the outer edge), so a stroked card lines up with unstroked ones.
 
 ## Rotation (\`rotation\` on any node)

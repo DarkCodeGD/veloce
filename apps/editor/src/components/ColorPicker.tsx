@@ -14,7 +14,7 @@
  * `ColorPicker` is the body (the text toolbar shows it inline, in its Color menu);
  * `ColorPopover` floats it beside the inspector, always inside the window.
  */
-import { Pipette } from "lucide-react";
+import { Pipette, X } from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent,
@@ -307,14 +307,19 @@ function TypedValue({
 
 /**
  * The picker in a floating panel, opened from `trigger` (a swatch). It sits beside the
- * inspector and is placed by us, so it's always inside the window. A press outside it or
- * Esc closes it; the trigger toggles it.
+ * inspector and is placed by us, so it's always inside the window. Like Figma's, it closes
+ * with its ✕, Esc, the trigger, or a press elsewhere in the panels, but stays open while the
+ * canvas is panned or zoomed. Selecting another layer closes it too: the inspector shows
+ * another layer's fields (keyed by layer), so this one unmounts.
  */
 export function ColorPopover({
+  title,
   trigger,
   onClose,
   children,
 }: {
+  /** What's being edited ("Fill", "Theme color primary"), in the header. */
+  title: string;
   trigger: RefObject<HTMLElement | null>;
   onClose(): void;
   children: ReactNode;
@@ -336,13 +341,22 @@ export function ColorPopover({
     };
     place();
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    // The paint picker's tabs change its height: stay inside the window.
+    const resized = new ResizeObserver(place);
+    if (popover.current) resized.observe(popover.current);
+    return () => {
+      window.removeEventListener("resize", place);
+      resized.disconnect();
+    };
   }, [trigger]);
 
   useEffect(() => {
     const inside = (target: EventTarget | null) =>
       target instanceof Node &&
-      (popover.current?.contains(target) || trigger.current?.contains(target));
+      (popover.current?.contains(target) ||
+        trigger.current?.contains(target) ||
+        // The canvas: panning keeps the picker open; picking another layer unmounts it.
+        (target instanceof Element && target.closest(".editor-canvas") !== null));
     const onDown = (e: globalThis.PointerEvent) => {
       if (inside(e.target)) return;
       // A hex typed but not entered still counts: blur commits it before we unmount.
@@ -373,6 +387,18 @@ export function ColorPopover({
       aria-label="Color picker"
       style={at ? { left: at.x, top: at.y } : { visibility: "hidden" }}
     >
+      <div className="color-popover-head">
+        <span>{title}</span>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Close color picker"
+          data-tip="Close (Esc)"
+          onClick={() => close.current()}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      </div>
       {children}
     </div>,
     document.body,

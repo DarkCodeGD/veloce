@@ -40,7 +40,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 /** Tag values whose change means "this is a different kind of object, replace it". */
 const DISCRIMINATORS: ReadonlyArray<readonly [key: string, values: ReadonlySet<string>]> = [
   ["mode", new Set(["stack", "grid", "absolute"])],
-  ["type", new Set(["linear-gradient", "radial-gradient", "image"])],
+  ["type", new Set(["linear-gradient", "radial-gradient", "conic-gradient", "image"])],
 ];
 
 /** Untagged fields, by name, whose object forms are told apart by their keys. */

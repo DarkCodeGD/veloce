@@ -3,9 +3,11 @@
  * or immediately (choices), and can reset to the default (`null` in the patch).
  * Token-aware: colors and lengths offer the theme's tokens first, raw values second.
  */
-import { primaryFamily, resolveColor, type Theme } from "@veloce/core";
+import { type Deck, primaryFamily, resolveColor, type Theme } from "@veloce/core";
 import { RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { assetUrl } from "../editor-context.js";
+import type { Imported } from "../model/asset-insert.js";
 import {
   baseToken,
   colorLabel,
@@ -17,9 +19,11 @@ import {
   pickerColor,
   withOpacity,
 } from "../model/color.js";
+import { paintCss, paintLabel } from "../model/paint.js";
 import { parseNumber } from "../model/scrub.js";
 import { nearestColorToken } from "../model/theme-edit.js";
 import { ColorPicker, ColorPopover } from "./ColorPicker.js";
+import { PaintPicker } from "./PaintPicker.js";
 import { Select, type SelectOption } from "./Select.js";
 import { useNumberControl } from "./useNumberControl.js";
 
@@ -383,7 +387,11 @@ export function LengthField({
  * (`$color.secondary/30`), so glows and tints follow theme switches; a raw hex takes an alpha
  * byte. Changing the color keeps the opacity (like Figma). The text shows a token by its name
  * (`primary`), so it fits beside the opacity. A raw color gets a one-click "use the closest
- * theme color". Gradients and images are kept, not edited.
+ * theme color".
+ *
+ * With `paint`, the field holds a fill or background: the chip opens the paint picker
+ * (gradients and images too, D66), and a gradient or image shows as its kind in the row.
+ * Without it, gradients and images are kept, not edited.
  */
 export function ColorField({
   label,
@@ -391,19 +399,28 @@ export function ColorField({
   theme,
   onCommit,
   onPreview,
+  paint,
 }: {
   label: string;
   value: unknown;
   theme: Theme;
-  onCommit: Commit;
-  /** Show a color live while the opacity or picker is dragged; `null` drops the preview. */
-  onPreview?: (color: string | null) => void;
+  /** One change; `imported` is a file uploaded for an image fill (paint fields only). */
+  onCommit: (value: Value | null, imported?: Imported) => void;
+  /** Show a value live while the opacity or picker is dragged; `null` drops the preview. */
+  onPreview?: (value: unknown | null) => void;
+  /** A paint (fill, background): gradients and images can be made here too. */
+  paint?: {
+    deck: Pick<Deck, "id" | "assets">;
+    /** Where a gradient starts when there's no color yet. Default: the primary color. */
+    fallback?: string;
+  };
 }) {
   const id = useId();
   const chip = useRef<HTMLButtonElement>(null);
   const [picking, setPicking] = useState(false);
   const isObject = typeof value === "object" && value !== null;
   const text = typeof value === "string" ? value : undefined;
+  const chipCss = paint ? paintCss(value, theme, (id) => assetUrl(paint.deck.id, id)) : undefined;
   const resolved = text === undefined ? undefined : resolveColor(theme, text);
   /** Any new color, at the opacity the current one has. */
   const pick = (color: string) => onCommit(keepOpacity(value, color));
@@ -434,14 +451,72 @@ export function ColorField({
   const snap = snapToken
     ? { token: snapToken, name: snapToken.slice(7), hex: theme.colors[snapToken.slice(7)] }
     : null;
+  const colorPicker = (
+    <ColorPicker
+      label={label}
+      value={shown}
+      onPreview={(p) => onPreview?.(picked(p))}
+      onCommit={(p) => {
+        const next = picked(p);
+        if (next !== value) onCommit(next);
+        else onPreview?.(null);
+      }}
+    />
+  );
+  const popover = (
+    <ColorPopover title={label} trigger={chip} onClose={() => setPicking(false)}>
+      {paint ? (
+        <PaintPicker
+          label={label}
+          value={value}
+          theme={theme}
+          deck={paint.deck}
+          fallback={paint.fallback ?? defaultPaintColor(theme)}
+          onPreview={(next) => onPreview?.(next)}
+          onCommit={(next, imported) => onCommit(next, imported)}
+        >
+          {colorPicker}
+        </PaintPicker>
+      ) : (
+        colorPicker
+      )}
+    </ColorPopover>
+  );
   return (
     <Field label={label} htmlFor={id} isSet={value !== undefined} onReset={() => onCommit(null)}>
       <div className="color">
-        {isObject ? (
+        {isObject && !paint ? (
           <span className="color-note">
             {(value as { type?: string }).type === "image" ? "Image fill" : "Gradient"}: pick a
             swatch to replace it
           </span>
+        ) : isObject ? (
+          // A gradient or image: its kind, and the picker to edit it.
+          <div className="color-row">
+            <div className="color-input">
+              <button
+                ref={chip}
+                type="button"
+                className={`color-chip${picking ? " is-open" : ""}`}
+                style={{ "--chip-paint": chipCss } as React.CSSProperties}
+                aria-label={`${label}: color picker`}
+                aria-haspopup="dialog"
+                aria-expanded={picking}
+                onClick={() => setPicking((open) => !open)}
+              />
+              <button
+                type="button"
+                id={id}
+                className="paint-name"
+                aria-haspopup="dialog"
+                aria-expanded={picking}
+                onClick={() => setPicking((open) => !open)}
+              >
+                {paintLabel(value)}
+              </button>
+            </div>
+            {picking && popover}
+          </div>
         ) : (
           <div className="color-row">
             <div className="color-input">
@@ -464,20 +539,7 @@ export function ColorField({
                 <span className="suffix">%</span>
               </div>
             )}
-            {picking && (
-              <ColorPopover trigger={chip} onClose={() => setPicking(false)}>
-                <ColorPicker
-                  label={label}
-                  value={shown}
-                  onPreview={(p) => onPreview?.(picked(p))}
-                  onCommit={(p) => {
-                    const next = picked(p);
-                    if (next !== value) onCommit(next);
-                    else onPreview?.(null);
-                  }}
-                />
-              </ColorPopover>
-            )}
+            {picking && popover}
           </div>
         )}
         {snap && (
@@ -490,6 +552,12 @@ export function ColorField({
       </div>
     </Field>
   );
+}
+
+/** A theme color to start a gradient from when there's none: primary, else the first. */
+function defaultPaintColor(theme: Theme): string {
+  const name = Object.hasOwn(theme.colors, "primary") ? "primary" : Object.keys(theme.colors)[0];
+  return name ? `$color.${name}` : "#4f46e5";
 }
 
 /**

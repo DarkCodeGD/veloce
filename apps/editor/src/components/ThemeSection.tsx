@@ -250,7 +250,11 @@ function ColorToken({
       <span className="theme-color-name">{name}</span>
       <code className="theme-color-value">{value}</code>
       {picking && (
-        <ColorPopover trigger={swatch} onClose={() => setPicking(false)}>
+        <ColorPopover
+          title={`Theme color ${name}`}
+          trigger={swatch}
+          onClose={() => setPicking(false)}
+        >
           <ColorPicker
             label={`Theme color ${name}`}
             value={shown}

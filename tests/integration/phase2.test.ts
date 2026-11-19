@@ -357,11 +357,21 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
             style: { fill: veil },
             children: [{ id: "veil-label", type: "text", props: { content: "Lost in the veil" } }],
           },
+          {
+            // Angular (conic) gradients are measured like the others (D66).
+            id: "wheel",
+            layout: { mode: "stack", padding: "$space.sm" },
+            style: { fill: { ...veil, type: "conic-gradient", angle: 30 } },
+            children: [
+              { id: "wheel-label", type: "text", props: { content: "Lost in the wheel" } },
+            ],
+          },
         ],
       },
     });
     expect(result.text).toMatch(/low-contrast · slide glass · whisper/);
     expect(result.text).toMatch(/low-contrast · slide glass · veil-label/);
+    expect(result.text).toMatch(/low-contrast · slide glass · wheel-label/);
     expect(result.text).not.toMatch(/low-contrast · slide glass · (speak|tint-label)/);
     expect(result.text).not.toMatch(/unknown-token/);
   });

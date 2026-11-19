@@ -25,9 +25,9 @@
 ## Current status
 
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
-- **Last updated:** 2026-11-19
+- **Last updated:** 2026-11-20
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (497 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (518 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -142,6 +142,11 @@
     batch that failed halfway) and assets removed so long ago that undo can't restore them
     are dropped from memory after each save and every 10 minutes. Uploads get 10 minutes
     to be added. Files never held them.
+  - **Paint picker (D66):** gradients and image fills were MCP-only; the inspector could only
+    replace them. Fills and backgrounds now get Figma's paint tabs in the color popover:
+    Solid, Linear, Radial, Angular (a new `conic-gradient` paint) and Image. Stops are added,
+    dragged and removed on a bar and colored with theme tokens at any opacity; image fills are
+    uploaded or reused, with a fit. Each gesture is one undo step, files included.
   - **Next:** round 4: image optimization on import.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
@@ -374,6 +379,16 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       (a cancelled drop, a failed paste) are swept on save and on close. Saves never wrote
       them; now their memory is freed after each save and on a timer, keeping what undo can
       bring back (D65)
+- [x] Paint picker: fills get Figma's paint tabs in the color popover, Solid | Linear |
+      Radial | Angular | Image, so humans can make and edit what agents already write
+      (golden rule 1; the inspector could only replace a gradient or image fill). A stop
+      bar (click to add, drag to move, drag off or Delete to remove; each stop is edited with
+      the same picker, tokens and `/NN` included), angle for linear and angular, center for
+      radial and angular. Angular is new in the schema (`conic-gradient`, additive; format
+      v1 hasn't shipped). Image tab: upload or reuse a deck image, fit (cover, contain, fill,
+      tile). Each drag is one undo step (D41). Diamond and video fills are skipped (no CSS
+      equivalent; video belongs to the video plugin). On-canvas gradient handles wait for
+      round 5's tool bar (D66)
 - [ ] Image optimization on import: photos far larger than the stage are downscaled, and
       heavy formats re-encoded (WebP/AVIF, keeping PNG where transparency or sharp edges
       need it), so a phone photo doesn't add 40 MB to a deck. The original is never needed
@@ -393,6 +408,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
       Today a text box, shape or frame can only come from pasting, dropping or the AI, which
       blocks this phase's "a full deck can be built by hand"
 - [ ] Size badge under the selection (`176 × 36`, in slide pixels), live while resizing
+- [ ] On-canvas gradient handles: with the paint picker open on a gradient, drag its ends
+      (linear), center (radial, angular) and stops on the slide itself, like Figma (D66 §8)
 - [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
       and its shortcut; the deck switcher, Follow AI / Live and Present stay in the bar on
       every workspace (AI activity is never hidden in one workspace)

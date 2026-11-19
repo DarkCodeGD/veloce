@@ -2,7 +2,7 @@
  * Paints (fills) and strokes.
  *
  * A paint is either a plain color (`"#4f46e5"`, `"$color.primary"`, `"transparent"`)
- * or a tagged object: a linear/radial gradient or an image.
+ * or a tagged object: a linear, radial or conic (angular) gradient, or an image.
  */
 import { z } from "zod";
 import { AssetRefSchema, ColorSchema, PointSchema, tokenRefSchema } from "./primitives.js";
@@ -32,6 +32,20 @@ export const RadialGradientSchema = z.strictObject({
   stops: z.array(GradientStopSchema).min(2).max(16),
 });
 
+/**
+ * Colors swept around `center` (Figma's angular gradient): offset 0 starts at `angle` and the
+ * stops go clockwise, offset 1 ending back where they started. Repeat the first stop's color
+ * last for a seamless wheel.
+ */
+export const ConicGradientSchema = z.strictObject({
+  type: z.literal("conic-gradient"),
+  /** Where offset 0 starts, in degrees clockwise from the top. Default: 0. */
+  angle: z.number().optional(),
+  /** Center as fractions of the box (0–1). Default: the middle. */
+  center: PointSchema.optional(),
+  stops: z.array(GradientStopSchema).min(2).max(16),
+});
+
 export const ImagePaintSchema = z.strictObject({
   type: z.literal("image"),
   asset: AssetRefSchema,
@@ -41,11 +55,19 @@ export const ImagePaintSchema = z.strictObject({
 
 export const PaintSchema = z.union([
   ColorSchema,
-  z.discriminatedUnion("type", [LinearGradientSchema, RadialGradientSchema, ImagePaintSchema]),
+  z.discriminatedUnion("type", [
+    LinearGradientSchema,
+    RadialGradientSchema,
+    ConicGradientSchema,
+    ImagePaintSchema,
+  ]),
 ]);
 export type Paint = z.infer<typeof PaintSchema>;
 export type LinearGradient = z.infer<typeof LinearGradientSchema>;
 export type RadialGradient = z.infer<typeof RadialGradientSchema>;
+export type ConicGradient = z.infer<typeof ConicGradientSchema>;
+/** Any gradient paint. */
+export type Gradient = LinearGradient | RadialGradient | ConicGradient;
 export type ImagePaint = z.infer<typeof ImagePaintSchema>;
 
 export const StrokeSchema = z.strictObject({

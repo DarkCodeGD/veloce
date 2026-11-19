@@ -32,10 +32,11 @@ import {
   Trash,
   Ungroup,
 } from "lucide-react";
+import { Fragment } from "react";
 import { run } from "../actions.js";
 import { registry, resolvedSizing } from "../editor-context.js";
 import { groupSelection, ungroupSelection } from "../group-actions.js";
-import { replaceAsset } from "../model/asset-insert.js";
+import { type Imported, replaceAsset } from "../model/asset-insert.js";
 import { type Command, deleteNodes, duplicateNodes, updateNode } from "../model/commands.js";
 import { ungroupable } from "../model/group.js";
 import {
@@ -46,6 +47,7 @@ import {
   setAnchor,
   switchLayout,
 } from "../model/manipulate.js";
+import { withPaintAssets } from "../model/paint.js";
 import { propFields } from "../model/schema-fields.js";
 import { parseNumber } from "../model/scrub.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
@@ -82,11 +84,13 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
 
   let body: React.ReactNode;
   if (nodes.length === 0) {
+    // Keyed by what's shown, so another slide or layer gets fresh fields: an open color
+    // picker closes instead of carrying over to it (Figma does the same).
     body = (
-      <>
+      <Fragment key={slide.id}>
         <SlideSection deck={deck} slide={slide} />
         <ThemeSection deck={deck} />
-      </>
+      </Fragment>
     );
   } else if (nodes.length > 1) {
     body = (
@@ -100,7 +104,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
     const parent = index.nodes.get(node.id)?.parentId;
     const parentNode = parent ? index.nodes.get(parent)?.node : undefined;
     body = (
-      <>
+      <Fragment key={node.id}>
         <header className="inspector-head">
           <strong>{nodeLabel(node)}</strong>
           <span>
@@ -121,7 +125,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
         ) : (
           <PropsSection deck={deck} node={node} />
         )}
-      </>
+      </Fragment>
     );
   }
   return (
@@ -212,7 +216,10 @@ function SlideSection({ deck, slide }: { deck: Deck; slide: Slide }) {
         label="Background"
         value={slide.background}
         theme={deck.theme}
-        onCommit={set("background", "Change slide background")}
+        {...livePaint(deck, slide.id, slide.background, (value) => ({
+          label: "Change slide background",
+          ops: [{ op: "slide.update", id: slide.id, set: { background: value } }],
+        }))}
       />
       <ToggleField
         label="Skip in show"
@@ -234,6 +241,29 @@ function live(toCommand: (value: unknown) => Command | null) {
     onPreview: (value: unknown) =>
       setPreview(value === null ? null : (toCommand(value)?.ops ?? null)),
     onCommit: (value: unknown) => void run(toCommand(value)).finally(() => setPreview(null)),
+  };
+}
+
+/**
+ * `live()` for a paint (fill, background), which can also be a gradient or an image: an image
+ * uploaded for it is registered in the same step, and the image it replaces is dropped from
+ * the deck if nothing else uses it (D66). `ownerId` is the slide or layer that owns it.
+ */
+function livePaint(
+  deck: Deck,
+  ownerId: string,
+  previous: unknown,
+  toCommand: (value: unknown) => Command | null,
+) {
+  return {
+    paint: { deck },
+    onPreview: live(toCommand).onPreview,
+    onCommit: (value: unknown, imported?: Imported) => {
+      const command = toCommand(value);
+      const withFiles =
+        command && withPaintAssets(command, deck, ownerId, previous, value, imported);
+      void run(withFiles).finally(() => setPreview(null));
+    },
   };
 }
 
@@ -566,7 +596,9 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
           label="Fill"
           value={node.style?.fill}
           theme={deck.theme}
-          {...liveStyle("fill", "Change fill")}
+          {...livePaint(deck, node.id, node.style?.fill, (value) =>
+            updateNode(node.id, { style: { fill: value } }, "Change fill"),
+          )}
         />
         <LengthField
           label="Radius"
@@ -646,7 +678,6 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
               />
             );
           case "color":
-          case "paint":
             return (
               <ColorField
                 key={field.key}
@@ -654,6 +685,16 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
                 value={value}
                 theme={deck.theme}
                 {...live(toCommand)}
+              />
+            );
+          case "paint":
+            return (
+              <ColorField
+                key={field.key}
+                {...common}
+                value={value}
+                theme={deck.theme}
+                {...livePaint(deck, node.id, value, toCommand)}
               />
             );
           case "length":

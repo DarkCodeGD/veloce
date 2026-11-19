@@ -57,6 +57,24 @@ describe("document schema", () => {
     if (!result.success) expect(formatIssues(result.error.issues)).toMatch(/^stops:/);
   });
 
+  it("accepts conic (angular) gradients with tokens at an opacity", () => {
+    const conic = {
+      type: "conic-gradient",
+      angle: 90,
+      center: { x: 0.5, y: 0.25 },
+      stops: [
+        { offset: 0, color: "$color.primary" },
+        { offset: 0.5, color: "$color.accent/40" },
+        { offset: 1, color: "$color.primary" },
+      ],
+    };
+    expect(PaintSchema.safeParse(conic).success).toBe(true);
+    const oneStop = { ...conic, stops: conic.stops.slice(0, 1) };
+    const result = PaintSchema.safeParse(oneStop);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(formatIssues(result.error.issues)).toMatch(/^stops:/);
+  });
+
   it("validates theme font references", () => {
     const bad = {
       ...DEFAULT_THEME,

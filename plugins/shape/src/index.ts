@@ -28,7 +28,7 @@ Rectangles and ellipses for backgrounds, cards, dividers, badges and decorative 
 
 **Props**
 - \`shape\`: \`"rect"\` or \`"ellipse"\`
-- \`fill\`: a color (\`"$color.primary"\`, or at an opacity: \`"$color.primary/30"\`), \`"transparent"\`, a gradient \`{ "type": "linear-gradient", "angle": 135, "stops": [{ "offset": 0, "color": "$color.primary" }, { "offset": 1, "color": "$color.secondary" }] }\`, or an image \`{ "type": "image", "asset": "asset:<sha256>" }\`
+- \`fill\`: a color (\`"$color.primary"\`, or at an opacity: \`"$color.primary/30"\`), \`"transparent"\`, a gradient \`{ "type": "linear-gradient", "angle": 135, "stops": [{ "offset": 0, "color": "$color.primary" }, { "offset": 1, "color": "$color.secondary" }] }\` (also \`"radial-gradient"\` with \`center\`, and \`"conic-gradient"\`, an angular sweep, with \`angle\` and \`center\`; see get_docs("layout")), or an image \`{ "type": "image", "asset": "asset:<sha256>" }\`
 - \`stroke\`: \`{ "color": "$color.border", "width": 2, "style"?: "solid" | "dashed" | "dotted" }\`
 - \`radius\`: rounded corners for rect (\`"$radius.md"\` or pixels)
 

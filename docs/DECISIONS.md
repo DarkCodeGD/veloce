@@ -1255,3 +1255,54 @@ and a phone photo can be 40 MB.
    `unref`'d) for decks nobody edits. **Why:** "on close" was the plan, but nothing is
    staged on disk, and decks stay open for the server's life, so closing frees everything
    anyway. The timer does what a sweep on close would have done, while the server runs.
+
+## D66 — The paint picker: gradients and image fills by hand, plus conic gradients
+
+**Status:** Accepted (2026-11-20).
+
+The format has had linear and radial gradients and image fills since phase 1, and agents
+used them, but the inspector could only replace them with a swatch. Golden rule 1 says
+humans and agents can do the same things, so fills and backgrounds now get Figma's paint
+picker in the color popover (D64).
+
+1. **One field, tabs in the popover:** Solid | Linear | Radial | Angular | Image
+   (`components/PaintPicker.tsx`, model in `model/paint.ts`). Fill and background fields (a
+   frame's fill, the slide background, any plugin prop whose schema allows a paint) get it.
+   Plain color fields (text color, strokes) keep the plain picker. **Why:** Figma users look
+   for paints exactly there, and one field means no new inspector rows.
+2. **Switching tabs converts at once,** in one undo step: a color becomes a gradient from it
+   to itself at 0% (`$color.primary` → `$color.primary/0`, so it stays a theme color, as
+   Figma does). Gradients keep their stops, and their angle and center where the new kind
+   has them; a gradient becomes its first stop's color. Image waits for a file. **Why:**
+   instant feedback without losing work while comparing kinds.
+3. **Stops on a bar:** click it to add a stop, colored like the gradient is there. Between
+   two stops of the same theme color the new stop is that token at the opacity in between;
+   otherwise a mixed hex. Drag a stop to move it, past its neighbours too; drag it 32px away
+   to remove it (at least two stay). Each stop is a slider (←/→, Shift ×10, Delete). The
+   selected stop's color uses the theme swatches and the same picker, so tokens and `/NN`
+   work in gradients. Stops are kept sorted, and offsets rounded to 0.1%. **Why:** CSS
+   draws an out-of-order stop at the previous one's position, so a sorted list renders the
+   way it reads.
+4. **Conic gradients are new in the schema:** `{ "type": "conic-gradient", "angle"?, "center"?,
+   "stops" }`, CSS `conic-gradient(from …deg at x% y%, …)`. The type name follows CSS like the
+   other two; the UI calls it Angular (Figma's name). Adding it to the union is additive,
+   and format v1 hasn't shipped, so no migration. Contrast lint measures it like the other
+   gradients (it samples stops from the computed style). **Not added:** diamond gradients (no
+   CSS equivalent), and video fills (they belong to the video plugin).
+5. **Image fills** upload through the same route as drops (D65 sweeps a cancelled one), or
+   reuse one of the deck's images, with a fit: Cover, Fit, Stretch, Tile. The upload's
+   `asset.add` goes in the same transaction as the paint change. An image the paint stops
+   using is unregistered in that step when nothing else uses it (like replacing an image
+   element's picture), so undo brings both back.
+6. **Objects are written whole:** angle, center and fit are always included, even at their
+   defaults. **Why:** `node.update` merges an object of the same `type` into the old one, so
+   a field left out would keep its old value.
+7. **The popover closes like Figma's (amends D64 §5):** a header with what's being edited and
+   a ✕, Esc, the trigger, or a press elsewhere in the panels. Presses on the canvas don't
+   close it, so panning (middle button, Space + drag) and zooming keep it open while you
+   look at the result. Selecting another layer (or slide) does close it: the inspector's
+   fields are keyed by what they show, so they remount instead of a picker carrying over
+   to a layer of the same type. Tooltips sit above the popover.
+8. **Later:** on-canvas gradient handles (drag the ends of a linear gradient, the center of
+   a radial one on the slide). That's canvas tool work, so it waits for round 5's tool bar
+   (D62).
