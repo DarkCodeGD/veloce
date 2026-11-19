@@ -384,6 +384,49 @@ describe.skipIf(problem !== null)("Phase 3: canvas zoom and pan", { timeout: 60_
     }
   });
 
+  it("never zooms the whole page: Ctrl + scroll over a panel and Ctrl + '+' in a field", async () => {
+    // Record, after the app's own listeners, whether each wheel's default (the browser's page
+    // zoom for Ctrl + wheel) was cancelled.
+    await page.evaluate(() => {
+      const w = window as unknown as { cancelled: boolean[] };
+      w.cancelled = [];
+      window.addEventListener("wheel", (e) => w.cancelled.push(e.defaultPrevented));
+    });
+    const cancelled = () =>
+      page.evaluate(() => (window as unknown as { cancelled: boolean[] }).cancelled);
+    await select("Box");
+    for (const panel of ['[aria-label="Layers"]', ".inspector"]) {
+      const b = await page.locator(panel).first().boundingBox();
+      if (!b) throw new Error(`no ${panel}`);
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await page.keyboard.down("Control");
+      await page.mouse.wheel(0, -100);
+      await page.keyboard.up("Control");
+      await page.mouse.wheel(0, 50); // plain scrolling still scrolls the panel
+    }
+    await expect.poll(async () => (await cancelled()).length).toBe(4);
+    expect(await cancelled()).toEqual([true, false, true, false]);
+    expect(await scale()).toBeCloseTo(fitScale, 3); // and the canvas didn't zoom either
+
+    // Ctrl + "+" while typing in an inspector field: the canvas zooms, the page doesn't.
+    const field = page.locator(".inspector input[type='text']").first();
+    await field.focus();
+    const prevented = await field.evaluate((el) => {
+      const e = new KeyboardEvent("keydown", {
+        key: "=",
+        code: "Equal",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      return !el.dispatchEvent(e);
+    });
+    expect(prevented).toBe(true);
+    await settled();
+    expect(await scale()).toBeGreaterThan(fitScale);
+    await field.blur();
+  });
+
   it("produces no page errors", () => {
     expect(h.pageErrors).toEqual([]);
   });

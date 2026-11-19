@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (467 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (469 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -370,6 +370,14 @@ The editor becomes an app: Blender's workspaces for different kinds of work, Fig
 panels with the important options in reach. Done before Motion, so Phase 4 lands as the
 Animate and Present workspaces instead of being squeezed into today's screen.
 
+- [ ] Tool bar in the top bar's centre (D62): Select (V), Frame (F), Shape (R / O, with a
+      menu for other shapes), Text (T), Image and Hand (H). Click to place at the default
+      size, or drag to draw; the new layer is selected, and a new text layer starts typing.
+      One `node.insert` per creation, the op agents use (golden rule 1). Shortcuts in every
+      tooltip; Esc goes back to Select. On narrow windows the tools fold into one menu.
+      Today a text box, shape or frame can only come from pasting, dropping or the AI, which
+      blocks this phase's "a full deck can be built by hand"
+- [ ] Size badge under the selection (`176 × 36`, in slide pixels), live while resizing
 - [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
       and its shortcut; the deck switcher, Follow AI / Live and Present stay in the bar on
       every workspace (AI activity is never hidden in one workspace)

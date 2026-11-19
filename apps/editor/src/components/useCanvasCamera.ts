@@ -228,7 +228,18 @@ export function useCanvasCamera({
     el?.addEventListener("pointerenter", enter);
     el?.addEventListener("pointerleave", leave);
 
+    // Mod + "+"/"-" zoom the canvas even while typing (Figma does too): they type nothing, and
+    // the browser's page zoom is blocked app-wide (page-zoom.ts). In the capture phase, so
+    // fields that keep their keys from editor shortcuts (stopPropagation) can't swallow it.
+    const onZoomKey = (e: KeyboardEvent) => {
+      const zoom = zoomKeyDirection(e);
+      if (zoom === 0) return;
+      e.preventDefault();
+      if (zoom > 0) zoomIn();
+      else zoomOut();
+    };
     const onKeyDown = (e: KeyboardEvent) => {
+      if (zoomKeyDirection(e) !== 0) return; // onZoomKey's
       if (typing(e.target)) return; // typing in a field or into a text layer
       if (e.code === "Space" && (over || latest.current.spaceHeld)) {
         e.preventDefault(); // no page scroll, no pressing a focused button
@@ -236,12 +247,7 @@ export function useCanvasCamera({
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
-      const zoom = zoomKeyDirection(e);
-      if (zoom !== 0) {
-        e.preventDefault(); // not the browser's page zoom
-        if (zoom > 0) zoomIn();
-        else zoomOut();
-      } else if (e.shiftKey && !mod && !e.altKey) {
+      if (e.shiftKey && !mod && !e.altKey) {
         // By physical key: Shift+1 types "!" (and other symbols on other layouts).
         const action = { Digit1: zoomToFit, Digit0: zoomTo100, Digit2: zoomToSelection }[e.code];
         if (action) {
@@ -254,12 +260,14 @@ export function useCanvasCamera({
       if (e.code === "Space") setSpaceHeld(false);
     };
     const onBlur = () => setSpaceHeld(false);
+    window.addEventListener("keydown", onZoomKey, true);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     return () => {
       el?.removeEventListener("pointerenter", enter);
       el?.removeEventListener("pointerleave", leave);
+      window.removeEventListener("keydown", onZoomKey, true);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);

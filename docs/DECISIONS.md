@@ -1096,6 +1096,12 @@ it was intended, so the final lint run never came back clean.
    document is the deck and the view is per viewer.
 6. **The overlay needs no zoom-specific code.** It already measures the rendered DOM, so
    outlines, handles, guides and the text editor stay exact at every zoom.
+7. **The browser's page zoom is blocked app-wide** (`page-zoom.ts`, installed at startup):
+   Ctrl/⌘ + scroll and pinch over a panel do nothing, and Mod + "+"/"-" zoom the canvas
+   even while typing in a field (like Figma). Both listen in the capture phase on `window`,
+   because the inspector's fields stop their keys from reaching editor shortcuts. **Why:**
+   scaling the whole UI by accident is never what you meant in a design tool. People who
+   need a bigger UI keep the OS display scale, and Preferences (D53) will get a UI scale.
 
 ## D61 — Text toolbar: style, color and alignment; whole-text formatting lives on the layer
 
@@ -1133,3 +1139,24 @@ it was intended, so the final lint run never came back clean.
    body layer didn't match a "display" layer. Core's `TEXT_STYLE_CSS` / `textStyleCss` is now
    the one list that the text plugin and the editor's typing surface both apply. **Why:** the
    two had drifted apart once already, and that caused this bug.
+
+## D62 — Creation tools live in the top bar's centre, not floating over the canvas
+
+**Status:** Accepted (2026-11-19). Extends D53.
+
+The editor gets a tool bar (Select, Frame, Shape, Text, Image, Hand). Figma floats its
+tools in a pill at the bottom of the canvas; Veloce puts them in the centre of the top bar,
+between the deck switcher and menus (left) and Follow AI / Live / Present (right).
+
+1. **Next to the rest of the app's controls.** **Why (the user's call):** Veloce has a top
+   bar and Figma doesn't, so the tools sit with the menus and the deck controls, a short
+   trip from one to the other. Keynote, Google Slides and PowerPoint put insert tools at
+   the top too, so it's where presentation users look.
+2. **In the bar, not floating over the canvas's top edge.** **Why:** a floating bar there
+   would collide with what already pops up above layers (the text toolbar, D61, and
+   selection labels), and it would cover the part of the slide where titles usually are.
+   In the bar it covers nothing.
+3. **Creating a layer is one `node.insert`,** the same op an agent sends (golden rule 1), so
+   undo, history and the AI's view of the deck need nothing new.
+4. **Narrow windows fold the tools into one menu,** so the bar never wraps or hides the AI
+   controls (D53: AI activity is never hidden).
