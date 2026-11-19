@@ -212,7 +212,12 @@ describe("building a deck", () => {
     expect(upsert.text).toMatch(/ignored-position · slide card · stray/);
     expect(upsert.text).toMatch(/add positioning: "free"/);
     expect(upsert.text).not.toMatch(/ignored-position · slide card · badge/);
-    expect((await call("get_docs", { topic: "layout" })).text).toMatch(/## Free layers/);
+    const layoutDocs = (await call("get_docs", { topic: "layout" })).text;
+    expect(layoutDocs).toMatch(/## Free layers/);
+    // Gaps an agent hit (feedback round 2): rotation, inside strokes, the root's centring.
+    expect(layoutDocs).toMatch(/## Rotation[\s\S]*upright box/);
+    expect(layoutDocs).toMatch(/Strokes are drawn inside the frame's edge/);
+    expect(layoutDocs).toMatch(/centered top-to-bottom.*"align": "center"/);
   });
 
   it("never silently overwrites a slide the user edited, and keeps the slide's root ID", async () => {

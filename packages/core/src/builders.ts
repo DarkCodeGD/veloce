@@ -10,7 +10,11 @@ import type { Theme } from "./schema/theme.js";
 
 export const DEFAULT_STAGE: Stage = { width: 1920, height: 1080 };
 
-/** The root layout new slides get: a centered column with comfortable margins. */
+/**
+ * The root layout new slides get: a vertically centered column with comfortable margins.
+ * Children stretch across (align: stretch), so hug-width content sits left until the slide
+ * says `align: "center"`.
+ */
 export const DEFAULT_SLIDE_LAYOUT: Layout = {
   mode: "stack",
   direction: "column",

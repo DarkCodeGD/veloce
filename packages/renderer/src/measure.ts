@@ -53,7 +53,7 @@ export function measureSlide(
     const m: NodeMeasurement = { bounds: toStage(box) };
     const isFrame = el.classList.contains("v-frame");
     const clipped = style(el).overflow === "hidden";
-    const content = isFrame ? childRects(el) : contentRects(el, style);
+    const content = isFrame ? childRects(el, style) : contentRects(el, style);
     const overflow = clipped ? null : overflowOf(box, content, scale);
     if (overflow) m.overflow = overflow;
     if (!isFrame) {
@@ -67,10 +67,17 @@ export function measureSlide(
 
 const round = (v: number) => Math.round(v * 10) / 10;
 
-/** Rects of a frame's direct children (their own overflow is reported on them). */
-function childRects(el: HTMLElement): DOMRect[] {
+/**
+ * Rects of a frame's flow children (their own overflow is reported on them). Free layers
+ * (absolutely positioned) don't count: they're placed on purpose, and a sticker hanging past
+ * its card's corner is a design, not a frame too small for its content. Leaving the slide
+ * is still caught, by lint's off-canvas rule.
+ */
+function childRects(el: HTMLElement, style: (el: Element) => CSSStyleDeclaration): DOMRect[] {
   return [...el.children].flatMap((c) =>
-    c.getClientRects().length ? [c.getBoundingClientRect()] : [],
+    c.getClientRects().length && style(c).position !== "absolute"
+      ? [c.getBoundingClientRect()]
+      : [],
   );
 }
 

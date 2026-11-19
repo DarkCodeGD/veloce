@@ -212,7 +212,7 @@ const getSlide = defineTool({
   name: "get_slide",
   title: "Get slide",
   description:
-    "Full JSON of one slide (all props), plus where each node ended up after layout (x,y width×height in stage pixels).",
+    "Full JSON of one slide (all props), plus where each node ended up after layout (x,y width×height in stage pixels; for a rotated node, the upright box it covers on screen).",
   input: z.strictObject({ slideId: z.string() }),
   annotations: { readOnlyHint: true },
   async run({ slideId }, ctx) {
@@ -224,7 +224,7 @@ const getSlide = defineTool({
         const [m] = await ctx.render.measure(open.deck, { deckId: open.id, slideIds: [slideId] });
         if (m)
           parts.push(
-            `Measured layout (stage ${m.stage.width}×${m.stage.height}):\n${boundsTable(m)}`,
+            `Measured layout (stage ${m.stage.width}×${m.stage.height}; rotated nodes show the upright box they cover, not their own size):\n${boundsTable(m)}`,
           );
       } catch {
         // Layout info is a bonus; the slide JSON is what was asked for.
@@ -239,7 +239,7 @@ const upsertSlide = defineTool({
   title: "Create or replace a slide",
   description: [
     "Create a slide, or replace an existing one (same slide ID), in one call.",
-    'Describe structure: nodes are elements { "type", "props" } or frames { "layout", "style", "children" }. The slide itself is a frame (default: a centered column).',
+    'Describe structure: nodes are elements { "type", "props" } or frames { "layout", "style", "children" }. The slide itself is a frame (default: a column centered top-to-bottom; children stretch across, so add align: "center" to center hug-width content).',
     "Omitted IDs are generated and returned; give stable IDs to nodes you may change later.",
     "Replacing rebuilds the whole slide: to fix or tweak an existing slide, use apply_ops (node.update by ID) instead.",
     "Returns the slide outline and lint issues to fix.",

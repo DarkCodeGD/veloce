@@ -1040,3 +1040,24 @@ The same feedback round also fixed:
 - Theme docs say which deck's theme they describe.
 - The layout docs cover negative offsets and how `fill` shares space after padding.
 - The outline shows rotation.
+
+## D59 — A frame's overflow counts its flow children only
+
+**Status:** Accepted (2026-11-19). From the agent retest of D58.
+
+An agent hung a rotated "Save 20%" sticker 12px past a CTA card's corner, the pattern our docs
+recommend. Lint reported it as an error, "children are 23px too tall". There was no way to say
+it was intended, so the final lint run never came back clean.
+
+1. **Free layers (absolutely positioned) don't count toward their frame's overflow.** The
+   renderer's `measure` leaves them out of a frame's content extents. **Why:** they are placed
+   by hand, so hanging past an edge is a design choice, not a frame too small for its
+   content. The flow is where the "this doesn't fit" bugs come from, and it is still
+   measured. A free layer's own content overflow (text too big for its fixed box) is still
+   reported on it.
+2. **Leaving the slide is still caught,** by `off-canvas`, for free layers too.
+3. **This also applies to Free (absolute) frames.** Every child there is free, so they never
+   report overflow. A fixed-size Free frame is a canvas you place things on, as in Figma,
+   where content past a frame is shown unless the frame clips.
+4. **Marking any finding as intentional** is a separate, wider feature (Phase 8), so it isn't
+   bolted onto this rule.

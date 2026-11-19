@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (425 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (426 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -112,6 +112,13 @@
     Lint: `ignored-padding`, a balanced `empty-space`, and free-layer `overlap` advice.
     Docs: negative offsets, `fill`, theme docs that name their deck. The user's decks were
     migrated (3 layers in 2 decks).
+  - **Agent feedback round 2 (D59):** the retest needed no workarounds. A frame's `overflow`
+    now counts only its flow children: free layers hanging past an edge are deliberate,
+    and `off-canvas` still catches them leaving the slide. Docs: the slide root is centered
+    top-to-bottom only (`align: "center"` for hug-width content), rotation (around the
+    centre, the upright box is what `position` describes), strokes drawn inside, and
+    `get_slide` bounds of rotated nodes. Acknowledging intentional lint findings went to
+    Phase 8.
   - **Next:** round 4: canvas zoom and pan.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
@@ -474,6 +481,11 @@ a self-contained HTML file that plays the animations, or a video.
       drifts between content slides (usually `justify: "center"` with different content
       heights). Until then, the layout docs tell agents to use `justify: "start"` on content
       slides
+- [ ] Acknowledge intentional lint findings: a way for an agent or a person to mark one
+      issue as "meant that way" so it stops showing in lint results, without silencing the
+      rule everywhere. Design questions first: where the acknowledgement lives (on the node,
+      by rule), whether it survives edits that change the measurement, and how the editor
+      shows it. (Agent feedback round 2: an intentional overhang kept failing the final lint.)
 - [ ] Built-in assistant: a chat panel in the editor for people without an MCP client.
       Bring your own key: Anthropic, or any OpenAI-compatible endpoint (which also covers
       local models like Ollama). It's one more MCP client of the same server (origin

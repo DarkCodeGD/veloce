@@ -95,7 +95,7 @@ export const SlideInputSchema = z.strictObject({
   notes: z.string().max(50_000).optional().describe("Speaker notes."),
   hidden: z.boolean().optional(),
   layout: LayoutSchema.optional().describe(
-    'Layout of the slide\'s root frame. Default: a centered column with "$space.xl" padding and "$space.md" gap.',
+    'Layout of the slide\'s root frame. Default: a column centered top-to-bottom, with "$space.xl" padding and "$space.md" gap. Children stretch across; add align: "center" to center hug-width content.',
   ),
   style: FrameStyleSchema.optional().describe("Style of the slide's root frame."),
   children: z.array(NodeInputSchema).max(1000).describe("The slide's content."),

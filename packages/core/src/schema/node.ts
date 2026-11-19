@@ -118,7 +118,10 @@ const nodeCommon = {
   locked: z.boolean().optional(),
   /** 0–1. Default: 1. */
   opacity: z.number().min(0).max(1).optional(),
-  /** Degrees, clockwise. Default: 0. */
+  /**
+   * Degrees, clockwise, around the layer's centre. Default: 0. Doesn't change layout:
+   * `position`, `anchor` and sizes describe the upright box.
+   */
   rotation: z.number().min(-360).max(360).optional(),
   /** Default: `"hug"` (plugins may declare their own default, e.g. text fills width). */
   width: SizingSchema.optional(),

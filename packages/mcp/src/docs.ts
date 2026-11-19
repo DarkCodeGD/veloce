@@ -57,9 +57,13 @@ One layer that should sit on top of an auto-layout frame (a badge on a card, a s
 
 ## Frame style (\`style\`)
 \`{ "fill": color | gradient | image, "stroke": { "color", "width" }, "radius": "$radius.lg", "shadow": "$shadow.md", "clip": true }\`
+Strokes are drawn inside the frame's edge and take no room: adding one never moves the content or the free layers (still measured from the outer edge), so a stroked card lines up with unstroked ones.
+
+## Rotation (\`rotation\` on any node)
+Degrees, clockwise, around the layer's centre. It doesn't affect layout: \`position\`, \`anchor\` and sizes describe the upright box, so a rotated sticker at \`{ "x": -12, "y": -12 }\` has its upright box 12px past the corner and its turned corners a little further. get_slide's measured bounds for a rotated node are the upright box it covers on screen (larger than its own size).
 
 ## Patterns
-Title slide (the slide root is already a centered column):
+Title slide (the slide root is a column centered top-to-bottom; its children stretch across, so add \`"align": "center"\` to the slide layout to center hug-width things like a button frame):
 \`{ "children": [ { "type": "text", "props": { "content": "Acme", "style": "$text.display" } }, { "type": "text", "props": { "content": "Tagline", "style": "$text.h3", "color": "$color.muted" } } ] }\`
 
 Two columns:

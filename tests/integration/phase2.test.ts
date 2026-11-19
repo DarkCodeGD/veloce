@@ -363,6 +363,52 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
     expect(tight.text).toMatch(/overflow · slide wrapping · wrap-left-380: .*too tall/);
   });
 
+  it.skipIf(!visual)("free layers hanging past their frame aren't overflow", async () => {
+    // From an agent run: a rotated sticker 12px past a CTA's corner read as "children are
+    // 23px too tall", with no way to say it was intended.
+    const result = await call("upsert_slide", {
+      slide: {
+        id: "hanging",
+        layout: { mode: "stack", align: "center", justify: "center" },
+        children: [
+          {
+            id: "h-cta",
+            width: 600,
+            layout: { mode: "stack", padding: 16 },
+            style: { fill: "$color.surface" },
+            children: [
+              { id: "h-cta-text", type: "text", props: { content: "Start free today" } },
+              {
+                id: "h-sticker",
+                type: "text",
+                width: "hug",
+                rotation: -8,
+                positioning: "free",
+                position: { x: -12, y: -12 },
+                props: { content: "Save 20%" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(result.text).not.toMatch(/overflow ·/);
+    // The frame's own flow content is still checked: text starting 16px down sticks out of
+    // a 40px box.
+    const tight = await call("apply_ops", {
+      label: "Squeeze",
+      ops: [{ op: "node.update", id: "h-cta", set: { height: 40 } }],
+    });
+    // (Reported on the innermost box that spills: the squeezed text.)
+    expect(tight.text).toMatch(/overflow · slide hanging · h-cta(-text)?: /);
+    // And a free layer that leaves the slide is still flagged.
+    const off = await call("apply_ops", {
+      label: "Off",
+      ops: [{ op: "node.update", id: "h-sticker", set: { position: { x: -800, y: -12 } } }],
+    });
+    expect(off.text).toMatch(/off-canvas · slide hanging · h-sticker/);
+  });
+
   it("refuses requests from other sites (DNS rebinding, cross-site requests, WebSocket hijacking)", async () => {
     const host = new URL(app.url).host;
     expect(await rawStatus(`${app.url}/api/health`, { host })).toBe(200);
