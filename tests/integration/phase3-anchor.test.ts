@@ -1,5 +1,6 @@
 /**
- * Phase 3, round 4 acceptance (anchors, D57): a free layer pinned to its frame's right edge
+ * Phase 3, round 4 acceptance (anchors, D57; frame edges and strokes, D58): a free layer pinned
+ * to its frame's right edge
  * renders at the same inset whatever the frame's size or its own text; dragging it moves it
  * with the pointer (its position counts from the right); Pin X in the inspector switches the
  * anchor without moving it. Real Chromium against the real server.
@@ -15,13 +16,16 @@ let page: Page;
 
 /** Two cards in a row (600 and 900 wide), each with a badge pinned 16px from its top-right. */
 async function build(agent: Client) {
-  const card = (id: string, width: number, badge: string, label: string) => ({
+  const card = (id: string, width: number, badge: string, label: string, stroke = 0) => ({
     id,
     name: id,
     width,
     height: 300,
     layout: { mode: "stack", padding: 24 },
-    style: { fill: "$color.surface" },
+    style: {
+      fill: "$color.surface",
+      ...(stroke ? { stroke: { color: "$color.primary", width: stroke } } : {}),
+    },
     children: [
       { id: `${id}-title`, type: "text", props: { content: "Plan", style: "$text.h3" } },
       {
@@ -43,7 +47,7 @@ async function build(agent: Client) {
       slide: {
         id: "s1",
         layout: { mode: "stack", direction: "row", padding: 60, gap: 40, align: "start" },
-        children: [card("small", 600, "Hot", "New"), card("wide", 900, "Sale", "Limited offer")],
+        children: [card("small", 600, "Hot", "New"), card("wide", 900, "Sale", "Limited offer", 6)],
       },
     },
   });
@@ -60,10 +64,10 @@ const scale = () =>
     .locator(".editor-canvas .slide-surface")
     .evaluate((el) => el.getBoundingClientRect().width / 1920);
 
-/** How far the badge's right edge is inside its card's content box, in slide pixels. */
+/** How far the badge's right edge is inside its card's right edge, in slide pixels. */
 async function rightInset(badge: string, card: string) {
   const [b, c, s] = [await box(badge), await box(card), await scale()];
-  return (c.x + c.width - (b.x + b.width)) / s - 24; // minus the card's padding
+  return (c.x + c.width - (b.x + b.width)) / s; // the card's padding plays no part
 }
 
 async function select(name: string) {
@@ -101,7 +105,16 @@ describe.skipIf(problem !== null)("Phase 3: anchors", { timeout: 60_000 }, () =>
     expect(await rightInset("Sale", "wide")).toBeCloseTo(16, 0); // longer text, wider card
     const s = await scale();
     const [hot, small] = [await box("Hot"), await box("small")];
-    expect((hot.y - small.y) / s).toBeCloseTo(24 + 16, 0);
+    expect((hot.y - small.y) / s).toBeCloseTo(16, 0);
+  });
+
+  it("draws strokes without moving content: the stroked card's title still sits at its padding", async () => {
+    const s = await scale();
+    for (const id of ["small", "wide"]) {
+      const [title, card] = [await box(`${id}-title`), await box(id)];
+      expect((title.x - card.x) / s, id).toBeCloseTo(24, 0);
+      expect((title.y - card.y) / s, id).toBeCloseTo(24, 0);
+    }
   });
 
   it("drags a right-pinned layer with the pointer", async () => {

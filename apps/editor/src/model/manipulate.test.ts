@@ -319,6 +319,10 @@ describe("switching a frame to Free", () => {
   });
 
   it("switches modes keeping padding and gap, and keeps the switch reversible", () => {
+    const layoutOf = (i: ReturnType<typeof indexSlide>, id: string) => {
+      const node = i.nodes.get(id)?.node;
+      return node?.kind === "frame" ? node.layout : null;
+    };
     const applyTo = (deck: typeof listDeck, command: Command | null) => {
       if (!command) throw new Error("no command");
       const result = applyTransaction(deck, {
@@ -343,20 +347,19 @@ describe("switching a frame to Free", () => {
       layout: { mode: "grid", columns: 2, gap: 12, padding: 20 },
     });
 
-    // To Free: padding survives, gap doesn't apply, the children are pinned.
+    // To Free: padding and gap go (free layers are measured from the frame's edges, so the
+    // frozen positions already include the padding: D58), and the children are pinned.
     const free = switchLayout(gx, "list", "absolute", measure);
     expect(free?.label).toBe("Change layout to absolute");
     const freed = applyTo(gapped, free);
     const fx2 = indexSlide(freed.slides[0] as (typeof freed.slides)[0]);
-    expect(fx2.nodes.get("list")?.node).toMatchObject({
-      layout: { mode: "absolute", padding: 20 },
-    });
+    expect(layoutOf(fx2, "list")).toEqual({ mode: "absolute" });
     expect(fx2.nodes.get("one")?.node.position).toEqual({ x: 0, y: 0 });
 
     // And back to a stack: the positions the flow would ignore go.
     const back = applyTo(freed, switchLayout(fx2, "list", "stack", measure));
     const bx = indexSlide(back.slides[0] as (typeof back.slides)[0]);
-    expect(bx.nodes.get("list")?.node).toMatchObject({ layout: { mode: "stack", padding: 20 } });
+    expect(layoutOf(bx, "list")).toEqual({ mode: "stack" });
     for (const id of ["one", "two", "pin"]) expect(bx.nodes.get(id)?.node.position).toBeUndefined();
   });
 });

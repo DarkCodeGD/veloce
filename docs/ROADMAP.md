@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (420 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (425 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -106,6 +106,12 @@
   - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
     replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
     says how to write it.
+  - **Agent feedback round 1 (D58):** from an MCP agent run against anchors. Free layers
+    are now measured from the frame's edges (Figma's way), not inside its padding, so a
+    pinned badge survives padding changes. Strokes are drawn inside without taking room.
+    Lint: `ignored-padding`, a balanced `empty-space`, and free-layer `overlap` advice.
+    Docs: negative offsets, `fill`, theme docs that name their deck. The user's decks were
+    migrated (3 layers in 2 decks).
   - **Next:** round 4: canvas zoom and pan.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with

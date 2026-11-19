@@ -46,57 +46,40 @@ export class CanvasSpace {
   }
 
   /**
-   * Where the layer's layout box sits in its parent frame's content box, in slide pixels:
-   * exactly the `position` that keeps it in place once it's free. Layout offsets ignore CSS
-   * transforms, so rotation (its own or its ancestors') and the canvas zoom don't skew it.
+   * Where the layer's layout box sits in its parent frame, from the frame's top-left corner,
+   * in slide pixels: exactly the `position` that keeps it in place once it's free (free
+   * layers are measured from the frame's edges, not its padding: D58). Layout offsets ignore
+   * CSS transforms, so rotation (its own or its ancestors') and the canvas zoom don't skew it.
    */
   offsetInParent(id: string): Point | null {
     const el = this.element(id);
     const parent = el?.parentElement;
     if (!el || !parent || el.offsetParent !== parent) return null;
-    const style = getComputedStyle(parent);
-    return {
-      x: el.offsetLeft - (Number.parseFloat(style.paddingLeft) || 0),
-      y: el.offsetTop - (Number.parseFloat(style.paddingTop) || 0),
-    };
+    return { x: el.offsetLeft, y: el.offsetTop };
   }
 
   /**
-   * Where a layer's unrotated top-left corner is on screen, measured from a frame's content
-   * box: the `position` that keeps it there once it's a child of that (absolute) frame.
+   * Where a layer's unrotated top-left corner is on screen, measured from a frame's top-left
+   * corner: the `position` that keeps it there once it's a free child of that frame.
    */
   positionIn(id: string, frameId: string): Point | null {
     const rect = this.rect(id);
     const size = this.size(id);
-    const frame = this.element(frameId);
+    const frame = this.rect(frameId);
     if (!rect || !size || !frame) return null;
-    const content = this.#contentOf(frame, this.#rectOf(frame));
     return {
-      x: Math.round(rect.x + rect.w / 2 - size.w / 2 - content.x),
-      y: Math.round(rect.y + rect.h / 2 - size.h / 2 - content.y),
+      x: Math.round(rect.x + rect.w / 2 - size.w / 2 - frame.x),
+      y: Math.round(rect.y + rect.h / 2 - size.h / 2 - frame.y),
     };
   }
 
   /**
-   * A frame's content size (inside its padding) in its own pixels: what anchored positions
-   * are measured in. Layout sizes ignore transforms, so rotated frames measure right.
+   * A frame's size in its own pixels: the area anchored positions are measured in. Layout
+   * sizes ignore transforms, so rotated frames measure right. (Strokes take no room: D58.)
    */
-  contentSize(frameId: string): { w: number; h: number } | null {
+  frameSize(frameId: string): { w: number; h: number } | null {
     const el = this.element(frameId);
-    if (!el) return null;
-    const style = getComputedStyle(el);
-    const pad = (side: "Top" | "Right" | "Bottom" | "Left") =>
-      Number.parseFloat(style[`padding${side}`]) || 0;
-    return {
-      w: Math.max(0, el.clientWidth - pad("Left") - pad("Right")),
-      h: Math.max(0, el.clientHeight - pad("Top") - pad("Bottom")),
-    };
-  }
-
-  /** A frame's content box (inside its padding) on the slide, in slide pixels. */
-  contentRect(frameId: string): Rect | null {
-    const el = this.element(frameId);
-    return el ? this.#contentOf(el, this.#rectOf(el)) : null;
+    return el ? { w: el.clientWidth, h: el.clientHeight } : null;
   }
 
   /** A frame's box inside its padding, in slide pixels. */

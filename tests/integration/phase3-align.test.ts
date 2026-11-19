@@ -130,11 +130,8 @@ describe.skipIf(problem !== null)("Phase 3: align and distribute", { timeout: 60
     await oneStep(() => page.keyboard.press("Alt+d"));
     const green = await box("Green");
     const board = await box("board");
-    const scale = await page
-      .locator(".editor-canvas .slide-surface")
-      .evaluate((el) => el.getBoundingClientRect().width / 1920);
-    // The board's content box ends 20px (its padding) inside its right edge.
-    expect(Math.abs(green.x + green.width - (board.x + board.width - 20 * scale))).toBeLessThan(1);
+    // Flush with the board's right edge: free layers align to the frame, not its padding.
+    expect(Math.abs(green.x + green.width - (board.x + board.width))).toBeLessThan(1);
     expect(await bar().getByRole("button", { name: "Distribute horizontally" }).isDisabled()).toBe(
       true,
     );

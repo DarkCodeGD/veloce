@@ -714,6 +714,7 @@ dropped → offered in the theme → rendering. HTTP and MCP paths are covered i
 ## D49 — Free positioning per layer: `positioning: "free"`, one shared rule
 
 **Status:** Accepted (2026-11-19). Extends D43 §2 (what Ctrl/Cmd does in a move).
+Amended by D58: positions are measured from the frame's edges, not its content box.
 
 Agents build slides as stacks and grids (golden rule 4), so a person could only reorder
 layers, never put one where they wanted. Now any layer in a stack or grid can leave the flow
@@ -1002,3 +1003,40 @@ something centred.
 6. **Agents** get the field with a description, a docs paragraph with a badge example, a
    `[free at 16,16 from top-right]` outline marker, and the `ignored-position` lint for an
    anchor the flow ignores.
+
+## D58 — Free layers are measured from the frame's edges; strokes take no room
+
+**Status:** Accepted (2026-11-19). Amends D49 and D57. From the first agent test of anchors.
+
+An agent pinned a badge "16px from the top-right" and it landed 80px from the card's right
+edge, because positions were measured inside the padding. Changing the padding moved the
+badge, which contradicted our own docs. The agent had to wrap the card in an unpadded frame.
+It also had to give the other cards invisible strokes to line up with a stroked one.
+
+1. **`position` is measured from the frame's own edges, for every free layer** (in absolute
+   frames and `positioning: "free"` in stacks/grids, with any anchor). **Why:** that's
+   Figma's model, and what people and agents expect. Padding spaces a frame's flow; it was
+   never meant to move layers that left the flow. Pinned corners now survive padding changes.
+2. **Padding on an absolute frame does nothing**, so it isn't rendered. Lint flags it
+   (`ignored-padding`), the inspector shows a hint instead of the field, and switching a
+   frame to Free drops it (the frozen positions already include it). The schema still
+   accepts it, so older decks and agents' habits don't fail validation.
+3. **Strokes are an inset outline, not a border.** Adding a stroke never moves or shrinks
+   the content (Figma's inside stroke). **Why:** a border took layout space, so a 4px stroke
+   shifted text 4px and made stroked cards lay out differently from unstroked ones.
+4. **No format migration** (format v1 is unshipped). Free layers inside padded frames shift
+   by the padding. The user's decks were migrated once through the running server's MCP: 3
+   layers in 2 decks, one undoable transaction per deck, after a backup. The script isn't
+   idempotent, so it isn't kept in the repo.
+5. **Editor measurements follow the frame's edges:** `offsetInParent`, `positionIn`,
+   `frameSize` for anchors, align's single-layer container, and the drop corner in Free
+   frames. Image drops already used the frame's outer box; they're consistent now.
+
+The same feedback round also fixed:
+
+- `empty-space` no longer flags centred slides (balanced bands) and ignores free layers.
+  One small label in a corner used to count as filling an empty half.
+- `overlap` gives free-layer advice (fill-width text needs `width: "hug"`).
+- Theme docs say which deck's theme they describe.
+- The layout docs cover negative offsets and how `fill` shares space after padding.
+- The outline shows rotation.

@@ -36,6 +36,8 @@ export const LINT_RULES = {
   "empty-space": "Content is bunched at one edge, leaving a large empty band (layout balance).",
   "ignored-position":
     'A layer has a `position` its frame ignores (a stack/grid child that isn\'t `positioning: "free"`).',
+  "ignored-padding":
+    "A free (absolute) frame has padding, which does nothing: free layers are measured from the frame's edges.",
 } as const;
 export type LintRule = keyof typeof LINT_RULES;
 
@@ -71,6 +73,8 @@ export const LINT_LIMITS = {
   tolerance: 2,
   /** Share of the slide height left empty above or below all content before we mention it. */
   emptyBand: 0.4,
+  /** Empty bands above and below closer than this (share of the height) are centred, not bunched. */
+  balancedBands: 0.1,
 } as const;
 
 const SEVERITY_ORDER: Record<LintSeverity, number> = { error: 0, warning: 1, info: 2 };
@@ -228,10 +232,36 @@ function positionRules(slide: Slide): LintIssue[] {
         fix: 'To pin it to an edge of the frame, add positioning: "free" and a position. To keep it in the flow, remove anchor.',
       });
     }
+    if (
+      node.kind === "frame" &&
+      node.layout.mode === "absolute" &&
+      node.layout.padding !== undefined
+    ) {
+      issues.push({
+        rule: "ignored-padding",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [node.id],
+        message: `${describe(node)} is a free (absolute) frame with padding, but its children are placed from the frame's edges, so the padding does nothing.`,
+        fix: "Remove the padding and add the inset to the children's positions, or make the frame a stack/grid if its children should be laid out inside the padding.",
+      });
+    }
     if (node.kind === "frame") for (const child of node.children) visit(child, node.layout);
   };
   visit(slide.root, null);
   return issues;
+}
+
+/** Free layers and everything inside them: placed by position, outside the slide's flow. */
+function freeSubtrees(slide: Slide): Set<string> {
+  const ids = new Set<string>();
+  const visit = (node: Node, parent: Layout | null, inFree: boolean) => {
+    const free = inFree || isFreeLayer(node, parent);
+    if (free) ids.add(node.id);
+    if (node.kind === "frame") for (const child of node.children) visit(child, node.layout, free);
+  };
+  visit(slide.root, null, false);
+  return ids;
 }
 
 /** Every token reference must exist in the theme, or it silently renders with fallback styling. */
@@ -300,9 +330,12 @@ function themeGroup(theme: Theme, group: string): Record<string, unknown> {
  */
 function balanceRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[] {
   if (!m) return [];
+  // The flow's content only: a small free label in a corner doesn't fill an empty half.
+  const free = freeSubtrees(slide);
   let top = Number.POSITIVE_INFINITY;
   let bottom = Number.NEGATIVE_INFINITY;
   for (const { node } of visibleNodes(slide)) {
+    if (free.has(node.id)) continue;
     const bounds = node.kind === "element" ? m.nodes[node.id]?.bounds : undefined;
     if (!bounds || bounds.height <= 0) continue;
     top = Math.min(top, bounds.y);
@@ -314,6 +347,8 @@ function balanceRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[
   const above = top / height;
   const band = Math.max(above, below);
   if (band <= LINT_LIMITS.emptyBand) return [];
+  // Equal space above and below is a centred slide (a title slide), not content at one edge.
+  if (Math.abs(above - below) < LINT_LIMITS.balancedBands) return [];
   const where = below >= above ? "bottom" : "top";
   return [
     {
@@ -333,6 +368,7 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
   const issue = (i: Omit<LintIssue, "slideId">) => issues.push({ slideId: slide.id, ...i });
   const tol = LINT_LIMITS.tolerance;
   const scale = 1920 / m.stage.width; // compare font sizes as if on a 1920-wide stage
+  const free = freeSubtrees(slide);
   const visible = visibleNodes(slide);
   const measured = visible.flatMap((v) => {
     const nm = m.nodes[v.node.id];
@@ -424,7 +460,10 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
           severity: "warning",
           nodeIds: [a.node.id, b.node.id],
           message: `${describe(a.node)} and ${describe(b.node)} overlap (${Math.round((overlap / smaller) * 100)}% of the smaller one).`,
-          fix: "Put them in a stack/grid frame instead of absolute or free positions, or move one. Ignore if it's intentional (e.g. a caption over an image).",
+          fix:
+            free.has(a.node.id) || free.has(b.node.id)
+              ? "One of them is a free layer. If the other is text, it fills its frame's width by default: give it width: \"hug\" so it stops before the free layer. Otherwise move the free layer (position, anchor). Ignore if it's intentional (e.g. a badge over an image)."
+              : "Put them in a stack/grid frame instead of absolute or free positions, or move one. Ignore if it's intentional (e.g. a caption over an image).",
         });
       }
     }

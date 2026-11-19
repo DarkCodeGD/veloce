@@ -182,6 +182,27 @@ describe("lint: ignored positions", () => {
   });
 });
 
+describe("lint: ignored padding", () => {
+  it("flags padding on a free frame, whose children are placed from its edges", () => {
+    const deck = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          children: [
+            frame({ id: "board", layout: { mode: "absolute", padding: 20 } }),
+            frame({ id: "plain", layout: { mode: "absolute" } }),
+            frame({ id: "card", layout: { mode: "stack", padding: 20 } }),
+          ],
+        }),
+      ],
+    });
+    const issues = lintDeck(deck).filter((i) => i.rule === "ignored-padding");
+    expect(issues.map((i) => i.nodeIds.join())).toEqual(["board"]);
+    expect(issues[0]?.fix).toMatch(/Remove the padding/);
+  });
+});
+
 describe("lint: theme tokens", () => {
   it("flags token references the theme doesn't define, with suggestions", () => {
     const deck = createDeck({
@@ -285,6 +306,50 @@ describe("lint: visual rules (with measurements)", () => {
     expect(bunched?.message).toBe('The bottom 61% of slide "s" is empty.');
     // Centered content (empty bands of ~30% above and below) is balanced.
     expect(lint({ a: box(96, 330, 800, 200), b: box(96, 560, 800, 190) })).toEqual([]);
+  });
+
+  it("leaves a centred short slide alone, and ignores free layers when measuring bands", () => {
+    const titled = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          rootId: "root",
+          children: [
+            text("title", "Title"),
+            text("tag", "v2", { positioning: "free", position: { x: 1800, y: 1040 } }),
+          ],
+        }),
+      ],
+    });
+    const lint = (nodes: Record<string, NodeMeasurement>) =>
+      lintDeck(titled, { measurements: new Map([["s", measured("s", nodes)]]) });
+    // A short title, centred: 46% empty above and below. Balanced, so no issue.
+    expect(lint({ title: box(96, 497, 1600, 86) }).map((i) => i.rule)).not.toContain("empty-space");
+    // Content at the top with a tiny free label at the bottom: the label doesn't fill the gap.
+    const issues = lint({ title: box(96, 96, 1600, 86), tag: box(1800, 1040, 60, 30) });
+    expect(issues.find((i) => i.rule === "empty-space")?.message).toMatch(/bottom 83%/);
+  });
+
+  it("gives free-layer overlaps advice that fits them", () => {
+    const badged = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          rootId: "root",
+          children: [
+            text("name", "Pro"),
+            text("badge", "New", { positioning: "free", position: { x: 300, y: 0 } }),
+          ],
+        }),
+      ],
+    });
+    const m = measured("s", { name: box(96, 96, 1600, 60), badge: box(400, 96, 120, 40) });
+    const overlap = lintDeck(badged, { measurements: new Map([["s", m]]) }).find(
+      (i) => i.rule === "overlap",
+    );
+    expect(overlap?.fix).toMatch(/width: "hug"/);
   });
 
   it("uses the large-text threshold (3:1) for big text", () => {

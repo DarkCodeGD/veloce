@@ -247,7 +247,8 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
       const ghost = { ...box, cx: box.cx + d.x, cy: box.cy + d.y };
       // Into another free frame: keep the layer where it was dropped.
       if (target.flow === "absolute") {
-        const corner = sub(topLeft(ghost), { x: target.content.x, y: target.content.y });
+        // Free layers are measured from the frame's edge (not its padding).
+        const corner = sub(topLeft(ghost), { x: target.rect.x, y: target.rect.y });
         const command = dropInto(index, id, {
           parentId: target.id,
           position: { x: Math.round(corner.x), y: Math.round(corner.y) },

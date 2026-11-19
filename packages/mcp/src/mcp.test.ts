@@ -198,6 +198,7 @@ describe("building a deck", () => {
             positioning: "free",
             anchor: { x: "end" },
             position: { x: 16, y: 16 },
+            rotation: -4,
           },
           { id: "stray", type: "text", props: { content: "Oops" }, position: { x: 10, y: 10 } },
         ],
@@ -205,7 +206,9 @@ describe("building a deck", () => {
     });
     expect(upsert.isError).toBe(false);
     expect(upsert.text).toMatch(/- badge: text "New" \[free at 1500,40\]/);
-    expect(upsert.text).toMatch(/- pin: text "Hot" \[free at 16,16 from top-right\]/);
+    expect(upsert.text).toMatch(
+      /- pin: text "Hot" \[free at 16,16 from top-right\] \[rotated -4°\]/,
+    );
     expect(upsert.text).toMatch(/ignored-position · slide card · stray/);
     expect(upsert.text).toMatch(/add positioning: "free"/);
     expect(upsert.text).not.toMatch(/ignored-position · slide card · badge/);
@@ -384,9 +387,10 @@ describe("themes, docs, previews and decks", () => {
     expect(noDeck).toMatch(/`midnight`: Palette \(Midnight\).*\$color\.on-primary #0a1024/);
     const created = (await call("create_deck", { title: "Docs", theme: "midnight" })).text;
     expect(created).toMatch(/Palette \(Midnight\): background #0a1024/);
-    expect((await call("get_docs", { topic: "theme" })).text).toMatch(
-      /`\$color\.primary`: #8b6dff/,
-    );
+    const themed = (await call("get_docs", { topic: "theme" })).text;
+    expect(themed).toMatch(/`\$color\.primary`: #8b6dff/);
+    // Says whose theme it is (agents read it before create_deck and got the old deck's).
+    expect(themed).toMatch(/theme of the open deck, "Docs"/);
     const types = (await call("list_element_types")).text;
     expect(types).toMatch(/## image: /);
     expect(types).not.toMatch(/\$schema/);

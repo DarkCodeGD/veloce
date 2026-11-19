@@ -46,7 +46,8 @@ export function alignSelection(
   const { space, boxes } = measure(index, ids);
   const only = topmost(index, ids);
   const parentId = only.length === 1 ? index.nodes.get(only[0] ?? "")?.parentId : null;
-  const container = parentId ? (space?.contentRect(parentId) ?? undefined) : undefined;
+  // A single layer aligns to its frame's edges (where free layers are measured from).
+  const container = parentId ? (space?.rect(parentId) ?? undefined) : undefined;
   return run(alignLayers(index, ids, edge, boxes, container));
 }
 

@@ -55,7 +55,8 @@ function outline(node: Node, depth: number, lines: string[]): void {
   // Anchored ones also say which corner their position is measured from.
   const at = `${node.position?.x ?? 0},${node.position?.y ?? 0}${anchorLabel(node)}`;
   const free = node.positioning === "free" ? ` [free at ${at}]` : node.anchor ? ` [at ${at}]` : "";
-  const hidden = `${free}${node.hidden ? " [hidden]" : ""}`;
+  const turned = node.rotation ? ` [rotated ${node.rotation}°]` : "";
+  const hidden = `${free}${turned}${node.hidden ? " [hidden]" : ""}`;
   if (node.kind === "frame") {
     lines.push(`${indent}- ${node.id}: frame (${layoutLabel(node)})${hidden}`);
     for (const child of node.children) outline(child, depth + 1, lines);

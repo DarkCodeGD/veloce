@@ -285,7 +285,7 @@ function pin(index: SlideIndex, node: Node, anchor: Anchor) {
   const space = mainCanvasSpace();
   const parentId = index.nodes.get(node.id)?.parentId;
   const size = space?.size(node.id);
-  const content = parentId ? space?.contentSize(parentId) : null;
+  const content = parentId ? space?.frameSize(parentId) : null;
   if (!size || !content) return;
   void run(setAnchor(index, node.id, anchor, { size, content }));
 }
@@ -544,7 +544,11 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
             {...liveLayout("gap", "Change gap")}
           />
         )}
-        {typeof layout.padding === "object" ? (
+        {layout.mode === "absolute" ? (
+          <p className="inspector-hint">
+            Free layers are placed from the frame's edges; pin them with Pin X / Pin Y.
+          </p>
+        ) : typeof layout.padding === "object" ? (
           <p className="inspector-hint">Padding: per-side values (set by AI).</p>
         ) : (
           <LengthField

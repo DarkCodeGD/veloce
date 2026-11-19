@@ -118,9 +118,9 @@ describe.skipIf(problem !== null)("Phase 3: free positioning", { timeout: 60_000
     const s = await scale();
     const slide = await page.locator(".editor-canvas .slide-surface").boundingBox();
     const badge = await box("badge");
-    // Root padding 80 + position: the badge ignores the column it's in.
-    expect(Math.abs(badge.x - (slide?.x ?? 0) - (80 + 1400) * s)).toBeLessThan(2);
-    expect(Math.abs(badge.y - (slide?.y ?? 0) - (80 + 20) * s)).toBeLessThan(2);
+    // Measured from the slide's edge (the root's padding spaces its flow, not free layers).
+    expect(Math.abs(badge.x - (slide?.x ?? 0) - 1400 * s)).toBeLessThan(2);
+    expect(Math.abs(badge.y - (slide?.y ?? 0) - 20 * s)).toBeLessThan(2);
     // The flow starts at the top as if the badge weren't there.
     const title = await box("title");
     expect(Math.abs(title.y - (slide?.y ?? 0) - 80 * s)).toBeLessThan(2);
@@ -138,7 +138,7 @@ describe.skipIf(problem !== null)("Phase 3: free positioning", { timeout: 60_000
 
     const stored = h.stored("title");
     expect(stored.positioning).toBe("free");
-    expect(stored.position).toEqual({ x: 0, y: 0 }); // top-left of the root's content box
+    expect(stored.position).toEqual({ x: 80, y: 80 }); // from the slide's corner: its padding
     expect(stored.width).toBe(1920 - 160); // was stretched across the column: baked
     expect(stored.height).toBeUndefined(); // text hugs its height by default: still does
     // Not a pixel of movement, and the flow closed up: the card moved into the title's spot.
@@ -212,10 +212,10 @@ describe.skipIf(problem !== null)("Phase 3: free positioning", { timeout: 60_000
     await h.synced();
 
     const card = h.stored("card");
-    expect(card.layout).toEqual({ mode: "absolute", padding: 24 });
+    expect(card.layout).toEqual({ mode: "absolute" }); // the padding is in the positions now
     expect(typeof card.height).toBe("number"); // it hugged its content: now pinned
     expect(card.width).toBeUndefined(); // still stretched across the column
-    expect(h.stored("left").position).toEqual({ x: 0, y: 0 });
+    expect(h.stored("left").position).toEqual({ x: 24, y: 24 });
     expect((h.stored("right").position as Point).x).toBeGreaterThan(100);
     for (const id of ["card", "left", "right"] as const) {
       const now = await box(id);

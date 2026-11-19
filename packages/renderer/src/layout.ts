@@ -85,7 +85,8 @@ export function frameLayoutCss(layout: Layout): CssRecord {
       };
     }
     case "absolute":
-      return { display: "block", padding };
+      // Free children are measured from the frame's edges; padding only spaces a flow.
+      return { display: "block", padding: "0px" };
   }
 }
 
@@ -95,7 +96,12 @@ export function frameStyleCss(node: FrameNode, assetUrl: AssetUrlResolver): CssR
   const style = node.style;
   if (!style) return css;
   if (style.fill !== undefined) css.background = cssPaint(style.fill, assetUrl);
-  if (style.stroke !== undefined) css.border = cssBorder(style.stroke);
+  // Strokes are drawn inside the frame's edge without taking room (Figma): an inset outline,
+  // not a border, so adding a stroke never moves or squeezes the content.
+  if (style.stroke !== undefined) {
+    css.outline = cssBorder(style.stroke);
+    css["outline-offset"] = `${-style.stroke.width}px`;
+  }
   if (style.radius !== undefined) css["border-radius"] = cssLength(style.radius);
   if (style.shadow !== undefined) css["box-shadow"] = cssShadow(style.shadow);
   if (style.clip) css.overflow = "hidden";
@@ -124,15 +130,15 @@ export function nodeBoxCss(
   // Free layers (every child of an absolute frame, `positioning: "free"` ones in stacks and
   // grids) sit at their own position. Absolutely positioned children don't take part in
   // flexbox or grid placement, so the flow closes up around them.
-  // `anchor` picks the edge `position` is measured from on each axis (core's anchor.ts):
-  // start → left/top, end → right/bottom (inward), center → from the content box's middle.
+  // Measured from the frame's edges, not its padding (which only spaces the flow), with
+  // `anchor` picking the edge on each axis (core's anchor.ts): start → left/top,
+  // end → right/bottom (inward), center → from the frame's middle.
   if (isFreeLayer(node, parent)) {
-    const [padTop, padRight, padBottom, padLeft] = paddingSides(parent.padding);
     const x = node.position?.x ?? 0;
     const y = node.position?.y ?? 0;
     css.position = "absolute";
-    const h = anchorCss(node.anchor?.x ?? "start", x, [padLeft, padRight], ["left", "right"]);
-    const v = anchorCss(node.anchor?.y ?? "start", y, [padTop, padBottom], ["top", "bottom"]);
+    const h = anchorCss(node.anchor?.x ?? "start", x, ["left", "right"]);
+    const v = anchorCss(node.anchor?.y ?? "start", y, ["top", "bottom"]);
     Object.assign(css, h.css, v.css);
     // Centring shifts the box back by half its own size; that composes with its rotation
     // (the translate applies in the frame's axes, the rotation about the box's centre).
@@ -140,8 +146,8 @@ export function nodeBoxCss(
       const shift = `translate(${h.center ? "-50%" : "0"}, ${v.center ? "-50%" : "0"})`;
       css.transform = css.transform ? `${shift} ${css.transform}` : shift;
     }
-    css.width = absoluteSize(size.width, [padLeft, padRight], h.inset, "max-content");
-    css.height = absoluteSize(size.height, [padTop, padBottom], v.inset, "auto");
+    css.width = absoluteSize(size.width, h.inset, "max-content");
+    css.height = absoluteSize(size.height, v.inset, "auto");
     return css;
   }
 
@@ -171,31 +177,24 @@ export function nodeBoxCss(
 function anchorCss(
   edge: AnchorEdge,
   offset: number,
-  [padStart, padEnd]: [string, string],
   [start, end]: [string, string],
 ): { css: CssRecord; center: boolean; inset: number } {
-  if (edge === "end")
-    return { css: { [end]: `calc(${padEnd} + ${offset}px)` }, center: false, inset: offset };
+  if (edge === "end") return { css: { [end]: `${offset}px` }, center: false, inset: offset };
+  // Centred: from the frame's middle; "fill" stays inside on both sides of the shifted centre.
   if (edge === "center") {
-    const middle = `calc(${padStart} + (100% - ${padStart} - ${padEnd}) / 2 + ${offset}px)`;
-    // "fill" stays inside the frame on both sides of the shifted centre.
-    return { css: { [start]: middle }, center: true, inset: 2 * Math.abs(offset) };
+    return {
+      css: { [start]: `calc(50% + ${offset}px)` },
+      center: true,
+      inset: 2 * Math.abs(offset),
+    };
   }
-  return { css: { [start]: `calc(${padStart} + ${offset}px)` }, center: false, inset: offset };
+  return { css: { [start]: `${offset}px` }, center: false, inset: offset };
 }
 
-/**
- * Absolute children: positions are relative to the frame's content box (inside its padding).
- * `"fill"` takes the content box minus the layer's inset from its anchored edge.
- */
-function absoluteSize(
-  v: ResolvedSizing,
-  [padStart, padEnd]: [string, string],
-  offset: number,
-  fit: string,
-): string {
+/** Free layers' sizes: `"fill"` takes the frame minus the layer's inset from its anchored edge. */
+function absoluteSize(v: ResolvedSizing, inset: number, fit: string): string {
   if (typeof v === "number") return `${v}px`;
-  if (v === "fill") return `calc(100% - ${padStart} - ${padEnd} - ${offset}px)`;
+  if (v === "fill") return `calc(100% - ${inset}px)`;
   return fit;
 }
 

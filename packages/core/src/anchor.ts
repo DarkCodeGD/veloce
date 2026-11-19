@@ -2,13 +2,16 @@
  * Anchors for free layers: which edge of the frame a layer's `position` is measured from, per
  * axis (Figma's constraints). A badge anchored to a card's top-right corner stays there when
  * the card, its padding or the badge's own text changes size.
+ * `content` below is the frame's size (inside its stroke, which takes no room).
  *
- * What `position` means on each axis (all measured inside the frame's padding, on the
- * layer's unrotated layout box; rotation turns it about its centre and changes nothing here):
- * - `"start"` (default): from the content box's left/top edge to the layer's left/top edge.
- * - `"end"`: from the content box's right/bottom edge to the layer's right/bottom edge,
- *   positive inward (like CSS `right`/`bottom`): `{ x: 16 }` is 16px in from the right.
- * - `"center"`: from the content box's centre to the layer's centre, positive right/down.
+ * What `position` means on each axis, measured from the frame's own edges (Figma's way: the
+ * frame's padding spaces its flow, never its free layers; strokes take no room either), on the
+ * layer's unrotated layout box (rotation turns it about its centre and changes nothing here):
+ * - `"start"` (default): from the frame's left/top edge to the layer's left/top edge.
+ * - `"end"`: from the frame's right/bottom edge to the layer's right/bottom edge, positive
+ *   inward (like CSS `right`/`bottom`): `{ x: 16 }` is 16px in from the right.
+ * - `"center"`: from the frame's centre to the layer's centre, positive right/down.
+ * Negative values are fine: they reach past the edge (a badge hanging over a corner).
  *
  * Pure math, shared by the renderer (CSS), the editor (gestures keep working on anchored
  * layers) and anything that converts between anchors without moving the layer.

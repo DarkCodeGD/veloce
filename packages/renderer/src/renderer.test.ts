@@ -12,7 +12,7 @@ import {
 } from "@veloce/core";
 import { defineElement, definePlugin, z } from "@veloce/plugin-api";
 import { afterEach, describe, expect, it } from "vitest";
-import { frameLayoutCss, nodeBoxCss } from "./layout.js";
+import { frameLayoutCss, frameStyleCss, nodeBoxCss } from "./layout.js";
 import { SlideRenderer } from "./slide-renderer.js";
 import { SlideView } from "./slide-view.js";
 
@@ -125,9 +125,7 @@ describe("layout → CSS", () => {
       "column-gap": "24px",
       "row-gap": "24px",
     });
-    expect(frameLayoutCss({ mode: "absolute", padding: { x: 10 } }).padding).toBe(
-      "0px 10px 0px 10px",
-    );
+    expect(frameLayoutCss({ mode: "stack", padding: { x: 10 } }).padding).toBe("0px 10px 0px 10px");
   });
 
   it("sizes children by their parent's layout", () => {
@@ -166,9 +164,9 @@ describe("layout → CSS", () => {
       nodeBoxCss(placed, { mode: "absolute", padding: 20 }, { width: "fill", height: 100 }),
     ).toMatchObject({
       position: "absolute",
-      left: "calc(20px + 40px)",
-      top: "calc(20px + 50px)",
-      width: "calc(100% - 20px - 20px - 40px)",
+      left: "40px", // from the frame's edge: padding only spaces a flow
+      top: "50px",
+      width: "calc(100% - 40px)",
       height: "100px",
     });
     expect(nodeBoxCss(node, null, { width: 1, height: 1 })).toMatchObject({
@@ -183,8 +181,8 @@ describe("layout → CSS", () => {
     const css = nodeBoxCss(free, padded, { width: 300, height: "hug" });
     expect(css).toMatchObject({
       position: "absolute",
-      left: "calc(10px + 40px)",
-      top: "calc(20px + 50px)",
+      left: "40px",
+      top: "50px",
       width: "300px",
       height: "auto",
     });
@@ -199,6 +197,15 @@ describe("layout → CSS", () => {
     expect(nodeBoxCss(free, null, { width: 1, height: 1 }).left).toBe("0");
   });
 
+  it("draws frame strokes inside the edge without taking room", () => {
+    const framed = frame({ id: "f", style: { stroke: { color: "#ff0000", width: 4 } } });
+    const css = frameStyleCss(framed, () => "");
+    expect(css).toMatchObject({ outline: "4px solid #ff0000", "outline-offset": "-4px" });
+    expect(css.border).toBeUndefined();
+    // A free frame's padding would only shift its free children: it isn't applied.
+    expect(frameLayoutCss({ mode: "absolute", padding: 40 }).padding).toBe("0px");
+  });
+
   it("measures anchored free layers from the right, the bottom or the middle", () => {
     const padded = { mode: "absolute", padding: { x: 10, y: 20 } } as const;
     const badge = element(
@@ -208,9 +215,9 @@ describe("layout → CSS", () => {
     );
     const css = nodeBoxCss(badge, padded, { width: "fill", height: "hug" });
     expect(css).toMatchObject({
-      right: "calc(10px + 16px)",
-      top: "calc(20px + 8px)",
-      width: "calc(100% - 10px - 10px - 16px)", // fill: from the left edge to its inset
+      right: "16px",
+      top: "8px",
+      width: "calc(100% - 16px)", // fill: from the left edge to its inset
       transform: "rotate(15deg)",
     });
     expect(css.left).toBeUndefined();
@@ -221,8 +228,8 @@ describe("layout → CSS", () => {
       { id: "c", anchor: { x: "center", y: "end" }, position: { x: -30, y: 12 }, rotation: 15 },
     );
     expect(nodeBoxCss(centered, padded, { width: 200, height: 40 })).toMatchObject({
-      left: "calc(10px + (100% - 10px - 10px) / 2 + -30px)",
-      bottom: "calc(20px + 12px)",
+      left: "calc(50% + -30px)",
+      bottom: "12px",
       transform: "translate(-50%, 0) rotate(15deg)",
     });
   });

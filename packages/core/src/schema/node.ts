@@ -69,7 +69,10 @@ export const GridLayoutSchema = z.strictObject({
   align: AlignSchema.optional(),
 });
 
-/** Children are placed with `position: { x, y }` relative to the frame's top-left. */
+/**
+ * Children are placed with `position: { x, y }` from the frame's edges. `padding` is still
+ * accepted (older decks, agents' habits) but does nothing here: lint flags it.
+ */
 export const AbsoluteLayoutSchema = z.strictObject({
   mode: z.literal("absolute"),
   padding: PaddingSchema.optional(),
@@ -121,7 +124,8 @@ const nodeCommon = {
   width: SizingSchema.optional(),
   height: SizingSchema.optional(),
   /**
-   * Where the layer sits in its frame, from the frame's content box (inside its padding).
+   * Where the layer sits in its frame, from the frame's top-left corner (or the edges its
+   * `anchor` names). The frame's padding only spaces its flow, so it never moves free layers.
    * Used when the parent frame's layout is `absolute`, or when this layer is
    * `positioning: "free"`; ignored otherwise (see `isFreeLayer`).
    */

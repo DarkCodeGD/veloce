@@ -306,12 +306,14 @@ export function switchLayout(
   const from = frame.layout;
   const padding = from.padding === undefined ? {} : { padding: from.padding };
   const gap = from.mode !== "absolute" && from.gap !== undefined ? { gap: from.gap } : {};
+  // Into Free, padding goes: free children are measured from the frame's edges, and their
+  // frozen positions already include it (D58).
   const layout: Layout =
     mode === "grid"
       ? { mode, columns: 2, ...gap, ...padding }
       : mode === "stack"
         ? { mode, ...gap, ...padding }
-        : { mode, ...padding };
+        : { mode };
   const ops: Op[] = [{ op: "node.update", id: frameId, set: { layout } }];
   if (mode === "absolute") ops.push(...freezeFrameOps(index, frameId, measure));
   if (from.mode === "absolute") {

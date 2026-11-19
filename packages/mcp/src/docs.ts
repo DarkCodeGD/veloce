@@ -40,17 +40,17 @@ Describe structure and let the engine compute positions: content reflows when te
   - \`align\` (cross axis): start | center | end | stretch (default stretch).
   - \`justify\` (main axis): start | center | end | space-between | space-around | space-evenly.
 - \`{ "mode": "grid", "columns": 3, "gap", "rowGap", "padding", "align" }\`: equal-width columns.
-- \`{ "mode": "absolute", "padding" }\`: children use \`position: { x, y }\`. Only for overlaps and decoration.
+- \`{ "mode": "absolute" }\`: children use \`position: { x, y }\` from the frame's edges (padding does nothing here). Only for overlaps and decoration.
 
 ## Free layers (\`positioning: "free"\`)
-One layer that should sit on top of an auto-layout frame (a badge on a card, a sticker, an arrow pointing at something) doesn't need an absolute frame: give it \`"positioning": "free"\` and a \`position: { x, y }\` (from the frame's content box, inside its padding). It leaves the flow: its siblings close up as if it weren't there, and it's drawn above the siblings before it. Keep everything else in the flow. A \`position\` without \`positioning: "free"\` is ignored in stacks and grids (lint: ignored-position).
+One layer that should sit on top of an auto-layout frame (a badge on a card, a sticker, an arrow pointing at something) doesn't need an absolute frame: give it \`"positioning": "free"\` and a \`position: { x, y }\`, measured from the frame's own edges: the frame's padding spaces its flow, never its free layers, and strokes take no room. It leaves the flow: its siblings close up as if it weren't there, and it's drawn above the siblings before it. Keep everything else in the flow. A \`position\` without \`positioning: "free"\` is ignored in stacks and grids (lint: ignored-position).
 
-**Anchors** pin a free layer to an edge or corner of its frame, so it stays there when the frame, its padding or the layer's own text changes size: \`"anchor": { "x": "end", "y": "start" }\` measures \`position\` from the top-right corner, where \`{ "x": 16, "y": 16 }\` means 16px in from the right and from the top. \`"center"\` measures from the middle (\`position\` is the offset of the layer's centre). Omitted axes are "start" (left / top). Badge on a card's corner: \`{ "type": "text", "props": { "content": "New" }, "width": "hug", "positioning": "free", "anchor": { "x": "end" }, "position": { "x": 16, "y": 16 } }\`. Give anchored text \`"width": "hug"\`: text fills its frame's width by default.
+**Anchors** pin a free layer to an edge or corner of its frame, so it stays there when the frame, its padding or the layer's own text changes size: \`"anchor": { "x": "end", "y": "start" }\` measures \`position\` from the top-right corner, where \`{ "x": 16, "y": 16 }\` means 16px in from the frame's right edge and its top edge. \`"center"\` measures from the middle (\`position\` is the offset of the layer's centre). Omitted axes are "start" (left / top). Badge on a card's corner: \`{ "type": "text", "props": { "content": "New" }, "width": "hug", "positioning": "free", "anchor": { "x": "end" }, "position": { "x": 16, "y": 16 } }\`. Give anchored text \`"width": "hug"\`: text fills its frame's width by default. Negative values reach past the edge (a sticker hanging over a corner: \`{ "x": -12, "y": -12 }\`).
 
 \`gap\` and \`padding\` take pixels or space tokens ("$space.md"). Padding can be one value, \`{ x, y }\` or \`{ top, right, bottom, left }\`.
 
 ## Sizing (\`width\` / \`height\` on any node)
-- \`"fill"\`: take the free space (in a row: share the width; in a column: share the height).
+- \`"fill"\`: take the free space (in a row: share the width; in a column: share the height). Siblings share what's left after their own padding, so cards that should be equal widths need equal padding (or fixed widths).
 - \`"hug"\`: fit the content.
 - a number: fixed pixels.
 - omitted: the element's default (text: fill width, hug height; shape 200×200; image 400×300).
@@ -144,7 +144,8 @@ ${Object.entries(BUILTIN_THEMES)
   return `# Theme
 
 Content references theme tokens; switching themes (set_theme) restyles everything.
-Current theme: **${current.name}**. ${paletteLine(current)}
+This is the theme of the open deck, "${deck?.meta.title ?? ""}": **${current.name}**. ${paletteLine(current)}
+After create_deck or open_deck, call get_docs("theme") again: each deck has its own theme.
 
 ## Built-in themes
 ${themes}
