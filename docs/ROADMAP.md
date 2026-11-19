@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (404 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (420 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -98,10 +98,15 @@
     layer aligns within its frame. `tests/integration/phase3-align.test.ts` covers it.
   - **Layers panel multi-select (D56):** Shift+click selects a range of rows, Ctrl/Cmd+click
     toggles one (it was Shift = toggle only, so selecting ten layers took ten clicks).
+  - **Round 4, anchors (D57):** free layers can be pinned to any edge or the middle of their
+    frame (`anchor: { x, y }`; inspector Pin X / Pin Y), so a badge stays in a card's corner
+    whatever the card's size or its own text. Drags, resizes, nudges, align, group and paste
+    all move anchored layers correctly; switching the pin never moves the layer. Agents get
+    the field, docs, an outline marker and lint. `tests/integration/phase3-anchor.test.ts`.
   - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
     replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
     says how to write it.
-  - **Next:** round 4: anchors for free layers.
+  - **Next:** round 4: canvas zoom and pan.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -316,11 +321,11 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       evenly), in free frames (D55)
 - [x] Layers panel multi-select like Figma: Shift+click selects a range of rows,
       Ctrl/Cmd+click toggles one (D56)
-- [ ] Anchors for free layers: `anchor: { x: "start" | "center" | "end", y: … }` says which
+- [x] Anchors for free layers: `anchor: { x: "start" | "center" | "end", y: … }` says which
       edge of the frame `position` is measured from, so a badge pinned to a card's top-right
       corner stays there when its text, the card's size or the padding changes (Figma
       constraints). `position` keeps its one `{ x, y }` shape. Inspector anchor picker,
-      drags and nudges keep working, MCP docs + lint. Extends D49
+      drags and nudges keep working, MCP docs + lint. Extends D49 (D57)
 - [ ] Canvas zoom and pan: Ctrl/Cmd + scroll and pinch, Space + drag, zoom to fit, 100%;
       handles, guides and text editing stay correct at every zoom
 - [ ] Text toolbar: text color (theme tokens first), paragraph alignment, text style

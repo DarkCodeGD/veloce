@@ -77,6 +77,22 @@ export class CanvasSpace {
     };
   }
 
+  /**
+   * A frame's content size (inside its padding) in its own pixels: what anchored positions
+   * are measured in. Layout sizes ignore transforms, so rotated frames measure right.
+   */
+  contentSize(frameId: string): { w: number; h: number } | null {
+    const el = this.element(frameId);
+    if (!el) return null;
+    const style = getComputedStyle(el);
+    const pad = (side: "Top" | "Right" | "Bottom" | "Left") =>
+      Number.parseFloat(style[`padding${side}`]) || 0;
+    return {
+      w: Math.max(0, el.clientWidth - pad("Left") - pad("Right")),
+      h: Math.max(0, el.clientHeight - pad("Top") - pad("Bottom")),
+    };
+  }
+
   /** A frame's content box (inside its padding) on the slide, in slide pixels. */
   contentRect(frameId: string): Rect | null {
     const el = this.element(frameId);

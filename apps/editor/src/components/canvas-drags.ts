@@ -25,6 +25,7 @@ import {
   dropInto,
   freeSizing,
   isFree,
+  movedPosition,
   moveTo,
   placeFreely,
   resizeTo,
@@ -145,9 +146,7 @@ export function moveDrag(ctx: Context, ids: readonly string[], start: Point): Dr
   const starts = free.flatMap((id) => {
     const rect = space.rect(id);
     const node = index.nodes.get(id)?.node;
-    return rect && node
-      ? [{ id, rect, position: node.position ?? { x: 0, y: 0 }, turn: ancestorRotation(index, id) }]
-      : [];
+    return rect && node ? [{ id, rect, node, turn: ancestorRotation(index, id) }] : [];
   });
   const first = starts[0];
   if (!first) return null;
@@ -175,7 +174,7 @@ export function moveDrag(ctx: Context, ids: readonly string[], start: Point): Dr
         guides = snap.guides;
       }
       const positions = new Map(
-        starts.map((s) => [s.id, add(s.position, rotateVector(d, -s.turn))] as const),
+        starts.map((s) => [s.id, movedPosition(s.node, rotateVector(d, -s.turn))] as const),
       );
       const measures = parent ? spacingIn(parent, offset(bounds, d), exclude) : [];
       return { command: moveTo(index, positions), feedback: { guides, measures } };
@@ -194,7 +193,6 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
   const parentNode = index.nodes.get(at.parentId)?.node;
   if (!parent || parentNode?.kind !== "frame") return null;
   const free = isFree(index, id);
-  const position = at.node.position ?? { x: 0, y: 0 };
   const turn = ancestorRotation(index, id);
   const self = new Set([id]);
   const targets = turn === 0 ? snapTargets(parent, self) : [];
@@ -240,7 +238,7 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
         }
         const command = dropInto(index, id, {
           parentId: parent.id,
-          position: add(position, rotateVector(d, -turn)),
+          position: movedPosition(at.node, rotateVector(d, -turn)),
         });
         const measures = turn === 0 ? spacingIn(parent, offset(rect, d), self) : [];
         return { command, feedback: { guides, measures } };
@@ -311,7 +309,6 @@ export function resizeDrag(ctx: Context, id: string, handle: Handle, start: Poin
   const free = isFree(index, id);
   // In the parent's own axes, with the top-left at the origin: topLeft() is then the offset.
   const b0: Box = { cx: size.w / 2, cy: size.h / 2, w: size.w, h: size.h, rotation };
-  const position = node.position ?? { x: 0, y: 0 };
   const dir = handleDirection(handle);
   const parentId = index.nodes.get(id)?.parentId;
   const snappable = free && rotation === 0 && turn === 0;
@@ -354,7 +351,7 @@ export function resizeDrag(ctx: Context, id: string, handle: Handle, start: Poin
       const command = resizeTo(index, id, {
         ...(dir.x !== 0 || w !== size.w ? { width: w } : {}),
         ...(dir.y !== 0 || h !== size.h ? { height: h } : {}),
-        ...(free ? { position: add(position, moved) } : {}),
+        ...(free ? { position: movedPosition(node, moved, { w: w - size.w, h: h - size.h }) } : {}),
       });
       const now = offset({ ...rect, w, h }, moved);
       return {

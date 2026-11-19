@@ -16,7 +16,7 @@
 import type { Op } from "@veloce/core";
 import type { Command } from "./commands.js";
 import type { Point, Rect } from "./geometry.js";
-import { ancestorRotation, isFree } from "./manipulate.js";
+import { ancestorRotation, isFree, movedPosition } from "./manipulate.js";
 import { nodeLabel, type SlideIndex, topmost } from "./slide-index.js";
 
 export type AlignEdge = "left" | "center" | "right" | "top" | "middle" | "bottom";
@@ -76,11 +76,8 @@ function shiftBy(
   for (const [id, d] of deltas) {
     const node = index.nodes.get(id)?.node;
     if (!node) continue;
-    const local = localShift(index, id, d);
-    const position = {
-      x: round2((node.position?.x ?? 0) + local.x),
-      y: round2((node.position?.y ?? 0) + local.y),
-    };
+    const moved = movedPosition(node, localShift(index, id, d)); // in the layer's anchor
+    const position = { x: round2(moved.x), y: round2(moved.y) };
     const movedX = position.x !== (node.position?.x ?? 0);
     const movedY = position.y !== (node.position?.y ?? 0);
     if (!movedX && !movedY) continue;

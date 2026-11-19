@@ -144,6 +144,38 @@ describe("clipboard", () => {
     expect(pasted?.position).toEqual({ x: 500, y: 10 });
   });
 
+  it("steps anchored pastes down-right on screen, and keeps the anchor in free frames", () => {
+    const base = makeDeck();
+    const pin = text("pin", "Hot", {
+      positioning: "free",
+      anchor: { x: "end" },
+      position: { x: 16, y: 16 },
+    });
+    const deck = apply(base, {
+      label: "Add pin",
+      ops: [{ op: "node.insert", parentId: "root", node: pin }],
+    });
+    const node = (d: Deck, id: string | undefined) => indexOf(d).nodes.get(id ?? "")?.node;
+    const again = paste(deck, ["pin"]);
+    // Right-pinned: 20px further right on screen is 20px less from the right edge.
+    expect(node(again.deck, again.command.select?.[0])).toMatchObject({
+      anchor: { x: "end" },
+      position: { x: -4, y: 36 },
+    });
+    const payload = copyNodes(indexOf(deck), ["pin"]) ?? undefined;
+    const intoFrame = paste(deck, ["a"], payload);
+    expect(node(intoFrame.deck, intoFrame.command.select?.[0])?.anchor).toEqual({ x: "end" });
+    // Into a stack's flow (pasted after a flow layer): position and anchor both go.
+    const flowCopy = copyNodes(indexOf(deck), ["pin"]);
+    if (!flowCopy) throw new Error("no copy");
+    const first = flowCopy.nodes[0];
+    if (first) first.positioning = "auto";
+    const inFlow = paste(deck, ["footer"], flowCopy);
+    const flowNode = node(inFlow.deck, inFlow.command.select?.[0]);
+    expect(flowNode?.position).toBeUndefined();
+    expect(flowNode?.anchor).toBeUndefined();
+  });
+
   it("cuts as one undoable removal", () => {
     const deck = makeDeck();
     const command = cutNodes(indexOf(deck), ["title", "footer"]);

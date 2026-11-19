@@ -218,6 +218,15 @@ function positionRules(slide: Slide): LintIssue[] {
         message: `${describe(node)} has position ${node.position.x},${node.position.y}, but its frame is a ${parent.mode}, so the position is ignored.`,
         fix: 'To place it there on top of the layout, add positioning: "free". To keep it in the flow, remove position.',
       });
+    } else if (parent !== null && node.anchor && !isFreeLayer(node, parent)) {
+      issues.push({
+        rule: "ignored-position",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [node.id],
+        message: `${describe(node)} has an anchor, but its frame is a ${parent.mode} that places it, so the anchor is ignored.`,
+        fix: 'To pin it to an edge of the frame, add positioning: "free" and a position. To keep it in the flow, remove anchor.',
+      });
     }
     if (node.kind === "frame") for (const child of node.children) visit(child, node.layout);
   };

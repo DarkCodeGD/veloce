@@ -14,6 +14,7 @@
  *   stack's main axis, follow the parent's `align` across it (like CSS `auto`).
  */
 import {
+  type AnchorEdge,
   type FrameNode,
   isFreeLayer,
   type Layout,
@@ -123,15 +124,24 @@ export function nodeBoxCss(
   // Free layers (every child of an absolute frame, `positioning: "free"` ones in stacks and
   // grids) sit at their own position. Absolutely positioned children don't take part in
   // flexbox or grid placement, so the flow closes up around them.
+  // `anchor` picks the edge `position` is measured from on each axis (core's anchor.ts):
+  // start → left/top, end → right/bottom (inward), center → from the content box's middle.
   if (isFreeLayer(node, parent)) {
     const [padTop, padRight, padBottom, padLeft] = paddingSides(parent.padding);
     const x = node.position?.x ?? 0;
     const y = node.position?.y ?? 0;
     css.position = "absolute";
-    css.left = `calc(${padLeft} + ${x}px)`;
-    css.top = `calc(${padTop} + ${y}px)`;
-    css.width = absoluteSize(size.width, [padLeft, padRight], x, "max-content");
-    css.height = absoluteSize(size.height, [padTop, padBottom], y, "auto");
+    const h = anchorCss(node.anchor?.x ?? "start", x, [padLeft, padRight], ["left", "right"]);
+    const v = anchorCss(node.anchor?.y ?? "start", y, [padTop, padBottom], ["top", "bottom"]);
+    Object.assign(css, h.css, v.css);
+    // Centring shifts the box back by half its own size; that composes with its rotation
+    // (the translate applies in the frame's axes, the rotation about the box's centre).
+    if (h.center || v.center) {
+      const shift = `translate(${h.center ? "-50%" : "0"}, ${v.center ? "-50%" : "0"})`;
+      css.transform = css.transform ? `${shift} ${css.transform}` : shift;
+    }
+    css.width = absoluteSize(size.width, [padLeft, padRight], h.inset, "max-content");
+    css.height = absoluteSize(size.height, [padTop, padBottom], v.inset, "auto");
     return css;
   }
 
@@ -157,7 +167,27 @@ export function nodeBoxCss(
   }
 }
 
-/** Absolute children: positions are relative to the frame's content box (inside its padding). */
+/** One axis of a free layer's placement for its anchor edge. */
+function anchorCss(
+  edge: AnchorEdge,
+  offset: number,
+  [padStart, padEnd]: [string, string],
+  [start, end]: [string, string],
+): { css: CssRecord; center: boolean; inset: number } {
+  if (edge === "end")
+    return { css: { [end]: `calc(${padEnd} + ${offset}px)` }, center: false, inset: offset };
+  if (edge === "center") {
+    const middle = `calc(${padStart} + (100% - ${padStart} - ${padEnd}) / 2 + ${offset}px)`;
+    // "fill" stays inside the frame on both sides of the shifted centre.
+    return { css: { [start]: middle }, center: true, inset: 2 * Math.abs(offset) };
+  }
+  return { css: { [start]: `calc(${padStart} + ${offset}px)` }, center: false, inset: offset };
+}
+
+/**
+ * Absolute children: positions are relative to the frame's content box (inside its padding).
+ * `"fill"` takes the content box minus the layer's inset from its anchored edge.
+ */
 function absoluteSize(
   v: ResolvedSizing,
   [padStart, padEnd]: [string, string],

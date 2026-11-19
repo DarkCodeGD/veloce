@@ -158,6 +158,28 @@ describe("lint: ignored positions", () => {
     expect(issues[0]?.message).toMatch(/frame is a stack/);
     expect(issues[0]?.fix).toMatch(/positioning: "free"/);
   });
+
+  it("flags an anchor on a layer the flow places", () => {
+    const deck = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          children: [
+            text("flow", "in the flow", { anchor: { x: "end" } }),
+            text("pinned", "badge", {
+              positioning: "free",
+              anchor: { x: "end" },
+              position: { x: 16, y: 16 },
+            }),
+          ],
+        }),
+      ],
+    });
+    const issues = lintDeck(deck).filter((i) => i.rule === "ignored-position");
+    expect(issues.map((i) => i.nodeIds.join())).toEqual(["flow"]);
+    expect(issues[0]?.message).toMatch(/anchor is ignored/);
+  });
 });
 
 describe("lint: theme tokens", () => {

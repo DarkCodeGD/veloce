@@ -173,7 +173,10 @@ function freeGroupOps(
 ): Op[] {
   const boxes = layers.map((id) => {
     const node = index.nodes.get(id)?.node;
-    const position = { x: node?.position?.x ?? 0, y: node?.position?.y ?? 0 };
+    // Anchored layers are measured from the left/top like the rest (the group is new: its
+    // members start out anchored to its top-left).
+    const stored = { x: node?.position?.x ?? 0, y: node?.position?.y ?? 0 };
+    const position = node?.anchor ? (measure.positionIn(id, parent.id) ?? stored) : stored;
     const fixed = (v: Sizing | undefined) => (typeof v === "number" ? v : 0);
     const measured = measure.size(id);
     const size = measured ?? { w: fixed(node?.width), h: fixed(node?.height) };
@@ -207,6 +210,7 @@ function freeGroupOps(
       position: { x: round2(box.position.x - x0), y: round2(box.position.y - y0) },
     };
     if (node?.positioning !== undefined) set.positioning = null; // always free in an absolute frame
+    if (node?.anchor !== undefined) set.anchor = null;
     const sizing = measure.sizing(box.id);
     for (const axis of ["width", "height"] as const) {
       const px = Math.max(1, Math.round(axis === "width" ? box.size.w : box.size.h));
@@ -276,6 +280,7 @@ export function ungroupLayers(
         } else if (child.positioning !== "free") {
           set.positioning = "free";
         }
+        if (child.anchor !== undefined) set.anchor = null; // the spot is from the left/top
         const size = measure.size(child.id);
         if (!freeInFrame && size) {
           const baked = freeSizing(frame.layout, measure.sizing(child.id), size);
@@ -287,8 +292,10 @@ export function ungroupLayers(
           const turned = normalizeDegrees((child.rotation ?? 0) + frame.rotation);
           if (turned !== (child.rotation ?? 0)) set.rotation = turned === 0 ? null : turned;
         }
-      } else if (child.positioning !== undefined) {
-        set.positioning = null; // "free" was about the frame it was freed in
+      } else {
+        // "free" and anchors were about the frame it was in.
+        if (child.positioning !== undefined) set.positioning = null;
+        if (child.anchor !== undefined) set.anchor = null;
       }
 
       if (frame.opacity !== undefined && frame.opacity < 1) {

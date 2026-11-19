@@ -4,6 +4,7 @@
  * Pure TypeScript: no DOM, no Node APIs (enforced by this package's compiler settings).
  * Used by the editor, the doc-server, the MCP server and every plugin.
  */
+export * from "./anchor.js";
 export * from "./assets.js";
 export * from "./builders.js";
 export * from "./checks.js";

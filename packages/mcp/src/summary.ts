@@ -38,13 +38,23 @@ export function slideHeader(slide: Slide, index: number): string {
   return `${index + 1}. slide ${slide.id}${name} · root frame ${slide.root.id} (${layoutLabel(slide.root)})${flags ? ` · ${flags}` : ""}`;
 }
 
+/** " from top-right" for anchored layers ("" for the default top-left). */
+function anchorLabel(node: Node): string {
+  const x = node.anchor?.x ?? "start";
+  const y = node.anchor?.y ?? "start";
+  if (x === "start" && y === "start") return "";
+  if (x === "center" && y === "center") return " from center";
+  const h = { start: "left", center: "center", end: "right" }[x];
+  const v = { start: "top", center: "middle", end: "bottom" }[y];
+  return ` from ${v}-${h}`;
+}
+
 function outline(node: Node, depth: number, lines: string[]): void {
   const indent = "  ".repeat(depth);
   // Free layers say so: they're out of the flow, so reordering them won't move them.
-  const free =
-    node.positioning === "free"
-      ? ` [free at ${node.position?.x ?? 0},${node.position?.y ?? 0}]`
-      : "";
+  // Anchored ones also say which corner their position is measured from.
+  const at = `${node.position?.x ?? 0},${node.position?.y ?? 0}${anchorLabel(node)}`;
+  const free = node.positioning === "free" ? ` [free at ${at}]` : node.anchor ? ` [at ${at}]` : "";
   const hidden = `${free}${node.hidden ? " [hidden]" : ""}`;
   if (node.kind === "frame") {
     lines.push(`${indent}- ${node.id}: frame (${layoutLabel(node)})${hidden}`);

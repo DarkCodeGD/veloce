@@ -9,6 +9,7 @@
  * Everything else is validated exactly like any other edit, by core and the plugin registry.
  */
 import {
+  AnchorSchema,
   createId,
   DEFAULT_SLIDE_LAYOUT,
   ElementTypeSchema,
@@ -37,6 +38,9 @@ const nodeCommon = {
   height: SizingSchema.optional().describe('Pixels, "fill" or "hug".'),
   position: PointSchema.optional().describe(
     'From the frame\'s content box. Used inside "absolute" frames, or with positioning: "free".',
+  ),
+  anchor: AnchorSchema.optional().describe(
+    'Which frame edges `position` is measured from (free layers): x "start" | "center" | "end", y the same. { x: "end" } + position.x 16 = 16px in from the right; "center" = offset from the middle. Default left/top. Pins badges to corners when sizes change.',
   ),
   positioning: z
     .enum(["auto", "free"])

@@ -190,12 +190,22 @@ describe("building a deck", () => {
             positioning: "free",
             position: { x: 1500, y: 40 },
           },
+          {
+            id: "pin",
+            type: "text",
+            props: { content: "Hot" },
+            width: "hug",
+            positioning: "free",
+            anchor: { x: "end" },
+            position: { x: 16, y: 16 },
+          },
           { id: "stray", type: "text", props: { content: "Oops" }, position: { x: 10, y: 10 } },
         ],
       },
     });
     expect(upsert.isError).toBe(false);
     expect(upsert.text).toMatch(/- badge: text "New" \[free at 1500,40\]/);
+    expect(upsert.text).toMatch(/- pin: text "Hot" \[free at 16,16 from top-right\]/);
     expect(upsert.text).toMatch(/ignored-position · slide card · stray/);
     expect(upsert.text).toMatch(/add positioning: "free"/);
     expect(upsert.text).not.toMatch(/ignored-position · slide card · badge/);

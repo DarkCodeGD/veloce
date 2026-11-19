@@ -4,6 +4,8 @@
  * plugins get a working inspector for free. Every change is one undoable transaction.
  */
 import {
+  type Anchor,
+  type AnchorEdge,
   type Deck,
   type ElementNode,
   type FrameNode,
@@ -14,6 +16,12 @@ import {
 } from "@veloce/core";
 import { NODE_ID_ATTR } from "@veloce/renderer";
 import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignStartVertical,
   ArrowDown,
   ArrowRight,
   Copy,
@@ -35,6 +43,7 @@ import {
   type Measured,
   placeFreely,
   placeInFlow,
+  setAnchor,
   switchLayout,
 } from "../model/manipulate.js";
 import { propFields } from "../model/schema-fields.js";
@@ -265,6 +274,22 @@ function renderedNumber(
  * Position: Auto / Free for a layer in a stack or grid. Free bakes where it is now (and any
  * stretched size) so nothing jumps; Auto hands it back to the layout.
  */
+/** What a free layer's X/Y field measures, by the edge it's pinned to (core's anchor.ts). */
+const AXIS_LABEL: Record<"x" | "y", Record<AnchorEdge, string>> = {
+  x: { start: "X", center: "X from middle", end: "From right" },
+  y: { start: "Y", center: "Y from middle", end: "From bottom" },
+};
+
+/** Pin a free layer to other edges of its frame, measured on the canvas so it stays put. */
+function pin(index: SlideIndex, node: Node, anchor: Anchor) {
+  const space = mainCanvasSpace();
+  const parentId = index.nodes.get(node.id)?.parentId;
+  const size = space?.size(node.id);
+  const content = parentId ? space?.contentSize(parentId) : null;
+  if (!size || !content) return;
+  void run(setAnchor(index, node.id, anchor, { size, content }));
+}
+
 function setPositioning(index: SlideIndex, node: Node, parentLayout: Layout, value: unknown) {
   if (value !== "free") return void run(placeInFlow(index, node.id));
   const space = mainCanvasSpace();
@@ -332,15 +357,37 @@ function LayerSection({
       )}
       {parentLayout && isFreeLayer(node, parentLayout) && (
         <>
+          <SelectField
+            label="Pin X"
+            value={node.anchor?.x}
+            options={[
+              { value: "start", label: "Left", icon: <AlignStartVertical size={14} /> },
+              { value: "center", label: "Center", icon: <AlignCenterVertical size={14} /> },
+              { value: "end", label: "Right", icon: <AlignEndVertical size={14} /> },
+            ]}
+            defaultValue="start"
+            onCommit={(v) => pin(index, node, { ...node.anchor, x: v as AnchorEdge })}
+          />
           <NumberField
-            label="X"
+            label={AXIS_LABEL.x[node.anchor?.x ?? "start"]}
             value={node.position?.x}
             placeholder="0"
             suffix="px"
             {...move("x")}
           />
+          <SelectField
+            label="Pin Y"
+            value={node.anchor?.y}
+            options={[
+              { value: "start", label: "Top", icon: <AlignStartHorizontal size={14} /> },
+              { value: "center", label: "Middle", icon: <AlignCenterHorizontal size={14} /> },
+              { value: "end", label: "Bottom", icon: <AlignEndHorizontal size={14} /> },
+            ]}
+            defaultValue="start"
+            onCommit={(v) => pin(index, node, { ...node.anchor, y: v as AnchorEdge })}
+          />
           <NumberField
-            label="Y"
+            label={AXIS_LABEL.y[node.anchor?.y ?? "start"]}
             value={node.position?.y}
             placeholder="0"
             suffix="px"

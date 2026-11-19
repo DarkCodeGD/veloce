@@ -967,3 +967,38 @@ Ctrl/Cmd+click toggles one row. Pure logic in `apps/editor/src/model/layer-selec
   If there's none, Shift just adds the row: Shift never drops what was selected.
 - Shift and Ctrl/Cmd presses never start a row drag (D51), so a selection click can't
   move a layer.
+
+## D57 — Anchors: `position` measured from the frame's start, end or middle
+
+**Status:** Accepted (2026-11-19). Extends D49.
+
+Free layers get an optional `anchor: { x?, y? }` with `"start" | "center" | "end"` per axis
+(default `"start"`, i.e. left/top as before). It's Figma's constraints, minus "scale" and
+"left & right": the two cases agent decks actually hit are a badge in a card's corner and
+something centred.
+
+1. **`position` keeps its single `{ x, y }` shape; the anchor changes what it measures.**
+   - `"end"`: the inset from the content box's right/bottom edge, positive inward (CSS
+     `right`/`bottom`).
+   - `"center"`: the offset of the layer's centre from the content box's centre.
+
+   **Why:** no union of position shapes (the trap D52 fixed for padding), and existing
+   decks, which have no anchor, mean exactly what they did. It's an optional field, so no
+   migration.
+2. **The renderer uses the matching CSS:** `right`/`bottom` for "end"; for "center", the
+   midpoint plus a `translate(-50%)` placed before the rotation. "fill" takes the content
+   box minus the inset from the anchored edge.
+3. **The math lives in core** (`anchor.ts`): `shiftAnchored` (a move of the start edge plus
+   any growth, in a layer's anchor), plus `startPosition` and `anchoredPosition`
+   (conversions). Every editor gesture already computed "start edge + delta". Moves, resizes,
+   nudges and align now route that delta through `movedPosition`, so they work unchanged
+   for anchored layers. A resize keeps the anchored edge still.
+4. **Switching the pin never moves the layer.** The inspector's Pin X / Pin Y convert the
+   position using the layer's and the frame's layout sizes, which rotation doesn't change.
+5. **An anchor belongs to its frame.** Moving a layer into another frame by dragging, putting
+   it back in the flow, or switching its Free frame to a stack drops the anchor. Group and
+   ungroup re-measure the layer on screen and drop it too. **Paste is the exception:** it keeps
+   the anchor, so a badge copied from one card lands in the other card's corner.
+6. **Agents** get the field with a description, a docs paragraph with a badge example, a
+   `[free at 16,16 from top-right]` outline marker, and the `ignored-position` lint for an
+   anchor the flow ignores.

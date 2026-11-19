@@ -3,7 +3,18 @@
  * rotate. Pure (state + intent → one Command), like model/commands.ts, so a drag sends
  * exactly the ops an agent would (golden rule #1) and stays one undo step.
  */
-import { isFreeLayer, type Layout, type Node, type Op, type Sizing } from "@veloce/core";
+import {
+  type Anchor,
+  anchoredPosition,
+  isFreeLayer,
+  type Layout,
+  type Node,
+  type Op,
+  type Size,
+  type Sizing,
+  shiftAnchored,
+  startPosition,
+} from "@veloce/core";
 import type { Command } from "./commands.js";
 import type { Point } from "./geometry.js";
 import { chainOf, nodeLabel, parentFrame, type SlideIndex } from "./slide-index.js";
@@ -33,6 +44,49 @@ export function ancestorRotation(index: SlideIndex, id: string): number {
   return chainOf(index, id)
     .slice(0, -1)
     .reduce((sum, a) => sum + (index.nodes.get(a)?.node.rotation ?? 0), 0);
+}
+
+/**
+ * Where a free layer's `position` goes when its left/top edge moves by `d` (in its parent's
+ * axes) and its size grows by `grow`, in the layer's own anchor (core's anchor.ts): every
+ * gesture computes "start edge + delta", and this keeps that right for layers pinned to the
+ * right, the bottom or the middle of their frame.
+ */
+export function movedPosition(node: Node, d: Point, grow?: Size): Point {
+  return shiftAnchored(node.position ?? { x: 0, y: 0 }, node.anchor, d, grow);
+}
+
+/**
+ * Pin a free layer to other edges of its frame without moving it: the position is converted
+ * to the new anchor using the layer's size and the frame's content size (both as rendered).
+ * Axes set to "start" are removed (it's the default), and so is an anchor left empty.
+ */
+export function setAnchor(
+  index: SlideIndex,
+  id: string,
+  anchor: Anchor,
+  measured: { size: Size; content: Size },
+): Command | null {
+  const node = index.nodes.get(id)?.node;
+  if (!node || !isFree(index, id)) return null;
+  const x = anchor.x ?? "start";
+  const y = anchor.y ?? "start";
+  if (x === (node.anchor?.x ?? "start") && y === (node.anchor?.y ?? "start")) return null;
+  const start = startPosition(
+    node.position ?? { x: 0, y: 0 },
+    node.anchor,
+    measured.size,
+    measured.content,
+  );
+  const next = { ...(x === "start" ? {} : { x }), ...(y === "start" ? {} : { y }) };
+  const empty = Object.keys(next).length === 0;
+  const position = roundPoint(anchoredPosition(start, next, measured.size, measured.content));
+  // Sent whole (merge patches would keep an axis this leaves out).
+  const patch = empty ? null : { x: next.x ?? null, y: next.y ?? null };
+  return {
+    label: `Anchor ${labelOf(index, id)}`,
+    ops: [{ op: "node.update", id, set: { anchor: patch, position } }],
+  };
 }
 
 /** Set the positions of free layers (layers in other frames are skipped). */
@@ -90,6 +144,8 @@ export function dropInto(index: SlideIndex, id: string, target: DropTarget): Com
     set.position = null;
   }
   if (!sameParent && at.node.positioning !== undefined) set.positioning = null;
+  // An anchor was about the old frame's edges; the new position is from the left/top.
+  if (!sameParent && at.node.anchor !== undefined) set.anchor = null;
   if (Object.keys(set).length > 0) ops.push({ op: "node.update", id, set });
   if (ops.length === 0) return null;
   return {
@@ -260,9 +316,11 @@ export function switchLayout(
   if (mode === "absolute") ops.push(...freezeFrameOps(index, frameId, measure));
   if (from.mode === "absolute") {
     for (const child of frame.children) {
-      if (child.position && child.positioning !== "free") {
-        ops.push({ op: "node.update", id: child.id, set: { position: null } });
-      }
+      if (child.positioning === "free" || (!child.position && !child.anchor)) continue;
+      const set: Record<string, unknown> = {};
+      if (child.position) set.position = null;
+      if (child.anchor) set.anchor = null;
+      ops.push({ op: "node.update", id: child.id, set });
     }
   }
   return { label: `Change layout to ${mode}`, ops };
@@ -299,7 +357,13 @@ export function placeInFlow(index: SlideIndex, id: string): Command | null {
   if (node?.positioning !== "free") return null;
   return {
     label: `Put ${labelOf(index, id)} back in the layout`,
-    ops: [{ op: "node.update", id, set: { positioning: null, position: null } }],
+    ops: [
+      {
+        op: "node.update",
+        id,
+        set: { positioning: null, position: null, ...(node.anchor ? { anchor: null } : {}) },
+      },
+    ],
     select: [id],
   };
 }

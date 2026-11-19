@@ -25,6 +25,7 @@ import {
   type Node,
   NodeSchema,
   type Op,
+  shiftAnchored,
   TextContentSchema,
   toPlainText,
 } from "@veloce/core";
@@ -240,21 +241,27 @@ function place(index: SlideIndex, parentId: string, nodes: Node[]): void {
   const parent = index.nodes.get(parentId)?.node;
   if (parent?.kind !== "frame") return;
   const absolute = parent.layout.mode === "absolute";
-  const key = (p: { x: number; y: number }) => `${p.x},${p.y}`;
+  // Same position and same anchor: the same spot (an anchor keeps its meaning in any frame,
+  // so a badge pinned to one card's corner lands on the other card's corner).
+  const key = (n: Node, p: { x: number; y: number }) =>
+    `${n.anchor?.x ?? "start"},${n.anchor?.y ?? "start"},${p.x},${p.y}`;
   const taken = new Set(
     parent.children
       .filter((c) => isFreeLayer(c, parent.layout))
-      .map((c) => key(c.position ?? { x: 0, y: 0 })),
+      .map((c) => key(c, c.position ?? { x: 0, y: 0 })),
   );
   for (const node of nodes) {
     if (absolute) delete node.positioning; // every child of an absolute frame is free anyway
     if (!isFreeLayer(node, parent.layout)) {
       delete node.position;
+      delete node.anchor;
       continue;
     }
     let p = node.position ?? { x: 0, y: 0 };
-    while (taken.has(key(p))) p = { x: p.x + PASTE_OFFSET, y: p.y + PASTE_OFFSET };
-    taken.add(key(p));
+    // Step down-right on screen, whichever edges the layer is measured from.
+    const step = { x: PASTE_OFFSET, y: PASTE_OFFSET };
+    while (taken.has(key(node, p))) p = shiftAnchored(p, node.anchor, step);
+    taken.add(key(node, p));
     node.position = p;
   }
 }

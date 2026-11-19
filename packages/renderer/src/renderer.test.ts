@@ -198,6 +198,34 @@ describe("layout → CSS", () => {
     // The root ignores it: it always fills the stage.
     expect(nodeBoxCss(free, null, { width: 1, height: 1 }).left).toBe("0");
   });
+
+  it("measures anchored free layers from the right, the bottom or the middle", () => {
+    const padded = { mode: "absolute", padding: { x: 10, y: 20 } } as const;
+    const badge = element(
+      "text",
+      {},
+      { id: "b", anchor: { x: "end", y: "start" }, position: { x: 16, y: 8 }, rotation: 15 },
+    );
+    const css = nodeBoxCss(badge, padded, { width: "fill", height: "hug" });
+    expect(css).toMatchObject({
+      right: "calc(10px + 16px)",
+      top: "calc(20px + 8px)",
+      width: "calc(100% - 10px - 10px - 16px)", // fill: from the left edge to its inset
+      transform: "rotate(15deg)",
+    });
+    expect(css.left).toBeUndefined();
+
+    const centered = element(
+      "text",
+      {},
+      { id: "c", anchor: { x: "center", y: "end" }, position: { x: -30, y: 12 }, rotation: 15 },
+    );
+    expect(nodeBoxCss(centered, padded, { width: 200, height: 40 })).toMatchObject({
+      left: "calc(10px + (100% - 10px - 10px) / 2 + -30px)",
+      bottom: "calc(20px + 12px)",
+      transform: "translate(-50%, 0) rotate(15deg)",
+    });
+  });
 });
 
 describe("SlideRenderer", () => {

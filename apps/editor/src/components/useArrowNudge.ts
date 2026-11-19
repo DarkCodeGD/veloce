@@ -8,7 +8,7 @@ import { useEffect } from "react";
 import { run } from "../actions.js";
 import { typing } from "../keyboard.js";
 import { type Point, rotateVector } from "../model/geometry.js";
-import { ancestorRotation, isFree, moveTo } from "../model/manipulate.js";
+import { ancestorRotation, isFree, movedPosition, moveTo } from "../model/manipulate.js";
 import { type SlideIndex, topmost } from "../model/slide-index.js";
 import { setPreview } from "../preview.js";
 
@@ -31,10 +31,10 @@ export function useArrowNudge(index: SlideIndex | null, selection: readonly stri
       const d = offset ?? { x: 0, y: 0 };
       const positions = new Map(
         layers.map((id) => {
-          const start = index.nodes.get(id)?.node.position ?? { x: 0, y: 0 };
-          // Screen directions, also inside rotated frames.
+          const node = index.nodes.get(id)?.node;
+          // Screen directions, also inside rotated frames, in the layer's own anchor.
           const local = rotateVector(d, -ancestorRotation(index, id));
-          return [id, { x: start.x + local.x, y: start.y + local.y }] as const;
+          return [id, node ? movedPosition(node, local) : local] as const;
         }),
       );
       return moveTo(index, positions);

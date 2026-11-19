@@ -92,6 +92,17 @@ export const FrameStyleSchema = z.strictObject({
 });
 export type FrameStyle = z.infer<typeof FrameStyleSchema>;
 
+/** Which edge of the frame a free layer's `position` is measured from, on one axis. */
+export const AnchorEdgeSchema = z.enum(["start", "center", "end"]);
+export type AnchorEdge = z.infer<typeof AnchorEdgeSchema>;
+
+/** Per axis; omitted axes are `"start"` (left / top). See anchor.ts for what each means. */
+export const AnchorSchema = z.strictObject({
+  x: AnchorEdgeSchema.optional(),
+  y: AnchorEdgeSchema.optional(),
+});
+export type Anchor = z.infer<typeof AnchorSchema>;
+
 // ── Nodes ───────────────────────────────────────────────────────────────────────────
 
 /** Fields every node has. Omitted optional fields mean "use the default". */
@@ -115,6 +126,12 @@ const nodeCommon = {
    * `positioning: "free"`; ignored otherwise (see `isFreeLayer`).
    */
   position: PointSchema.optional(),
+  /**
+   * Which edges of the frame `position` is measured from: `{ x: "end", y: "start" }` pins a
+   * badge to the top-right corner, `"center"` measures from the middle. Default: left/top.
+   * Only meaningful for free layers, like `position`.
+   */
+  anchor: AnchorSchema.optional(),
   /**
    * `"free"` takes the layer out of its stack/grid flow (Figma's "ignore auto layout"): it
    * sits at its own `position` on top of the flow, which closes up as if it weren't there.
