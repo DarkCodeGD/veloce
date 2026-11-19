@@ -418,19 +418,29 @@ panels with the important options in reach. Done before Motion, so Phase 4 lands
 Animate and Present workspaces instead of being squeezed into today's screen.
 
 - [ ] **Parity with agents** (golden rule #1: whatever an agent can do, the user can do in the
-      editor). Audit from 2026-11-20, most important first:
+      editor). Audit from 2026-11-20, most important first. Keep the inspector airy (D47):
+      only 4 of these live in it, and each stays hidden until it's used. The rest go to
+      the History panel, a lint panel, the File menu or a dialog.
   - [ ] Review AI changes: a "Revert" on agent groups in the History panel (what
-        `undo_agent_changes` does), so the user can reject an agent's work
+        `undo_agent_changes` does), so the user can reject an agent's work. In the History
+        panel, not the inspector
   - [ ] Lint in the editor: a panel (or badges on slides and layers) with the issues agents
-        see, select-on-click, and each issue's fix hint
-  - [ ] Frame border and shadow in the inspector (`style.stroke`, `style.shadow`)
-  - [ ] Per-side padding (today it's read-only: "set by AI")
-  - [ ] Deck info: rename the deck, description, authors, language (`deck.updateMeta`)
+        see, select-on-click, and each issue's fix hint. Its own panel, not the inspector
+  - [ ] Frame border and shadow in the inspector (`style.stroke`, `style.shadow`), Figma
+        style: a "Border" / "Shadow" header with **+** until one is added (**−** removes
+        it), so an unbordered card shows two short rows, not empty fields
+  - [ ] Per-side padding (today it's read-only: "set by AI"): one field, plus an
+        "individual sides" toggle that opens the four. Same control as per-corner radius
+  - [ ] Deck info: rename the deck, description, authors, language (`deck.updateMeta`),
+        in a File → Deck info dialog
   - [ ] New deck from the editor (File → New, with a theme), like `create_deck`
   - [ ] Theme editor beyond colors and fonts: text styles (size, weight, line height,
-        letter spacing, case), and the spacing, radius and shadow scales
-  - [ ] Nested object props in the generated inspector (an image's focus point `{x, y}`,
-        and any plugin prop that's an object), not read-only
+        letter spacing, case), and the spacing, radius and shadow scales. Too big for an
+        inspector section: a dialog or its own workspace; the inspector keeps colors and
+        fonts
+  - [ ] Nested object props in the generated inspector (any plugin prop that's an
+        object), not read-only. An image's focus point `{x, y}` is a dot to drag on the
+        image preview, not number fields
 - [ ] Tool bar in the top bar's centre (D62): Select (V), Frame (F), Shape (R / O, with a
       menu for other shapes), Text (T), Image and Hand (H). Click to place at the default
       size, or drag to draw; the new layer is selected, and a new text layer starts typing.
@@ -521,7 +531,9 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
       symbol characters as icons, and they render in a fallback font (Inter only covers text). Until
       this lands, the design docs tell agents not to use them.
 - [ ] `video`: seek-synced to the clock
-- [ ] Per-corner radius on shapes and frames
+- [ ] Per-corner radius on shapes and frames: one radius field, plus an "individual
+      corners" toggle that opens the four (toggling back sets one value again). Same
+      control as round 5's per-side padding
 
 **Done when:** all plugins pass conformance; the agent can discover and use them via `list_element_types` + `get_docs`.
 
