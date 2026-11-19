@@ -42,6 +42,9 @@ Describe structure and let the engine compute positions: content reflows when te
 - \`{ "mode": "grid", "columns": 3, "gap", "rowGap", "padding", "align" }\`: equal-width columns.
 - \`{ "mode": "absolute", "padding" }\`: children use \`position: { x, y }\`. Only for overlaps and decoration.
 
+## Free layers (\`positioning: "free"\`)
+One layer that should sit on top of an auto-layout frame (a badge on a card, a sticker, an arrow pointing at something) doesn't need an absolute frame: give it \`"positioning": "free"\` and a \`position: { x, y }\` (from the frame's content box, inside its padding). It leaves the flow: its siblings close up as if it weren't there, and it's drawn above the siblings before it. Keep everything else in the flow. A \`position\` without \`positioning: "free"\` is ignored in stacks and grids (lint: ignored-position).
+
 \`gap\` and \`padding\` take pixels or space tokens ("$space.md"). Padding can be one value, \`{ x, y }\` or \`{ top, right, bottom, left }\`.
 
 ## Sizing (\`width\` / \`height\` on any node)

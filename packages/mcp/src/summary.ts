@@ -40,7 +40,12 @@ export function slideHeader(slide: Slide, index: number): string {
 
 function outline(node: Node, depth: number, lines: string[]): void {
   const indent = "  ".repeat(depth);
-  const hidden = node.hidden ? " [hidden]" : "";
+  // Free layers say so: they're out of the flow, so reordering them won't move them.
+  const free =
+    node.positioning === "free"
+      ? ` [free at ${node.position?.x ?? 0},${node.position?.y ?? 0}]`
+      : "";
+  const hidden = `${free}${node.hidden ? " [hidden]" : ""}`;
   if (node.kind === "frame") {
     lines.push(`${indent}- ${node.id}: frame (${layoutLabel(node)})${hidden}`);
     for (const child of node.children) outline(child, depth + 1, lines);

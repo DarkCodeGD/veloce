@@ -709,3 +709,56 @@ another deck, or the agent's new `add_asset` MCP tool.
 one transaction, undo), refusals, screenshot paste, cross-deck paste, Replace…, and a font
 dropped → offered in the theme → rendering. HTTP and MCP paths are covered in
 `phase2.test.ts` and `mcp.test.ts`.
+
+## D49 — Free positioning per layer: `positioning: "free"`, one shared rule
+
+**Status:** Accepted (2026-11-19). Extends D43 §2 (what Ctrl/Cmd does in a move).
+
+Agents build slides as stacks and grids (golden rule 4), so a person could only reorder
+layers, never put one where they wanted. Now any layer in a stack or grid can leave the flow
+and sit at its own position on top of it, like Figma's "ignore auto layout".
+
+1. **An explicit field: `positioning?: "auto" | "free"`** on every node, next to
+   `position`. It's optional and additive. Format v1 hasn't shipped, so there's no migration
+   (same call as D48 §4). **Why:** a `position` alone can't mean "free". Decks already carry
+   stale positions on stack children (left over from switching a frame out of absolute), and
+   agents write `position` in stacks expecting it to work. An enum matches the inspector
+   (Position: Auto / Free) and Figma's `layoutPositioning`, and leaves room to grow.
+2. **One rule: `isFreeLayer(node, parentLayout)` in core.** A layer is placed by its own
+   position if its parent is absolute, or if it's `"free"` in a stack or grid. The root never
+   is. The renderer, the editor's `isFree`, paste, lint and the MCP outline all call this
+   one rule. Free children of stacks and grids get exactly the CSS of absolute-frame children.
+   They're absolutely positioned from the content box, so flexbox and grid close up around
+   them. They paint in document order, the same as everything else.
+3. **Going free never jumps.** The position comes from the layer's layout offset in its frame
+   (`offsetLeft/Top` minus the padding). That ignores transforms, so rotation and the canvas
+   zoom can't skew it. Sizes that the flow was stretching get baked to pixels (`freeSizing`).
+   That covers `fill`, `auto` across a stretching stack, and a grid cell's width (and its
+   height, unless aligned). `auto` that was fitting its content becomes `hug`. Fixed and hug
+   sizes stay. It's one transaction; Auto removes `positioning` and `position` again.
+4. **Ctrl/Cmd-drag pulls a layer out of its stack** at the spot you let go. D43 already made
+   Ctrl/Cmd mean "stay in this frame", so this extends it to "stay in this frame, right
+   here". It's read live, so pressing or releasing it mid-drag switches between reorder and
+   place. While pulling, the layer snaps only to the frame's content box, because its
+   siblings are reflowing and their start rectangles would be stale guides. Free layers then
+   move, nudge, snap and resize by position like any free-frame child. **Why Ctrl:** Alt
+   (no snap) and Shift (axis lock) were taken, and the old Ctrl-only reorder within the
+   frame is still the default whenever the pointer stays in that frame.
+5. **Free siblings aren't reorder slots.** Insertion works on the flowing siblings, and
+   `childIndexForSlot` maps the slot back to a child index. A layer dropped after the last
+   flowing sibling goes before any trailing free ones, so those stay on top.
+6. **Changing frames resets it.** Dropping a free layer into another frame clears
+   `positioning`, because "free" was about the frame it was freed in. Pasting keeps free
+   layers free in stacks (stepping off taken spots like D45 pastes) and drops the flag in
+   absolute frames. Switching a frame from absolute to stack or grid clears its children's
+   now-ignored positions in the same transaction.
+7. **Agents:** the MCP node input documents `positioning`. `get_docs("layout")` has a "Free
+   layers" section (badges, stickers, arrows on top of a flow). The outline marks
+   `[free at x,y]`. A new lint rule, `ignored-position` (warning), names any `position` a
+   stack or grid ignores and offers both fixes: add `positioning: "free"` or remove the
+   position.
+
+`tests/integration/phase3-free.test.ts` covers this in real Chromium. Free layers render out
+of the flow. Inspector Free doesn't move the layer by a pixel, and the flow closes up. Ctrl-drag
+pulls a layer out. Free layers move by position without reordering, and reorders skip them.
+Every gesture is one undo step.

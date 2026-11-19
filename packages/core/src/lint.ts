@@ -15,7 +15,7 @@ import {
   type SlideMeasurement,
 } from "./measure.js";
 import type { Deck, Slide } from "./schema/deck.js";
-import type { ElementNode, Node } from "./schema/node.js";
+import { type ElementNode, isFreeLayer, type Layout, type Node } from "./schema/node.js";
 import { TextContentSchema, toPlainText } from "./schema/rich-text.js";
 import type { Theme } from "./schema/theme.js";
 import { suggest } from "./suggest.js";
@@ -34,6 +34,8 @@ export const LINT_RULES = {
   "alt-text": "An image's alt text is empty or looks like a file name.",
   "unknown-token": "Content references a theme token the theme doesn't define.",
   "empty-space": "Content is bunched at one edge, leaving a large empty band (layout balance).",
+  "ignored-position":
+    'A layer has a `position` its frame ignores (a stack/grid child that isn\'t `positioning: "free"`).',
 } as const;
 export type LintRule = keyof typeof LINT_RULES;
 
@@ -80,6 +82,7 @@ export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
     if (only && !only.has(slide.id)) continue;
     const slideIssues = [
       ...structuralRules(slide),
+      ...positionRules(slide),
       ...tokenRules(slide, deck.theme),
       ...visualRules(slide, options.measurements?.get(slide.id)),
       ...balanceRules(slide, options.measurements?.get(slide.id)),
@@ -196,6 +199,29 @@ function structuralRules(slide: Slide): LintIssue[] {
       fix: "Split it into two slides or move detail to speaker notes (slide `notes`).",
     });
   }
+  return issues;
+}
+
+/**
+ * A `position` on a layer its frame lays out is silently ignored: almost always an agent
+ * expecting the layer to sit there. Say so, and offer both readings of the intent.
+ */
+function positionRules(slide: Slide): LintIssue[] {
+  const issues: LintIssue[] = [];
+  const visit = (node: Node, parent: Layout | null) => {
+    if (parent !== null && node.position && !isFreeLayer(node, parent)) {
+      issues.push({
+        rule: "ignored-position",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [node.id],
+        message: `${describe(node)} has position ${node.position.x},${node.position.y}, but its frame is a ${parent.mode}, so the position is ignored.`,
+        fix: 'To place it there on top of the layout, add positioning: "free". To keep it in the flow, remove position.',
+      });
+    }
+    if (node.kind === "frame") for (const child of node.children) visit(child, node.layout);
+  };
+  visit(slide.root, null);
   return issues;
 }
 
@@ -389,7 +415,7 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
           severity: "warning",
           nodeIds: [a.node.id, b.node.id],
           message: `${describe(a.node)} and ${describe(b.node)} overlap (${Math.round((overlap / smaller) * 100)}% of the smaller one).`,
-          fix: "Put them in a stack/grid frame instead of absolute positions, or move one. Ignore if it's intentional (e.g. a caption over an image).",
+          fix: "Put them in a stack/grid frame instead of absolute or free positions, or move one. Ignore if it's intentional (e.g. a caption over an image).",
         });
       }
     }

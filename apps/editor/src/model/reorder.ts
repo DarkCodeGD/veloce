@@ -66,7 +66,24 @@ export interface FrameSnapshot {
   flow: FlowAxis | "absolute";
   /** Locked frames don't accept drops. */
   locked: boolean;
-  children: ReadonlyArray<{ id: string; rect: Rect }>;
+  /** `free`: out of the flow (placed by `position`), so not a slot to insert between. */
+  children: ReadonlyArray<{ id: string; rect: Rect; free: boolean }>;
+}
+
+/**
+ * Turn a slot among a frame's flowing children into an index among all its children (both
+ * without the dragged layer). Free layers aren't slots: a layer dropped after the last
+ * flowing one goes right after it, before any free layers, so those stay drawn on top.
+ */
+export function childIndexForSlot(
+  children: ReadonlyArray<{ free: boolean }>,
+  slot: number,
+): number {
+  const flowing = children.flatMap((c, i) => (c.free ? [] : [i]));
+  const before = flowing[slot];
+  if (before !== undefined) return before;
+  const last = flowing.at(-1);
+  return last === undefined ? 0 : last + 1;
 }
 
 /**

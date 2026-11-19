@@ -128,6 +128,38 @@ describe("lint: structural rules", () => {
   });
 });
 
+describe("lint: ignored positions", () => {
+  it("flags a position its stack or grid ignores, but not free layers or absolute children", () => {
+    const at = { x: 40, y: 80 };
+    const deck = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          children: [
+            text("stale", "in the flow", { position: at }),
+            text("free", "on top", { position: at, positioning: "free" }),
+            frame({
+              id: "grid",
+              layout: { mode: "grid", columns: 2 },
+              children: [text("cell", "x", { position: at })],
+            }),
+            frame({
+              id: "abs",
+              layout: { mode: "absolute" },
+              children: [text("placed", "y", { position: at })],
+            }),
+          ],
+        }),
+      ],
+    });
+    const issues = lintDeck(deck).filter((i) => i.rule === "ignored-position");
+    expect(issues.map((i) => i.nodeIds.join())).toEqual(["stale", "cell"]);
+    expect(issues[0]?.message).toMatch(/frame is a stack/);
+    expect(issues[0]?.fix).toMatch(/positioning: "free"/);
+  });
+});
+
 describe("lint: theme tokens", () => {
   it("flags token references the theme doesn't define, with suggestions", () => {
     const deck = createDeck({

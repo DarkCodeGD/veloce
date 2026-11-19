@@ -3,11 +3,19 @@
  * Element props are generated from the plugin's schema (golden rule #5), so third-party
  * plugins get a working inspector for free. Every change is one undoable transaction.
  */
-import type { Deck, ElementNode, FrameNode, Layout, Node, Slide } from "@veloce/core";
+import {
+  type Deck,
+  type ElementNode,
+  type FrameNode,
+  isFreeLayer,
+  type Layout,
+  type Node,
+  type Slide,
+} from "@veloce/core";
 import { NODE_ID_ATTR } from "@veloce/renderer";
 import { ArrowDown, ArrowRight, Copy, LayoutGrid, Move, Rows3, Trash } from "lucide-react";
 import { run } from "../actions.js";
-import { registry } from "../editor-context.js";
+import { registry, resolvedSizing } from "../editor-context.js";
 import { replaceAsset } from "../model/asset-insert.js";
 import {
   type Command,
@@ -16,13 +24,15 @@ import {
   replacePatch,
   updateNode,
 } from "../model/commands.js";
+import { freeSizing, placeFreely, placeInFlow } from "../model/manipulate.js";
 import { propFields } from "../model/schema-fields.js";
 import { parseNumber } from "../model/scrub.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
-import { indexSlide, nodeLabel } from "../model/slide-index.js";
+import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { shortcutAttrs } from "../platform.js";
 import { setPreview } from "../preview.js";
 import { AssetField } from "./AssetField.js";
+import { mainCanvasSpace } from "./canvas-space.js";
 import {
   ColorField,
   type Commit,
@@ -78,6 +88,7 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
         </header>
         <LayerActions index={index} ids={selection} onSelect={onSelect} />
         <LayerSection
+          index={index}
           node={node}
           parentLayout={parentNode?.kind === "frame" ? parentNode.layout : null}
         />
@@ -209,7 +220,28 @@ function renderedNumber(
   return value;
 }
 
-function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout | null }) {
+/**
+ * Position: Auto / Free for a layer in a stack or grid. Free bakes where it is now (and any
+ * stretched size) so nothing jumps; Auto hands it back to the layout.
+ */
+function setPositioning(index: SlideIndex, node: Node, parentLayout: Layout, value: unknown) {
+  if (value !== "free") return void run(placeInFlow(index, node.id));
+  const space = mainCanvasSpace();
+  const at = space?.offsetInParent(node.id) ?? { x: 0, y: 0 };
+  const size = space?.size(node.id);
+  const sizes = size ? freeSizing(parentLayout, resolvedSizing(node), size) : {};
+  void run(placeFreely(index, node.id, at, sizes));
+}
+
+function LayerSection({
+  index,
+  node,
+  parentLayout,
+}: {
+  index: SlideIndex;
+  node: Node;
+  parentLayout: Layout | null;
+}) {
   const set =
     (key: string, label: string): Commit =>
     (value) =>
@@ -245,7 +277,19 @@ function LayerSection({ node, parentLayout }: { node: Node; parentLayout: Layout
         current={size?.height}
         {...setLive("height", "Change height")}
       />
-      {parentLayout?.mode === "absolute" && (
+      {parentLayout && parentLayout.mode !== "absolute" && (
+        <SelectField
+          label="Position"
+          value={node.positioning}
+          options={[
+            { value: "auto", label: "Auto", icon: <Rows3 size={14} /> },
+            { value: "free", label: "Free", icon: <Move size={14} /> },
+          ]}
+          defaultValue="auto"
+          onCommit={(v) => setPositioning(index, node, parentLayout, v)}
+        />
+      )}
+      {parentLayout && isFreeLayer(node, parentLayout) && (
         <>
           <NumberField
             label="X"
@@ -316,13 +360,21 @@ function FrameSections({ deck, node }: { deck: Deck; node: FrameNode }) {
         : mode === "stack"
           ? { mode, ...keep }
           : { mode, ...keep };
-    void run(
-      updateNode(
-        node.id,
-        { layout: replacePatch(layout as Record<string, unknown>, next) },
-        `Change layout to ${mode}`,
-      ),
+    const change = updateNode(
+      node.id,
+      { layout: replacePatch(layout as Record<string, unknown>, next) },
+      `Change layout to ${mode}`,
     );
+    // Into a stack or grid: positions the flow now ignores go (lint would flag them), except
+    // on layers that are explicitly free. Same transaction, so one undo restores them.
+    if (layout.mode === "absolute") {
+      for (const child of node.children) {
+        if (child.position && child.positioning !== "free") {
+          change.ops.push({ op: "node.update", id: child.id, set: { position: null } });
+        }
+      }
+    }
+    void run(change);
   };
   const setStyle =
     (key: string, label: string): Commit =>

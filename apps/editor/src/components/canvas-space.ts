@@ -4,7 +4,7 @@
  * live preview may reflow the layout, but every calculation keeps using the layout the user
  * saw when they grabbed the layer.
  */
-import type { Layout } from "@veloce/core";
+import { isFreeLayer, type Layout } from "@veloce/core";
 import { NODE_ID_ATTR } from "@veloce/renderer";
 import type { Point, Rect } from "../model/geometry.js";
 import type { FlowAxis, FrameSnapshot } from "../model/reorder.js";
@@ -45,6 +45,22 @@ export class CanvasSpace {
     return el ? { w: el.offsetWidth, h: el.offsetHeight } : null;
   }
 
+  /**
+   * Where the layer's layout box sits in its parent frame's content box, in slide pixels:
+   * exactly the `position` that keeps it in place once it's free. Layout offsets ignore CSS
+   * transforms, so rotation (its own or its ancestors') and the canvas zoom don't skew it.
+   */
+  offsetInParent(id: string): Point | null {
+    const el = this.element(id);
+    const parent = el?.parentElement;
+    if (!el || !parent || el.offsetParent !== parent) return null;
+    const style = getComputedStyle(parent);
+    return {
+      x: el.offsetLeft - (Number.parseFloat(style.paddingLeft) || 0),
+      y: el.offsetTop - (Number.parseFloat(style.paddingTop) || 0),
+    };
+  }
+
   #rectOf(el: Element): Rect {
     const r = el.getBoundingClientRect();
     const tl = this.toSlide({ x: r.left, y: r.top });
@@ -78,7 +94,7 @@ export class CanvasSpace {
         locked: node.locked === true,
         children: node.children.flatMap((child) => {
           const r = exclude.has(child.id) ? null : this.rect(child.id);
-          return r ? [{ id: child.id, rect: r }] : [];
+          return r ? [{ id: child.id, rect: r, free: isFreeLayer(child, node.layout) }] : [];
         }),
       });
     }

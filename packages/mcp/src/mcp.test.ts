@@ -175,6 +175,33 @@ describe("building a deck", () => {
     expect(replaced.text).toMatch(/Replace slide intro: done[\s\S]*1\. slide intro/);
   });
 
+  it("places free layers on top of a stack, and flags positions a stack ignores", async () => {
+    await connect();
+    await call("create_deck", { title: "Badges" });
+    const upsert = await call("upsert_slide", {
+      slide: {
+        id: "card",
+        children: [
+          { id: "title", type: "text", props: { content: "Pricing" } },
+          {
+            id: "badge",
+            type: "text",
+            props: { content: "New" },
+            positioning: "free",
+            position: { x: 1500, y: 40 },
+          },
+          { id: "stray", type: "text", props: { content: "Oops" }, position: { x: 10, y: 10 } },
+        ],
+      },
+    });
+    expect(upsert.isError).toBe(false);
+    expect(upsert.text).toMatch(/- badge: text "New" \[free at 1500,40\]/);
+    expect(upsert.text).toMatch(/ignored-position · slide card · stray/);
+    expect(upsert.text).toMatch(/add positioning: "free"/);
+    expect(upsert.text).not.toMatch(/ignored-position · slide card · badge/);
+    expect((await call("get_docs", { topic: "layout" })).text).toMatch(/## Free layers/);
+  });
+
   it("never silently overwrites a slide the user edited, and keeps the slide's root ID", async () => {
     await connect();
     await call("create_deck", { title: "Shared" });

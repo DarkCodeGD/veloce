@@ -13,7 +13,15 @@
  * - `"auto"` (the node didn't say and its plugin has no default): fit the content along a
  *   stack's main axis, follow the parent's `align` across it (like CSS `auto`).
  */
-import type { FrameNode, Layout, Node, Padding, Sizing, Space } from "@veloce/core";
+import {
+  type FrameNode,
+  isFreeLayer,
+  type Layout,
+  type Node,
+  type Padding,
+  type Sizing,
+  type Space,
+} from "@veloce/core";
 import {
   type AssetUrlResolver,
   cssBorder,
@@ -112,6 +120,21 @@ export function nodeBoxCss(
   }
   css.position = "relative";
 
+  // Free layers (every child of an absolute frame, `positioning: "free"` ones in stacks and
+  // grids) sit at their own position. Absolutely positioned children don't take part in
+  // flexbox or grid placement, so the flow closes up around them.
+  if (isFreeLayer(node, parent)) {
+    const [padTop, padRight, padBottom, padLeft] = paddingSides(parent.padding);
+    const x = node.position?.x ?? 0;
+    const y = node.position?.y ?? 0;
+    css.position = "absolute";
+    css.left = `calc(${padLeft} + ${x}px)`;
+    css.top = `calc(${padTop} + ${y}px)`;
+    css.width = absoluteSize(size.width, [padLeft, padRight], x, "max-content");
+    css.height = absoluteSize(size.height, [padTop, padBottom], y, "auto");
+    return css;
+  }
+
   switch (parent.mode) {
     case "stack": {
       const row = (parent.direction ?? "column") === "row";
@@ -129,17 +152,8 @@ export function nodeBoxCss(
         gridAxis("height", size.height, parent.align ?? "stretch"),
       );
       return css;
-    case "absolute": {
-      const [padTop, padRight, padBottom, padLeft] = paddingSides(parent.padding);
-      const x = node.position?.x ?? 0;
-      const y = node.position?.y ?? 0;
-      css.position = "absolute";
-      css.left = `calc(${padLeft} + ${x}px)`;
-      css.top = `calc(${padTop} + ${y}px)`;
-      css.width = absoluteSize(size.width, [padLeft, padRight], x, "max-content");
-      css.height = absoluteSize(size.height, [padTop, padBottom], y, "auto");
-      return css;
-    }
+    case "absolute":
+      return css; // unreachable: every child of an absolute frame is free (handled above)
   }
 }
 

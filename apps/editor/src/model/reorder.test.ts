@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  childIndexForSlot,
   dropTarget,
   type FrameSnapshot,
   insertionIndex,
@@ -10,6 +11,16 @@ import {
 const cell = (x: number, y: number) => ({ x, y, w: 100, h: 100 });
 
 describe("reorder", () => {
+  it("skips free layers when turning a slot into a child index", () => {
+    // [flow0, FREE, flow1, FREE]: free layers aren't slots, and stay on top.
+    const kids = [{ free: false }, { free: true }, { free: false }, { free: true }];
+    expect(childIndexForSlot(kids, 0)).toBe(0); // before flow0
+    expect(childIndexForSlot(kids, 1)).toBe(2); // before flow1 (after the free one)
+    expect(childIndexForSlot(kids, 2)).toBe(3); // after flow1, below the trailing free one
+    expect(childIndexForSlot([{ free: true }], 0)).toBe(0); // no flow: under the free ones
+    expect(childIndexForSlot([], 0)).toBe(0);
+  });
+
   it("inserts by the siblings' centres along a row or a column", () => {
     const row = [0, 100, 200].map((x) => ({ x, y: 0, w: 80, h: 40 })); // centres 40, 140, 240
     expect(insertionIndex({ x: 10, y: 0 }, row, "row")).toBe(0);

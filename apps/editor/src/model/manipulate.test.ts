@@ -1,7 +1,17 @@
 import { applyTransaction, createDeck, createSlide, type Deck, element, frame } from "@veloce/core";
 import { describe, expect, it } from "vitest";
 import type { Command } from "./commands.js";
-import { ancestorRotation, dropInto, isFree, moveTo, resizeTo, rotateTo } from "./manipulate.js";
+import {
+  ancestorRotation,
+  dropInto,
+  freeSizing,
+  isFree,
+  moveTo,
+  placeFreely,
+  placeInFlow,
+  resizeTo,
+  rotateTo,
+} from "./manipulate.js";
 import { indexSlide } from "./slide-index.js";
 
 const text = (id: string, extra = {}) => element("text", { content: id }, { id, ...extra });
@@ -119,5 +129,123 @@ describe("manipulate", () => {
     expect(apply(rotateTo(index, "a", 30)).nodes.get("a")?.node.rotation).toBe(30);
     expect(apply(rotateTo(index, "turned", 0)).nodes.get("turned")?.node.rotation).toBeUndefined();
     expect(rotateTo(index, "a", 0)).toBeNull();
+  });
+});
+
+describe("free positioning in stacks and grids", () => {
+  /** root (column) > [title, badge (free at 600,40), card (stack) > [inner]] */
+  const freeDeck = createDeck({
+    title: "t",
+    slides: [
+      createSlide({
+        id: "s1",
+        rootId: "root",
+        children: [
+          text("title"),
+          text("badge", { positioning: "free", position: { x: 600, y: 40 } }),
+          frame({ id: "card", layout: { mode: "stack" }, children: [text("inner")] }),
+        ],
+      }),
+    ],
+  });
+  const fx = indexSlide(freeDeck.slides[0] as (typeof freeDeck.slides)[0]);
+  const run = (command: Command | null) => {
+    if (!command) throw new Error("no command");
+    const result = applyTransaction(freeDeck, {
+      origin: "user",
+      label: command.label,
+      ops: command.ops,
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    return indexSlide(result.deck.slides[0] as (typeof freeDeck.slides)[0]);
+  };
+  const nodeOf = (i: ReturnType<typeof run>, id: string) => i.nodes.get(id)?.node;
+
+  it("treats free layers in a stack like children of a free frame", () => {
+    expect(isFree(fx, "badge")).toBe(true);
+    expect(isFree(fx, "title")).toBe(false);
+    expect(isFree(fx, "root")).toBe(false);
+    // Moves and nudges change their position; flow layers are skipped.
+    const moved = moveTo(
+      fx,
+      new Map([
+        ["badge", { x: 610.004, y: 52 }],
+        ["title", { x: 1, y: 1 }],
+      ]),
+    );
+    expect(moved?.ops).toEqual([
+      { op: "node.update", id: "badge", set: { position: { x: 610, y: 52 } } },
+    ]);
+  });
+
+  it("bakes stretched sizes when a layer leaves the flow, and keeps fitted ones fitting", () => {
+    const column = { mode: "stack" } as const;
+    const rendered = { w: 1600.4, h: 72 };
+    // Text in a column: fill width → its pixels; hug height stays hug.
+    expect(freeSizing(column, { width: "fill", height: "hug" }, rendered)).toEqual({
+      width: 1600,
+    });
+    // A frame (auto both): stretched across the column → baked; along it → hug.
+    expect(freeSizing(column, { width: "auto", height: "auto" }, rendered)).toEqual({
+      width: 1600,
+      height: "hug",
+    });
+    // Centered column: nothing stretches it.
+    expect(
+      freeSizing({ mode: "stack", align: "center" }, { width: "auto", height: "auto" }, rendered),
+    ).toEqual({ width: "hug", height: "hug" });
+    // A row stretches heights.
+    expect(
+      freeSizing({ mode: "stack", direction: "row" }, { width: "auto", height: "auto" }, rendered),
+    ).toEqual({ width: "hug", height: 72 });
+    // Grid cells stretch the width, and the height unless aligned.
+    const grid = { mode: "grid", columns: 2 } as const;
+    expect(freeSizing(grid, { width: "auto", height: "auto" }, rendered)).toEqual({
+      width: 1600,
+      height: 72,
+    });
+    expect(
+      freeSizing({ ...grid, align: "start" }, { width: "auto", height: "auto" }, rendered),
+    ).toEqual({ width: 1600, height: "hug" });
+    // Fixed sizes stay.
+    expect(freeSizing(column, { width: 300, height: 200 }, rendered)).toEqual({});
+  });
+
+  it("frees a layer in one step, and puts it back in the flow", () => {
+    const freed = placeFreely(fx, "title", { x: 120.333, y: 64 }, { width: 1600, height: "hug" });
+    expect(freed?.label).toBe('Place "title" freely');
+    expect(freed?.ops).toEqual([
+      {
+        op: "node.update",
+        id: "title",
+        set: { positioning: "free", position: { x: 120.33, y: 64 }, width: 1600, height: "hug" },
+      },
+    ]);
+    const after = run(freed);
+    expect(nodeOf(after, "title")).toMatchObject({ positioning: "free", width: 1600 });
+    // Already free, or in an absolute frame: nothing to do.
+    expect(placeFreely(fx, "badge", { x: 0, y: 0 })).toBeNull();
+    expect(placeFreely(index, "a", { x: 0, y: 0 })).toBeNull();
+
+    const back = placeInFlow(fx, "badge");
+    expect(back?.label).toBe('Put "badge" back in the layout');
+    const flowing = nodeOf(run(back), "badge");
+    expect(flowing?.positioning).toBeUndefined();
+    expect(flowing?.position).toBeUndefined();
+    expect(placeInFlow(fx, "title")).toBeNull();
+  });
+
+  it("moves a free layer within its stack by position, and resets it when it changes frames", () => {
+    const within = dropInto(fx, "badge", { parentId: "root", position: { x: 700, y: 40 } });
+    expect(within?.label).toBe('Move "badge"');
+    expect(within?.ops).toEqual([
+      { op: "node.update", id: "badge", set: { position: { x: 700, y: 40 } } },
+    ]);
+    // Into another stack: it joins that flow, without its now meaningless position.
+    const into = dropInto(fx, "badge", { parentId: "card", index: 0 });
+    const after = run(into);
+    expect(childIds(after, "card")).toEqual(["badge", "inner"]);
+    expect(nodeOf(after, "badge")?.positioning).toBeUndefined();
+    expect(nodeOf(after, "badge")?.position).toBeUndefined();
   });
 });

@@ -176,6 +176,28 @@ describe("layout → CSS", () => {
       height: "100%",
     });
   });
+
+  it("takes free layers out of stacks and grids, at their own position", () => {
+    const free = element("text", {}, { id: "f", positioning: "free", position: { x: 40, y: 50 } });
+    const padded = { mode: "stack", padding: { x: 10, y: 20 } } as const;
+    const css = nodeBoxCss(free, padded, { width: 300, height: "hug" });
+    expect(css).toMatchObject({
+      position: "absolute",
+      left: "calc(10px + 40px)",
+      top: "calc(20px + 50px)",
+      width: "300px",
+      height: "auto",
+    });
+    expect(css.flex).toBeUndefined(); // no flex sizing: it isn't in the flow
+    expect(
+      nodeBoxCss(free, { mode: "grid", columns: 3 }, { width: "hug", height: 80 }),
+    ).toMatchObject({ position: "absolute", width: "max-content", height: "80px" });
+    // `positioning: "auto"` (and a stray position) stays in the flow.
+    const auto = { ...free, positioning: "auto" as const };
+    expect(nodeBoxCss(auto, padded, { width: 300, height: "hug" }).position).toBe("relative");
+    // The root ignores it: it always fills the stage.
+    expect(nodeBoxCss(free, null, { width: 1, height: 1 }).left).toBe("0");
+  });
 });
 
 describe("SlideRenderer", () => {

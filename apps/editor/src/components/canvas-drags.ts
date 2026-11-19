@@ -5,6 +5,8 @@
  * draw on the canvas (guides, the insertion line, a size badge…). useCanvasGestures drives
  * them; the pure maths lives in model/.
  */
+import type { Layout } from "@veloce/core";
+import { resolvedSizing } from "../editor-context.js";
 import type { Command } from "../model/commands.js";
 import {
   anchoredBox,
@@ -21,13 +23,21 @@ import {
 import {
   ancestorRotation,
   dropInto,
+  freeSizing,
   isFree,
   moveTo,
+  placeFreely,
   resizeTo,
   rotateTo,
 } from "../model/manipulate.js";
 import { marqueeCandidates, marqueeHits, rectBetween } from "../model/marquee.js";
-import { dropTarget, type FrameSnapshot, insertionIndex, insertionLine } from "../model/reorder.js";
+import {
+  childIndexForSlot,
+  dropTarget,
+  type FrameSnapshot,
+  insertionIndex,
+  insertionLine,
+} from "../model/reorder.js";
 import { type SlideIndex, topmost } from "../model/slide-index.js";
 import { type Guide, guidesFor, snapAxis, snapMove } from "../model/snapping.js";
 import { type Measure, spacingAround } from "../model/spacing.js";
@@ -42,7 +52,10 @@ export interface Modifiers {
   shift: boolean;
   /** Move: no snapping. Resize: from the centre. */
   alt: boolean;
-  /** Ctrl/Cmd. Move: stay in the current frame (don't drop into another one). */
+  /**
+   * Ctrl/Cmd. Move: stay in the current frame, at the spot you drop it (a layer in a stack or
+   * grid leaves the flow: free positioning). Never drops into another frame.
+   */
   mod: boolean;
 }
 
@@ -178,12 +191,19 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
   if (!at?.parentId || !box || !rect) return null;
   const frames = space.frames(index, subtree(index, id));
   const parent = frames.find((f) => f.id === at.parentId);
-  if (!parent) return null;
+  const parentNode = index.nodes.get(at.parentId)?.node;
+  if (!parent || parentNode?.kind !== "frame") return null;
+  const free = isFree(index, id);
   const position = at.node.position ?? { x: 0, y: 0 };
   const turn = ancestorRotation(index, id);
   const self = new Set([id]);
   const targets = turn === 0 ? snapTargets(parent, self) : [];
   const p0 = space.toSlide(start);
+  // Ctrl on a layer in a stack/grid pulls it out of the flow, starting from where it is, at
+  // the size it has. Its siblings close up live, so it snaps only to the frame's content box
+  // (their start rectangles would be stale guides).
+  const pull = free ? null : pullOut(ctx, id, parentNode.layout);
+  const pullTargets = turn === 0 ? [parent.content] : [];
 
   return {
     update(pointer, mods) {
@@ -191,8 +211,26 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
       let d = constrain(sub(p, p0), mods.shift);
       const target = (!mods.mod && dropTarget(frames, p, EDGE_BAND_PX / space.scale)) || parent;
 
-      // Stay in a free frame: move by position, snapping to the siblings.
-      if (target.id === parent.id && target.flow === "absolute") {
+      if (target.id === parent.id && !free && mods.mod && pull) {
+        d = { x: Math.round(d.x), y: Math.round(d.y) };
+        let guides: Guide[] = [];
+        if (pullTargets.length > 0 && !mods.alt) {
+          const snap = snapMove(offset(rect, d), pullTargets, SNAP_PX / space.scale);
+          d = add(d, { x: snap.dx, y: snap.dy });
+          guides = snap.guides;
+        }
+        const command = placeFreely(
+          index,
+          id,
+          add(pull.position, rotateVector(d, -turn)),
+          pull.size,
+        );
+        return { command, feedback: { guides } };
+      }
+
+      // Stay in the frame, placed by position (a free frame's child, or a free layer in a
+      // stack or grid): move, snapping to the siblings.
+      if (target.id === parent.id && free) {
         d = { x: Math.round(d.x), y: Math.round(d.y) };
         let guides: Guide[] = [];
         if (targets.length > 0 && !mods.alt) {
@@ -220,10 +258,15 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
       }
 
       // Into a stack or grid: the slot under the pointer (siblings as laid out at the start).
-      const siblings = target.children.filter((c) => c.id !== id).map((c) => c.rect);
+      // Free siblings float above the flow, so they're not slots.
+      const others = target.children.filter((c) => c.id !== id);
+      const siblings = others.filter((c) => !c.free).map((c) => c.rect);
       const slot = insertionIndex(p, siblings, target.flow);
       return {
-        command: dropInto(index, id, { parentId: target.id, index: slot }),
+        command: dropInto(index, id, {
+          parentId: target.id,
+          index: childIndexForSlot(others, slot),
+        }),
         feedback: {
           target: target.rect,
           ghost,
@@ -232,6 +275,22 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
       };
     },
   };
+}
+
+/**
+ * Where a layer in a stack or grid sits now, as a free `position`, and the sizes that keep it
+ * looking the same once it's out of the flow. Null if it can't be measured.
+ */
+function pullOut(
+  ctx: Context,
+  id: string,
+  parentLayout: Layout,
+): { position: Point; size: ReturnType<typeof freeSizing> } | null {
+  const node = ctx.index.nodes.get(id)?.node;
+  const position = ctx.space.offsetInParent(id);
+  const size = ctx.space.size(id);
+  if (!node || !position || !size) return null;
+  return { position, size: freeSizing(parentLayout, resolvedSizing(node), size) };
 }
 
 // ── Resize ──────────────────────────────────────────────────────────────────────────

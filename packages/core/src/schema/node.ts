@@ -103,8 +103,19 @@ const nodeCommon = {
   /** Default: `"hug"` (plugins may declare their own default, e.g. text fills width). */
   width: SizingSchema.optional(),
   height: SizingSchema.optional(),
-  /** Only used when the parent frame's layout is `absolute`. */
+  /**
+   * Where the layer sits in its frame, from the frame's content box (inside its padding).
+   * Used when the parent frame's layout is `absolute`, or when this layer is
+   * `positioning: "free"`; ignored otherwise (see `isFreeLayer`).
+   */
   position: PointSchema.optional(),
+  /**
+   * `"free"` takes the layer out of its stack/grid flow (Figma's "ignore auto layout"): it
+   * sits at its own `position` on top of the flow, which closes up as if it weren't there.
+   * Default: `"auto"` (placed by the parent's layout). No effect in `absolute` frames, whose
+   * children are always free.
+   */
+  positioning: z.enum(["auto", "free"]).optional(),
 };
 
 /** Element types: built-ins are bare (`text`), third-party ones are namespaced (`acme.sparkles`). */
@@ -149,6 +160,17 @@ export const NodeSchema: z.ZodType<Node> = z.discriminatedUnion("kind", [
   FrameNodeSchema,
   ElementNodeSchema,
 ]);
+
+/**
+ * Whether a layer is placed by its own `position` rather than by its parent's layout: every
+ * child of an `absolute` frame, and `positioning: "free"` children of stacks and grids.
+ * `parent` is the parent frame's layout, or `null` for a slide's root (which always fills the
+ * stage). The one rule the renderer, the editor, lint and MCP all share.
+ */
+export function isFreeLayer(node: Pick<Node, "positioning">, parent: Layout | null): boolean {
+  if (parent === null) return false;
+  return parent.mode === "absolute" || node.positioning === "free";
+}
 
 /** Deepest allowed nesting (root = depth 0). Guards renderers and recursion against abuse. */
 export const MAX_DEPTH = 32;

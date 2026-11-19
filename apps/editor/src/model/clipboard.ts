@@ -21,6 +21,7 @@ import {
   AssetInfoSchema,
   collectAssetRefs,
   element,
+  isFreeLayer,
   type Node,
   NodeSchema,
   type Op,
@@ -230,17 +231,27 @@ export function pasteText(
   };
 }
 
-/** Positions for nodes about to go into `parentId` (mutates the fresh copies). */
+/**
+ * Positions for nodes about to go into `parentId` (mutates the fresh copies). Free layers
+ * (in an absolute frame, or `positioning: "free"` ones pasted into a stack or grid) step
+ * off any free sibling they'd land exactly on; the rest drop their meaningless `position`.
+ */
 function place(index: SlideIndex, parentId: string, nodes: Node[]): void {
   const parent = index.nodes.get(parentId)?.node;
-  const free = parent?.kind === "frame" && parent.layout.mode === "absolute";
-  if (!free) {
-    for (const node of nodes) delete (node as { position?: unknown }).position;
-    return;
-  }
+  if (parent?.kind !== "frame") return;
+  const absolute = parent.layout.mode === "absolute";
   const key = (p: { x: number; y: number }) => `${p.x},${p.y}`;
-  const taken = new Set(parent.children.map((c) => key(c.position ?? { x: 0, y: 0 })));
+  const taken = new Set(
+    parent.children
+      .filter((c) => isFreeLayer(c, parent.layout))
+      .map((c) => key(c.position ?? { x: 0, y: 0 })),
+  );
   for (const node of nodes) {
+    if (absolute) delete node.positioning; // every child of an absolute frame is free anyway
+    if (!isFreeLayer(node, parent.layout)) {
+      delete node.position;
+      continue;
+    }
     let p = node.position ?? { x: 0, y: 0 };
     while (taken.has(key(p))) p = { x: p.x + PASTE_OFFSET, y: p.y + PASTE_OFFSET };
     taken.add(key(p));

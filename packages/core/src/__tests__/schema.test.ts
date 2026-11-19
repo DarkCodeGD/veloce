@@ -3,7 +3,7 @@ import { createDeck } from "../builders.js";
 import { DEFAULT_THEME } from "../default-theme.js";
 import { formatIssues, parseOrThrow, VeloceError } from "../errors.js";
 import { DeckSchema } from "../schema/deck.js";
-import { NodeSchema } from "../schema/node.js";
+import { isFreeLayer, NodeSchema } from "../schema/node.js";
 import { PaintSchema } from "../schema/paint.js";
 import { RichTextSchema, toParagraphs, toPlainText } from "../schema/rich-text.js";
 import { ThemeSchema } from "../schema/theme.js";
@@ -64,6 +64,19 @@ describe("document schema", () => {
     };
     const err = errorOf(ThemeSchema, bad);
     expect(err.message).toMatch(/text\.h1\.font: Unknown font "nope"/);
+  });
+
+  it("knows which layers are placed by their own position", () => {
+    const stack = { mode: "stack" } as const;
+    const absolute = { mode: "absolute" } as const;
+    expect(isFreeLayer({}, stack)).toBe(false);
+    expect(isFreeLayer({ positioning: "auto" }, stack)).toBe(false);
+    expect(isFreeLayer({ positioning: "free" }, stack)).toBe(true);
+    expect(isFreeLayer({ positioning: "free" }, { mode: "grid", columns: 2 })).toBe(true);
+    expect(isFreeLayer({}, absolute)).toBe(true);
+    expect(isFreeLayer({ positioning: "free" }, null)).toBe(false); // the root fills the stage
+    const node = { id: "x", kind: "element", type: "text", props: {}, positioning: "floating" };
+    expect(errorOf(NodeSchema, node).path).toBe("positioning");
   });
 
   it("only allows web and mail links in rich text (no javascript: URLs)", () => {

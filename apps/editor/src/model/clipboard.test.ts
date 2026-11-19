@@ -121,6 +121,29 @@ describe("clipboard", () => {
     expect(pasted?.position).toBeUndefined();
   });
 
+  it("keeps free layers free in stacks (stepping off taken spots), not in free frames", () => {
+    const base = makeDeck();
+    const badge = text("badge", "New", { positioning: "free", position: { x: 500, y: 10 } });
+    const deck = apply(base, {
+      label: "Add badge",
+      ops: [{ op: "node.insert", parentId: "root", node: badge }],
+    });
+    const node = (d: Deck, id: string | undefined) => indexOf(d).nodes.get(id ?? "")?.node;
+
+    // Pasted next to itself: still free, shifted off the original.
+    const again = paste(deck, ["badge"]);
+    expect(node(again.deck, again.command.select?.[0])).toMatchObject({
+      positioning: "free",
+      position: { x: 520, y: 30 },
+    });
+    // Into an absolute frame every child is free: the flag goes, the position stays.
+    const payload = copyNodes(indexOf(deck), ["badge"]) ?? undefined;
+    const intoFrame = paste(deck, ["a"], payload);
+    const pasted = node(intoFrame.deck, intoFrame.command.select?.[0]);
+    expect(pasted?.positioning).toBeUndefined();
+    expect(pasted?.position).toEqual({ x: 500, y: 10 });
+  });
+
   it("cuts as one undoable removal", () => {
     const deck = makeDeck();
     const command = cutNodes(indexOf(deck), ["title", "footer"]);

@@ -9,7 +9,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (328 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (344 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -51,7 +51,12 @@
     down, so dragging a layer only reorders it; there's no way to place one freely, and
     switching a frame to Free collapses its children. Round 4 (below) fixes that and adds the
     basics people expect from Figma/Keynote before Motion, which needs freely placed layers.
-  - **Next:** round 4, starting with free positioning per layer.
+  - **Round 4, free positioning (D49):** any layer in a stack or grid can go Free
+    (inspector Position: Auto / Free, or Ctrl/Cmd-drag it out) without moving a pixel; it
+    then moves, nudges and snaps by position while the flow closes up beneath it. Agents get
+    `positioning: "free"`, a "Free layers" docs section and an `ignored-position` lint.
+    `tests/integration/phase3-free.test.ts` covers it.
+  - **Next:** round 4, item 2: switching a frame to Free keeps its children in place.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -245,7 +250,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
 
 **Round 4: free positioning and pro-tool basics**
 
-- [ ] Free positioning per layer: a layer inside a stack or grid can leave the flow and sit
+- [x] Free positioning per layer: a layer inside a stack or grid can leave the flow and sit
       at its own `x`/`y` on top of it (Figma's "ignore auto layout"). Inspector toggle
       (Position: Auto / Free) and dragging a layer out of its stack; it keeps its on-screen
       spot. Same option for agents over MCP (schema + docs + lint), with a migration if the

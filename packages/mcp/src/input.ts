@@ -35,7 +35,15 @@ const nodeCommon = {
     'Pixels, "fill" (take free space) or "hug" (fit content).',
   ),
   height: SizingSchema.optional().describe('Pixels, "fill" or "hug".'),
-  position: PointSchema.optional().describe('Only inside a frame whose layout mode is "absolute".'),
+  position: PointSchema.optional().describe(
+    'From the frame\'s content box. Used inside "absolute" frames, or with positioning: "free".',
+  ),
+  positioning: z
+    .enum(["auto", "free"])
+    .optional()
+    .describe(
+      '"free": leave the stack/grid flow and sit at `position` on top of it (badges, stickers, overlays). Default "auto".',
+    ),
 };
 
 export const ElementInputSchema = z.strictObject({
