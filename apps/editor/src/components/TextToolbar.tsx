@@ -5,8 +5,8 @@
  *
  * Every control keeps the focus (and so the text selection) in the editor: buttons cancel
  * their mousedown, and the menus are plain buttons in a popup, not focus-taking widgets. So
- * the next keystroke keeps typing, and the selection stays visible while you pick. The one
- * exception is the system color picker, which needs focus; the editor gets it back on close.
+ * the next keystroke keeps typing, and the selection stays visible while you pick. The color
+ * picker's hex box takes the focus while you type a hex; committing hands it back.
  *
  * Style and alignment format whole paragraphs; color formats the selected text (or what the
  * caret types next). What the controls show is the selection's effective value: its own
@@ -39,14 +39,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { fromPicked, type PickedColor, pickerColor } from "../model/color.js";
 import type { Point } from "../model/geometry.js";
 import { DOC, normalizeLink } from "../model/rich-text-doc.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { type Align, effectiveBox, type TextBox, uniform } from "../model/text-box.js";
-import { toHex6 } from "../model/theme-edit.js";
 import { shortcutAttrs } from "../platform.js";
+import { ColorPicker } from "./ColorPicker.js";
 import { Swatches, tokenOptions } from "./fields.js";
-import { useColorPicker } from "./useColorPicker.js";
 
 type Chain = ReturnType<Editor["chain"]>;
 
@@ -337,6 +337,7 @@ export function TextToolbar({ editor, anchor, theme, box, escapeTrap }: Props) {
           value={format.color}
           onPreview={(color) => editor.chain().setMark(DOC.color, { color }).run()}
           onPick={(color) => pick((c) => c.setMark(DOC.color, { color }))}
+          onCommit={(color) => apply((c) => c.setMark(DOC.color, { color }))}
         />
       </ToolbarMenu>
 
@@ -465,38 +466,38 @@ function ToolbarMenu({
   );
 }
 
-/** Theme colors first; any other color from the system picker. */
+/**
+ * Theme colors first; any other color (and an opacity) from the picker below them. Both keep
+ * the focus in the text: the picker cancels its presses, and its hex box hands the focus back
+ * when it commits.
+ */
 function ColorMenu({
   theme,
   value,
   onPreview,
   onPick,
+  onCommit,
 }: {
   theme: Theme;
   value: string | undefined;
-  /** Dragging in the system picker: recolor live (no focus change, the picker is open). */
+  /** Dragging in the picker: recolor live. */
   onPreview(color: string): void;
+  /** A swatch: set it and close the menu. */
   onPick(color: string): void;
+  /** A finished change in the picker: set it, keep the menu open for the next one. */
+  onCommit(color: string): void;
 }) {
-  const shown = swatchColor(theme, value);
-  const hex = (shown && toHex6(shown)) ?? "#000000";
-  const picker = useColorPicker(hex, onPick, onPreview);
-  const custom = value !== undefined && !value.startsWith("$");
+  const shown = pickerColor(swatchColor(theme, value), value);
+  const picked = (p: PickedColor) => fromPicked(value, shown.hex, p);
   return (
     <div className="text-color-menu">
       <Swatches theme={theme} label="Text color" value={value} onPick={onPick} keepFocus />
-      {/* The system picker needs the focus; picking hands it back to the text. */}
-      <label className={`text-color-custom${custom ? " is-on" : ""}`}>
-        <span className="text-color-custom-chip" style={{ background: custom ? shown : undefined }}>
-          <input
-            ref={picker}
-            type="color"
-            className="picker-input"
-            aria-label="Custom text color"
-          />
-        </span>
-        Custom…
-      </label>
+      <ColorPicker
+        label="Text color"
+        value={shown}
+        onPreview={(p) => onPreview(picked(p))}
+        onCommit={(p) => onCommit(picked(p))}
+      />
     </div>
   );
 }

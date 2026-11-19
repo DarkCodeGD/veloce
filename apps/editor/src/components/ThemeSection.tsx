@@ -18,23 +18,23 @@ import {
   type Theme,
 } from "@veloce/core";
 import { Plus, TriangleAlert } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { run } from "../actions.js";
 import { uploadAll } from "../assets.js";
 import { addFonts, splitImports } from "../model/asset-insert.js";
+import { fromPicked, type PickedColor, pickerColor } from "../model/color.js";
 import {
   builtinIdOf,
   contrastIssues,
   setThemeCommand,
-  toHex6,
   withColor,
   withFont,
 } from "../model/theme-edit.js";
 import { setPreview } from "../preview.js";
 import { showToast } from "../toasts.js";
+import { ColorPicker, ColorPopover } from "./ColorPicker.js";
 import { Group, Section, SelectField } from "./fields.js";
 import type { SelectOption } from "./Select.js";
-import { useColorPicker } from "./useColorPicker.js";
 
 /** Each font shown in itself; no hint, so long names fit the trigger. */
 const FONT_OPTIONS: SelectOption[] = BUNDLED_FONTS.map((f) => ({
@@ -213,8 +213,9 @@ function ThemeCard({ theme, on, onPick }: { theme: Theme; on: boolean; onPick():
 }
 
 /**
- * One palette color: the swatch opens the system color picker. Dragging in the picker
- * previews live; closing it commits one transaction.
+ * One palette color: the swatch opens the color picker (with alpha: a theme color may be
+ * translucent). Dragging previews live; each finished drag, key or typed hex commits one
+ * transaction.
  */
 function ColorToken({
   name,
@@ -229,17 +230,35 @@ function ColorToken({
   onPreview(hex: string): void;
   onCommit(hex: string): void;
 }) {
-  // The system picker has no alpha: editing a translucent token makes it opaque.
-  const hex6 = toHex6(value) ?? "#000000";
-  const input = useColorPicker(hex6, onCommit, onPreview);
+  const swatch = useRef<HTMLButtonElement>(null);
+  const [picking, setPicking] = useState(false);
+  const shown = pickerColor(value, value);
+  const picked = (p: PickedColor) => fromPicked(value, shown.hex, p);
   return (
     <li className={`theme-color${warn ? " is-warn" : ""}`}>
-      <label className="theme-swatch" style={{ background: value }} data-tip={`Edit ${name}`}>
-        <span className="sr-only">{`Theme color ${name}`}</span>
-        <input ref={input} type="color" className="picker-input" />
-      </label>
+      <button
+        ref={swatch}
+        type="button"
+        className={`theme-swatch${picking ? " is-open" : ""}`}
+        style={{ background: value }}
+        data-tip={picking ? undefined : `Edit ${name}`}
+        aria-label={`Theme color ${name}`}
+        aria-haspopup="dialog"
+        aria-expanded={picking}
+        onClick={() => setPicking((open) => !open)}
+      />
       <span className="theme-color-name">{name}</span>
       <code className="theme-color-value">{value}</code>
+      {picking && (
+        <ColorPopover trigger={swatch} onClose={() => setPicking(false)}>
+          <ColorPicker
+            label={`Theme color ${name}`}
+            value={shown}
+            onPreview={(p) => onPreview(picked(p))}
+            onCommit={(p) => onCommit(picked(p))}
+          />
+        </ColorPopover>
+      )}
     </li>
   );
 }

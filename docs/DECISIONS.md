@@ -605,6 +605,7 @@ Double-click a text layer (or press Enter with it selected) to edit it in place.
    accessible, and the OS picker has an eyedropper. Trade-off: no alpha, so editing a
    translucent token makes it opaque. The hook binds through a callback ref, so a picker that
    mounts later (a gradient replaced by a color) still gets its listeners.
+   **Superseded by D64** (the editor's own picker, with alpha).
 4. **Contrast warnings in the palette** check the pairs slides lean on most (text and muted
    on background/surface: 4.5:1; primary on background: 3:1; on-primary on primary: 4.5:1),
    the same WCAG math lint uses. **Why:** a bad palette breaks every slide at once; it should
@@ -1116,8 +1117,8 @@ it was intended, so the final lint run never came back clean.
 2. **The menus never take the focus.** They're plain buttons in a popup that cancel their
    mousedown, not the inspector's `Select`. **Why:** the text selection stays visible while
    you pick, and the next keystroke keeps typing (D44's toolbar rule). Esc closes an open
-   menu before it ends the session. The system color picker is the one exception (it needs
-   focus); picking hands it back to the text.
+   menu before it ends the session. The color picker (D64) is shown inline in the Color menu
+   and keeps the focus too; only its hex box takes it while you type, and hands it back.
 3. **Formatting that covers the whole text moves to the layer** when the session ends
    (`model/text-box.ts`): every paragraph h2 → the layer's `style: "$text.h2"`, every plain
    run accent → `color`, every paragraph centered → `align`. Overrides that only repeat the
@@ -1187,10 +1188,43 @@ takes an opacity in percent: `"$color.secondary/30"`.
    renderer finds it inside gradients (`CSS_COLOR_FN`), so translucent text, fills and
    stops are flattened like any other alpha.
 4. **The editor: an opacity box next to every color field's hex, and the color keeps its
-   opacity.** **Why:** the system picker has no alpha (D47). Figma keeps a fill's opacity
+   opacity.** **Why:** the system picker had no alpha (D47; the picker that replaced it has
+   one, D64). Figma keeps a fill's opacity
    when you change its color, so a swatch, a picked hex or "Use theme color" all keep the
    current opacity (`keepOpacity`). On a raw hex the box edits the alpha byte, so the
    control works the same on both kinds of color. 100% writes the plain form (`$color.x`,
-   `#rrggbb`). Scrubbing and arrow keys preview live, then commit one transaction. The text
-   toolbar's color menu shows tokens at an opacity but doesn't edit the opacity: that
-   happens on the layer, in the inspector.
+   `#rrggbb`). Scrubbing and arrow keys preview live, then commit one transaction. The field
+   shows a token by its name (`primary`), so it fits beside the opacity box; typing a name,
+   `name/30` or a hex without `#` works too.
+
+## D64 — The editor's own color picker, replacing `<input type="color">`
+
+**Status:** Accepted (2026-11-19). Supersedes D47 §3.
+
+On Linux/Wayland the browser's color popup opened off the screen's edge, past the
+inspector. Chromium places that popup itself, and on Wayland it can't know where its window
+sits on the screen, so it can't keep the popup on-screen. The page only controls the
+invisible input it's anchored to. So the editor now draws its own picker.
+
+1. **Plain DOM, no dependency:** a saturation × brightness square, hue and opacity sliders,
+   an eyedropper (Chromium's `EyeDropper` API, shown only where it exists), a hex box and
+   an opacity percent box (`components/ColorPicker.tsx`, color math in `model/color.ts`).
+   **Why:** each picker library we'd add is more than this (~300 lines), and we need the
+   gesture contract and focus rules below anyway.
+2. **Placed by us, always inside the window** (`model/popover.ts`): beside the inspector,
+   level with the swatch, like Figma's pickers left of its properties panel, so it covers the
+   canvas and not the fields being edited. With no room there, it goes below or above the
+   swatch, clamped to the window. **Why:** this was the bug, and the same code runs on every
+   OS. The system picker also looked different on each OS, and on macOS it's a floating
+   panel that outlives the page.
+3. **Alpha everywhere.** The opacity slider edits a token's opacity (`$color.x/30`, D63) or a
+   hex's alpha byte. Moving only the opacity keeps a token a token (`fromPicked`), so a
+   theme color stays theme-following. Theme palette colors can now be translucent (D47's
+   trade-off is gone).
+4. **The gesture contract (D41):** dragging previews on every move and commits once on
+   release; each arrow key, typed hex or eyedropper pick is one commit. Holding the HSV
+   state in the picker keeps a gray's hue while you drag through it.
+5. **Focus:** pressing the square or a slider cancels the press, so the focus stays where it
+   was. In the text toolbar the picker sits inline in the Color menu and the selection stays
+   highlighted while you drag (D61). The popover closes on Esc (without deselecting the
+   layer) or on a press outside it; a hex typed but not entered still commits.

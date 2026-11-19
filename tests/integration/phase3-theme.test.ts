@@ -5,7 +5,7 @@
  * in real Chromium against the real server.
  */
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { Locator, Page } from "playwright-core";
+import type { Page } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { browserProblem, type EditorHarness, startEditor } from "./editor-harness.js";
 
@@ -44,17 +44,21 @@ const computed = (id: string, prop: "fontFamily" | "color") =>
     .first()
     .evaluate((el, p) => getComputedStyle(el)[p as "color"], prop);
 
-/** What the system color picker does: `input` while dragging, `change` when it closes. */
-async function pickColor(input: Locator, hex: string, { close = true } = {}) {
-  await input.evaluate(
-    (el, [value, done]) => {
-      const picker = el as HTMLInputElement;
-      picker.value = value as string;
-      picker.dispatchEvent(new Event("input", { bubbles: true }));
-      if (done) picker.dispatchEvent(new Event("change", { bubbles: true }));
-    },
-    [hex, close] as const,
-  );
+/** Open a palette color's picker (its swatch) and return the picker. */
+async function openPicker(name: string) {
+  await colorRow(name)
+    .getByRole("button", { name: `Theme color ${name}` })
+    .click();
+  const picker = page.getByRole("dialog", { name: "Color picker" });
+  await picker.waitFor();
+  return picker;
+}
+
+/** Type a hex into the open picker; Enter commits it. */
+async function typeHex(name: string, hex: string) {
+  const input = page.getByRole("textbox", { name: `Theme color ${name} hex` });
+  await input.fill(hex);
+  await input.press("Enter");
 }
 
 async function undo() {
@@ -102,20 +106,44 @@ describe.skipIf(problem !== null)("Phase 3: themes", { timeout: 60_000 }, () => 
     await expect.poll(() => computed("title", "fontFamily")).toMatch(/^Inter/);
   });
 
-  it("edits a palette color: previews on the slide while picking, commits once on close", async () => {
+  it("edits a palette color: a drag previews on the slide, its release commits once", async () => {
     const before = h.userTransactions();
-    const input = colorRow("text").locator("input[type=color]");
-    await pickColor(input, "#ff8800", { close: false });
-    // Preview: the slide's text (which uses $color.text) recolors; nothing was sent yet.
-    await expect.poll(() => computed("title", "color")).toBe("rgb(255, 136, 0)");
+    const picker = await openPicker("text");
+    // The picker sits beside the inspector, inside the window (the browser's own popup
+    // overflowed the screen on Wayland).
+    const box = await picker.boundingBox();
+    const inspector = await page.locator(".inspector").boundingBox();
+    const viewport = page.viewportSize();
+    if (!box || !inspector || !viewport) throw new Error("no layout");
+    expect(box.x + box.width).toBeLessThanOrEqual(inspector.x);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+
+    // Drag in the square: the slide's text (which uses $color.text) recolors live.
+    const area = await picker
+      .getByRole("slider", { name: /saturation and brightness/ })
+      .boundingBox();
+    if (!area) throw new Error("no square");
+    await page.mouse.move(area.x + area.width * 0.9, area.y + area.height * 0.1);
+    await page.mouse.down();
+    await page.mouse.move(area.x + area.width * 0.8, area.y + area.height * 0.2, { steps: 4 });
+    await expect.poll(() => computed("title", "color")).not.toBe("rgb(238, 242, 255)");
     expect(h.userTransactions()).toBe(before);
-    await pickColor(input, "#22cc88");
-    await expect.poll(() => theme().colors.text).toBe("#22cc88");
-    expect(h.userTransactions()).toBe(before + 1);
+    await page.mouse.up();
+    await expect.poll(() => h.userTransactions()).toBe(before + 1);
     expect(h.changes.at(-1)?.label).toBe('Change theme color "text"');
+    expect(theme().colors.text).toMatch(/^#[0-9a-f]{6}$/);
+
+    // A typed hex: one more step.
+    await typeHex("text", "#22cc88");
+    await expect.poll(() => theme().colors.text).toBe("#22cc88");
+    expect(h.userTransactions()).toBe(before + 2);
     expect(theme().name).toBe("Midnight (custom)");
     await h.synced();
     await expect.poll(() => computed("title", "color")).toBe("rgb(34, 204, 136)");
+    // Esc closes the picker, nothing else.
+    await page.keyboard.press("Escape");
+    await expect.poll(() => picker.count()).toBe(0);
     // Customized: no built-in card is current, and the panel says so.
     expect(await page.locator('.theme-card[aria-pressed="true"]').count()).toBe(0);
     await expect
@@ -123,14 +151,29 @@ describe.skipIf(problem !== null)("Phase 3: themes", { timeout: 60_000 }, () => 
       .toBe(1);
 
     await undo();
+    await undo();
     expect(theme().colors.text).toBe("#eef2ff");
     expect(theme().name).toBe("Midnight");
+  });
+
+  it("gives a palette color an opacity: the picker has alpha", async () => {
+    await openPicker("surface");
+    const percent = page.getByRole("textbox", { name: "Theme color surface opacity percent" });
+    const before = theme().colors.surface ?? "";
+    await percent.fill("50");
+    await percent.press("Enter");
+    await expect.poll(() => theme().colors.surface).toBe(`${before.slice(0, 7)}80`);
+    await page.keyboard.press("Escape");
+    await undo();
+    expect(theme().colors.surface).toBe(before);
   });
 
   it("warns about hard-to-read color pairs as you edit the palette", async () => {
     expect(await page.locator(".theme-issues").count()).toBe(0);
     const muted = colorRow("muted");
-    await pickColor(muted.locator("input[type=color]"), "#2a3360");
+    await openPicker("muted");
+    await typeHex("muted", "#2a3360");
+    await page.keyboard.press("Escape");
     await expect.poll(() => theme().colors.muted).toBe("#2a3360");
     await h.synced();
     await expect

@@ -6,11 +6,21 @@
 import { primaryFamily, resolveColor, type Theme } from "@veloce/core";
 import { RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { baseToken, isColorText, keepOpacity, opacityOf, withOpacity } from "../model/color.js";
+import {
+  baseToken,
+  colorLabel,
+  fromPicked,
+  keepOpacity,
+  opacityOf,
+  type PickedColor,
+  parseTypedColor,
+  pickerColor,
+  withOpacity,
+} from "../model/color.js";
 import { parseNumber } from "../model/scrub.js";
-import { nearestColorToken, toHex6 } from "../model/theme-edit.js";
+import { nearestColorToken } from "../model/theme-edit.js";
+import { ColorPicker, ColorPopover } from "./ColorPicker.js";
 import { Select, type SelectOption } from "./Select.js";
-import { useColorPicker } from "./useColorPicker.js";
 import { useNumberControl } from "./useNumberControl.js";
 
 type LabelProps = ReturnType<typeof useNumberControl>["labelProps"];
@@ -368,11 +378,12 @@ export function LengthField({
 }
 
 /**
- * Theme color swatches first, then any color (typed, or from the system picker behind the
- * chip), and an opacity in percent next to it. A token at an opacity stays a token
+ * Theme color swatches first, then any color (typed, or from the color picker the chip
+ * opens), and an opacity in percent next to it. A token at an opacity stays a token
  * (`$color.secondary/30`), so glows and tints follow theme switches; a raw hex takes an alpha
- * byte. Changing the color keeps the opacity (like Figma). A raw color gets a one-click "use
- * the closest theme color". Gradients and images are kept, not edited.
+ * byte. Changing the color keeps the opacity (like Figma). The text shows a token by its name
+ * (`primary`), so it fits beside the opacity. A raw color gets a one-click "use the closest
+ * theme color". Gradients and images are kept, not edited.
  */
 export function ColorField({
   label,
@@ -385,24 +396,25 @@ export function ColorField({
   value: unknown;
   theme: Theme;
   onCommit: Commit;
-  /** Show a color live while the opacity is scrubbed or nudged; `null` drops the preview. */
+  /** Show a color live while the opacity or picker is dragged; `null` drops the preview. */
   onPreview?: (color: string | null) => void;
 }) {
   const id = useId();
+  const chip = useRef<HTMLButtonElement>(null);
+  const [picking, setPicking] = useState(false);
   const isObject = typeof value === "object" && value !== null;
   const text = typeof value === "string" ? value : undefined;
   const resolved = text === undefined ? undefined : resolveColor(theme, text);
   /** Any new color, at the opacity the current one has. */
   const pick = (color: string) => onCommit(keepOpacity(value, color));
-  const draft = useDraft(text ?? "", (typed) => {
-    const t = typed.trim();
-    if (t === "") return onCommit(null);
-    if (isColorText(t)) onCommit(t);
+  const draft = useDraft(colorLabel(value), (typed) => {
+    if (typed.trim() === "") return onCommit(null);
+    const color = parseTypedColor(typed, theme.colors, value);
+    if (color !== null && color !== value) onCommit(color);
   });
-  const pickerValue = (resolved && toHex6(resolved)) ?? "#000000";
-  const picker = useColorPicker(pickerValue, (hex) => {
-    if (hex !== pickerValue) pick(hex);
-  });
+  const shown = pickerColor(resolved, value);
+  /** The picker's color as a document color (a token stays a token if only alpha moved). */
+  const picked = (p: PickedColor) => fromPicked(value, shown.hex, p);
   const opacity = opacityOf(value);
   const opacityControl = useNumberControl({
     value: opacity ?? undefined,
@@ -433,14 +445,17 @@ export function ColorField({
         ) : (
           <div className="color-row">
             <div className="color-input">
-              {/* The chip opens the system picker, for a color outside the theme. */}
-              <label
-                className="color-chip"
+              {/* The chip opens the color picker, for a color outside the theme. */}
+              <button
+                ref={chip}
+                type="button"
+                className={`color-chip${picking ? " is-open" : ""}${resolved === undefined ? " is-unset" : ""}`}
                 style={{ "--chip": resolved ?? "transparent" } as React.CSSProperties}
-              >
-                <span className="sr-only">{`${label}: custom color`}</span>
-                <input ref={picker} type="color" className="picker-input" />
-              </label>
+                aria-label={`${label}: color picker`}
+                aria-haspopup="dialog"
+                aria-expanded={picking}
+                onClick={() => setPicking((open) => !open)}
+              />
               <input id={id} type="text" spellCheck={false} placeholder="Default" {...draft} />
             </div>
             {opacity !== null && (
@@ -448,6 +463,20 @@ export function ColorField({
                 <input aria-label={`${label} opacity`} {...opacityControl.inputProps} />
                 <span className="suffix">%</span>
               </div>
+            )}
+            {picking && (
+              <ColorPopover trigger={chip} onClose={() => setPicking(false)}>
+                <ColorPicker
+                  label={label}
+                  value={shown}
+                  onPreview={(p) => onPreview?.(picked(p))}
+                  onCommit={(p) => {
+                    const next = picked(p);
+                    if (next !== value) onCommit(next);
+                    else onPreview?.(null);
+                  }}
+                />
+              </ColorPopover>
             )}
           </div>
         )}

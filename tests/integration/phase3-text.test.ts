@@ -395,20 +395,27 @@ describe.skipIf(problem !== null)("Phase 3: typing on the slide", { timeout: 60_
     expect(content("title")).toBe("Hello world");
   });
 
-  it("colors the whole text from the system picker, and that color goes on the layer", async () => {
+  it("colors the whole text from the picker, and that color goes on the layer", async () => {
     await startTyping("footer");
     await page.keyboard.press("Control+a");
     await colorMenu().click();
-    // What closing the system picker does: the input changes, then fires "change".
-    await page.locator("input[aria-label='Custom text color']").evaluate((el) => {
-      const input = el as HTMLInputElement;
-      input.value = "#ff3366";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await expect.poll(editorFocused).toBe(true); // the text gets the focus back
+    // Dragging in the picker's square keeps the focus in the text (the selection stays).
+    const area = await page.getByRole("slider", { name: /Text color saturation/ }).boundingBox();
+    if (!area) throw new Error("no square");
+    await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(area.x + area.width * 0.7, area.y + area.height * 0.3, { steps: 3 });
+    await page.mouse.up();
+    expect(await editorFocused()).toBe(true);
+    expect(await popups()).toBe(1); // stays open for the next change
+    // A typed hex wins, and hands the focus back to the text.
+    const hex = page.getByRole("textbox", { name: "Text color hex" });
+    await hex.fill("ff3366");
+    await hex.press("Enter");
+    await expect.poll(editorFocused).toBe(true);
+    await page.keyboard.press("Escape"); // closes the menu…
     expect(await popups()).toBe(0);
-    await oneTransaction(() => page.keyboard.press("Escape"));
+    await oneTransaction(() => page.keyboard.press("Escape")); // …then ends the session
     expect(h.stored("footer").props?.color).toBe("#ff3366");
     expect(content("footer")).toBe("Footer");
     await undo();

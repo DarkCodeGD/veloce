@@ -125,4 +125,62 @@ describe.skipIf(problem !== null)("Phase 3: colors at an opacity", { timeout: 60
     await expect.poll(() => h.stored("glow").props?.fill).toBe("#ff336680");
     expect(h.pageErrors).toEqual([]);
   });
+
+  it("the field shows a token by name, so it fits next to the opacity", async () => {
+    const hex = page.getByRole("textbox", { name: "Fill", exact: true });
+    await hex.fill("accent");
+    await hex.press("Enter");
+    // Typed without an opacity: it keeps the current one (50%, from the last test).
+    await expect.poll(() => h.stored("glow").props?.fill).toBe("$color.accent/50");
+    await expect.poll(() => hex.inputValue()).toBe("accent");
+  });
+
+  it("opens the picker inside the window, even in a narrow one; alpha keeps the token", async () => {
+    const size = page.viewportSize();
+    if (!size) throw new Error("no viewport");
+    await page.setViewportSize({ width: 900, height: 560 });
+    try {
+      await page.getByRole("button", { name: "Fill: color picker" }).click();
+      const picker = page.getByRole("dialog", { name: "Color picker" });
+      await picker.waitFor();
+      await expect
+        .poll(async () => {
+          const box = await picker.boundingBox();
+          return (
+            box !== null &&
+            box.x >= 0 &&
+            box.y >= 0 &&
+            box.x + box.width <= 900 &&
+            box.y + box.height <= 560
+          );
+        })
+        .toBe(true);
+
+      // Dragging only the opacity keeps the theme color (and so its theme-following).
+      const before = h.userTransactions();
+      const alpha = await picker.getByRole("slider", { name: "Fill opacity slider" }).boundingBox();
+      if (!alpha) throw new Error("no slider");
+      const y = alpha.y + alpha.height / 2;
+      await page.mouse.move(alpha.x + alpha.width * 0.5, y);
+      await page.mouse.down();
+      await page.mouse.move(alpha.x + alpha.width * 0.25, y, { steps: 4 });
+      await page.mouse.up();
+      await expect.poll(() => h.userTransactions()).toBe(before + 1); // one drag, one step
+      expect(h.stored("glow").props?.fill).toMatch(/^\$color\.accent\/(2[3-7])$/);
+
+      // Arrow keys on the hue slider: a new color (a hex), at the same opacity.
+      const opacity = Number(String(h.stored("glow").props?.fill).split("/")[1]);
+      await picker.getByRole("slider", { name: "Fill hue" }).press("Shift+ArrowRight");
+      await expect.poll(() => h.stored("glow").props?.fill).toMatch(/^#[0-9a-f]{8}$/);
+      const alphaByte = Number.parseInt(String(h.stored("glow").props?.fill).slice(7), 16);
+      expect(Math.round((alphaByte / 255) * 100)).toBe(opacity);
+
+      // A press outside closes it.
+      await page.locator(".inspector-head").click();
+      await expect.poll(() => picker.count()).toBe(0);
+      expect(h.pageErrors).toEqual([]);
+    } finally {
+      await page.setViewportSize(size);
+    }
+  });
 });

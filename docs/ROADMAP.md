@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (480 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (493 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -134,6 +134,10 @@
     `color-mix()` on the theme variable, and contrast lint measures it (text, fills and
     gradient stops). Color fields get an opacity box next to the hex; picking another color
     keeps the opacity. A raw hex takes it as its alpha byte.
+  - **Own color picker (D64):** the browser's color popup opened off-screen on Wayland, so the
+    editor draws its own: square, hue, opacity, eyedropper, hex. It sits beside the inspector,
+    always inside the window, and inline in the text toolbar's Color menu. Palette colors can
+    be translucent now.
   - **Next:** round 4: clean up unused uploads.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
