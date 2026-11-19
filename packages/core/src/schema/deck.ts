@@ -61,6 +61,8 @@ export const AssetInfoSchema = z.strictObject({
       /** CSS font-weight (1–1000). A variable font gives its range, e.g. [100, 900]. */
       weight: z.union([FontWeightSchema, z.tuple([FontWeightSchema, FontWeightSchema])]).optional(),
       style: z.enum(["normal", "italic"]).optional(),
+      /** What kind of face it is (from its own OS/2 table): picks the fallback in font stacks. */
+      category: z.enum(["serif", "sans-serif", "monospace"]).optional(),
     })
     .optional(),
 });

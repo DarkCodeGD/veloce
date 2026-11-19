@@ -46,10 +46,12 @@ const AI_DOCS = `# text
 Headings, body copy, captions and bullet lists. Size and font come from theme text styles. Use \`style\` and avoid raw font sizes.
 
 **Props**
-- \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [{ text, bold?, italic?, color?, link? }], list?: "bullet" | "number", level?, align?, style? }]\` (a paragraph \`style\` overrides the layer's for that paragraph)
-- \`style\`: \`"$text.display" | "$text.h1" | "$text.h2" | "$text.h3" | "$text.body" | "$text.small" | "$text.caption" | "$text.code"\` (default body)
+- \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [...], list?: "bullet" | "number", level?: 0–5, align?, style? }]\` (a paragraph \`style\` overrides the layer's for that paragraph)
+  - a run: \`{ text, bold?, italic?, underline?, strike?, code?, color?, link? }\` (\`code\`: inline monospace; \`link\`: https/mailto, drawn in the text's color, underlined)
+- \`style\`: \`"$text.display" | "$text.h1" | "$text.h2" | "$text.h3" | "$text.body" | "$text.small" | "$text.caption" | "$text.code"\` (default body). Each style's font (heading or body), size, weight and case (caption may be UPPERCASE) are listed in get_docs("theme").
 - \`color\`: a color token such as \`"$color.muted"\` (default \`"$color.text"\`)
-- \`align\`, \`verticalAlign\`
+- \`align\`: \`"left" | "center" | "right" | "justify"\`; \`verticalAlign\`: \`"top" | "middle" | "bottom"\`
+- Overrides of the style, used sparingly: \`fontSize\`, \`fontWeight\`, \`font\` (\`"$font.heading"\`…), \`italic\`, \`lineHeight\`
 
 **Example:** a title
 \`{ "type": "text", "props": { "content": "Q3 Results", "style": "$text.h1" } }\`
@@ -188,7 +190,11 @@ function runElement(run: TextRun): HTMLElement {
   const s = el.style;
   if (run.bold) s.fontWeight = "700";
   if (run.italic) s.fontStyle = "italic";
-  const decorations = [run.underline && "underline", run.strike && "line-through"].filter(Boolean);
+  // Links read like the text around them, underlined (never the browser's blue, which
+  // ignores the theme and fails contrast on dark slides); a run color still applies.
+  if (isLink) s.color = "inherit";
+  const underline = run.underline || isLink;
+  const decorations = [underline && "underline", run.strike && "line-through"].filter(Boolean);
   if (decorations.length) s.textDecorationLine = decorations.join(" ");
   if (run.code) {
     s.fontFamily = "var(--v-font-mono, monospace)";

@@ -74,6 +74,9 @@ describe("text element", () => {
     expect(links).toHaveLength(1);
     expect(links[0]?.getAttribute("href")).toBe("https://veloce.dev");
     expect(links[0]?.rel).toBe("noopener noreferrer");
+    // The text's own color, underlined: never the browser's blue (it ignores the theme).
+    expect(links[0]?.style.color).toBe("inherit");
+    expect(links[0]?.style.textDecorationLine).toBe("underline");
     expect(
       TextPropsSchema.safeParse({ content: [{ runs: [{ text: "x", link: "javascript:x" }] }] })
         .success,

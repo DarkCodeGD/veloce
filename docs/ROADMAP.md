@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (537 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (551 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -152,6 +152,12 @@
     worker thread. A 5K wallpaper went 3.8 MB → 105 KB in ~2 s. A toast shows the saving with
     "Keep original"; agents see it in `add_asset` and can pass `optimize: false`. New package
     `@veloce/images` (jSquash WebAssembly codecs, Apache-2.0). Round 4 is done.
+  - **Agent feedback round 3 (D68, D69):** a 15-slide MCP test deck covering all of round 4.
+    Each agent session now keeps its own deck (the user switching decks in the editor had
+    sent an agent's slide into another deck). Translucent slide backgrounds sit on the theme,
+    links follow the text color, contrast lint samples gradients under the text, empty-space
+    and off-canvas count painted frames, clearer errors (opacity range, anchors, tiles),
+    serif/mono font fallbacks, decimal sizes and fuller docs.
   - **Next:** round 5: the tool bar (D62).
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with

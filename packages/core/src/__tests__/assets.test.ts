@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { assetKind, deckFontFaces, deckFontFamilies, fontStackFor } from "../assets.js";
+import {
+  assetKind,
+  deckFontFaces,
+  deckFontFamilies,
+  deckFontStack,
+  fontStackFor,
+  formatBytes,
+} from "../assets.js";
 import { type AssetInfo, AssetInfoSchema } from "../schema/deck.js";
 
 const id = (n: number) => String(n).repeat(64).slice(0, 64);
@@ -41,6 +48,19 @@ describe("asset kinds and deck fonts", () => {
     ]);
     expect(deckFontFamilies({ assets })).toEqual(["Acme Sans", "Brand Serif"]);
     expect(fontStackFor("Acme Sans")).toBe('"Acme Sans", system-ui, sans-serif');
+    expect([3_907_925, 128_400, 999_600, 34].map(formatBytes)).toEqual([
+      "3.9 MB",
+      "128 KB",
+      "1.0 MB",
+      "34 bytes",
+    ]);
+    expect(fontStackFor("Caladea", "serif")).toBe('"Caladea", Georgia, serif');
+    expect(fontStackFor("Mono", "monospace")).toBe('"Mono", ui-monospace, monospace');
+    const serif = { mime: "font/ttf", bytes: 1, font: { family: "Caladea", category: "serif" } };
+    expect(deckFontStack({ assets: { ...assets, [id(6)]: serif as AssetInfo } }, "Caladea")).toBe(
+      '"Caladea", Georgia, serif',
+    );
+    expect(deckFontStack({ assets }, "Acme Sans")).toBe('"Acme Sans", system-ui, sans-serif');
   });
 
   it("only accepts font family names that are safe in a CSS font stack", () => {

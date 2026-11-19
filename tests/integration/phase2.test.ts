@@ -376,6 +376,69 @@ describe("Phase 2: an agent builds a deck the user watches live", { timeout: 60_
     expect(result.text).not.toMatch(/unknown-token/);
   });
 
+  it.skipIf(!visual)("measures a gradient's contrast where the text sits on it", async () => {
+    // Light text on a card fading from the light text color (top) to transparent, over the
+    // dark Midnight background (agent report B4): at the top it's unreadable, at the bottom
+    // it's fine. Lint used to judge both by the worst stop anywhere.
+    const fade = {
+      type: "linear-gradient",
+      stops: [
+        { offset: 0, color: "$color.text" },
+        { offset: 1, color: "$color.text/0" },
+      ],
+    };
+    const result = await call("upsert_slide", {
+      slide: {
+        id: "faded",
+        children: [
+          {
+            id: "fade-card",
+            width: 900,
+            height: 600,
+            layout: { mode: "stack", justify: "space-between", padding: "$space.md" },
+            style: { fill: fade },
+            children: [
+              { id: "fade-top", type: "text", props: { content: "Lost on the light end" } },
+              { id: "fade-bottom", type: "text", props: { content: "Clear on the faded end" } },
+            ],
+          },
+        ],
+      },
+    });
+    expect(result.text).toMatch(/low-contrast · slide faded · fade-top/);
+    expect(result.text).not.toMatch(/low-contrast · slide faded · fade-bottom/);
+    await call("apply_ops", { ops: [{ op: "slide.remove", id: "faded" }] });
+  });
+
+  it.skipIf(!visual)("draws a translucent slide background over the theme, not white", async () => {
+    // A glow fading into the dark Midnight background: light text stays readable. It was
+    // drawn over the white page under the slide (1.06:1, agent report B2).
+    const result = await call("upsert_slide", {
+      slide: {
+        id: "halo",
+        background: {
+          type: "radial-gradient",
+          center: { x: 0.28, y: 0.42 },
+          stops: [
+            { offset: 0, color: "$color.primary/55" },
+            { offset: 0.45, color: "$color.primary/15" },
+            { offset: 1, color: "$color.background" },
+          ],
+        },
+        children: [
+          {
+            id: "halo-text",
+            type: "text",
+            props: { content: "Glowing, not white", style: "$text.h1" },
+          },
+        ],
+      },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.text).not.toMatch(/low-contrast · slide halo/);
+    await call("apply_ops", { ops: [{ op: "slide.remove", id: "halo" }] });
+  });
+
   it.skipIf(!visual)("wrapped text in any alignment never reads as overflowing", async () => {
     // Regression: the space at each soft wrap hangs past the line end; it isn't content.
     const lines = [

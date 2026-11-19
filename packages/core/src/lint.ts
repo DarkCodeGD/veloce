@@ -15,7 +15,13 @@ import {
   type SlideMeasurement,
 } from "./measure.js";
 import type { Deck, Slide } from "./schema/deck.js";
-import { type ElementNode, isFreeLayer, type Layout, type Node } from "./schema/node.js";
+import {
+  type ElementNode,
+  type FrameStyle,
+  isFreeLayer,
+  type Layout,
+  type Node,
+} from "./schema/node.js";
 import { TextContentSchema, toPlainText } from "./schema/rich-text.js";
 import type { Theme } from "./schema/theme.js";
 import { suggest } from "./suggest.js";
@@ -75,6 +81,10 @@ export const LINT_LIMITS = {
   emptyBand: 0.4,
   /** Empty bands above and below closer than this (share of the height) are centred, not bunched. */
   balancedBands: 0.1,
+  /** A painted frame this tall (share of the slide) is a backdrop, not content, for balance. */
+  backdropShare: 0.9,
+  /** Free layers shorter than this (share of the slide) don't count for balance (labels). */
+  smallFreeShare: 0.08,
 } as const;
 
 const SEVERITY_ORDER: Record<LintSeverity, number> = { error: 0, warning: 1, info: 2 };
@@ -330,23 +340,30 @@ function themeGroup(theme: Theme, group: string): Record<string, unknown> {
 
 /**
  * Layout balance (info only: a design call, but agents that skip previews can't see it).
- * Elements, not frames: "fill" frames span the slide even when their content doesn't.
+ * What counts as content: elements, and frames that draw something (a filled or stroked
+ * card is content even where its text ends early). Not counted: frames that only arrange
+ * (a "fill" frame spans the slide even when its content doesn't), a painted backdrop as tall
+ * as the slide, and small free layers (a page number in a corner doesn't fill an empty
+ * half). Big free layers, like a diagram's boxes in a Free frame, count.
  */
 function balanceRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[] {
   if (!m) return [];
-  // The flow's content only: a small free label in a corner doesn't fill an empty half.
   const free = freeSubtrees(slide);
+  const height = m.stage.height;
   let top = Number.POSITIVE_INFINITY;
   let bottom = Number.NEGATIVE_INFINITY;
   for (const { node } of visibleNodes(slide)) {
-    if (free.has(node.id)) continue;
-    const bounds = node.kind === "element" ? m.nodes[node.id]?.bounds : undefined;
+    const bounds = m.nodes[node.id]?.bounds;
     if (!bounds || bounds.height <= 0) continue;
+    if (node.kind === "frame") {
+      if (node.id === slide.root.id || !paints(node.style)) continue;
+      if (bounds.height >= height * LINT_LIMITS.backdropShare) continue;
+    }
+    if (free.has(node.id) && bounds.height < height * LINT_LIMITS.smallFreeShare) continue;
     top = Math.min(top, bounds.y);
     bottom = Math.max(bottom, bounds.y + bounds.height);
   }
   if (!Number.isFinite(top)) return [];
-  const height = m.stage.height;
   const below = (height - bottom) / height;
   const above = top / height;
   const band = Math.max(above, below);
@@ -364,6 +381,11 @@ function balanceRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[
       fix: 'Center the content (justify: "center" on the slide), let cards grow (height: "fill"), use larger styles, or add a visual. Check with render_preview.',
     },
   ];
+}
+
+/** A frame that draws something: a fill, a stroke or a shadow. */
+function paints(style: FrameStyle | undefined): boolean {
+  return Boolean(style && (style.fill !== undefined || style.stroke || style.shadow));
 }
 
 function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[] {
@@ -421,9 +443,19 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
   >;
   const stage: Rect = { x: 0, y: 0, width: m.stage.width, height: m.stage.height };
 
-  for (const { node, m: nm } of elements) {
+  // Off the slide: elements, and frames that draw something (a box in a diagram). Once a
+  // box is reported, what's inside it isn't reported again.
+  const offCanvas = new Set<string>();
+  const drawn = measured.filter(
+    (x) =>
+      isElement(x.node) ||
+      (x.node.kind === "frame" && x.node.id !== slide.root.id && paints(x.node.style)),
+  );
+  for (const { node, ancestors, m: nm } of drawn) {
     const b = nm.bounds;
     if (b.width <= 0 && b.height <= 0) continue;
+    if (ancestors.some((id) => offCanvas.has(id))) continue;
+    const before = issues.length;
     const inside = intersectionArea(b, stage);
     if (inside === 0) {
       issue({
@@ -447,6 +479,7 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
         fix: "Move or shrink it so it stays inside the slide, or put it in an auto-layout frame.",
       });
     }
+    if (issues.length > before) offCanvas.add(node.id);
   }
 
   // Overlap between content elements. Shapes are excluded: they're usually backgrounds/decor.

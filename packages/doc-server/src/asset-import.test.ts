@@ -20,10 +20,21 @@ interface FontSpec {
   italic?: boolean;
   /** Variable weight axis. */
   wght?: [number, number];
+  /** OS/2 PANOSE bytes (family kind, serif style, weight, proportion…). */
+  panose?: number[];
+  /** OS/2 sFamilyClass's class (high byte). */
+  familyClass?: number;
 }
 
 /** The `name`, `OS/2` (and `fvar`) tables of a font, as raw bytes. */
-function fontTables({ names = [], weight = 400, italic = false, wght }: FontSpec) {
+function fontTables({
+  names = [],
+  weight = 400,
+  italic = false,
+  wght,
+  panose,
+  familyClass,
+}: FontSpec) {
   const tables = new Map<string, Uint8Array>();
   const encoded = names.map(([id, text]) => ({
     id,
@@ -54,6 +65,8 @@ function fontTables({ names = [], weight = 400, italic = false, wght }: FontSpec
   const os2 = new Array(96).fill(0);
   os2.splice(4, 2, ...u16(weight));
   os2.splice(62, 2, ...u16(italic ? 1 : 0x40));
+  if (familyClass !== undefined) os2[30] = familyClass;
+  if (panose) os2.splice(32, panose.length, ...panose);
   tables.set("OS/2", Uint8Array.from(os2));
   if (wght) {
     const fixed = (n: number) => u32(n * 65536);
@@ -292,6 +305,16 @@ describe("inspectAsset: fonts", () => {
     });
     expect(ok(inspectAsset(woff(acme)))).toMatchObject({ mime: "font/woff", font: expected });
     expect(ok(inspectAsset(woff2(acme)))).toMatchObject({ mime: "font/woff2", font: expected });
+  });
+
+  it("tells serif, sans and monospace faces apart (for the fallback in font stacks)", () => {
+    const category = (spec: Partial<FontSpec>) =>
+      ok(inspectAsset(ttf({ names: [[1, "Face"]], ...spec }))).font?.category;
+    expect(category({ panose: [2, 4, 5, 3, 5, 4, 6, 3, 2, 4] })).toBe("serif"); // Caladea
+    expect(category({ panose: [2, 11, 7, 4, 2, 2, 2, 2, 2, 4] })).toBe("sans-serif"); // FreeSans
+    expect(category({ panose: [2, 0, 8, 9, 3, 0, 0, 0, 0, 4], familyClass: 8 })).toBe("monospace");
+    expect(category({ familyClass: 1 })).toBe("serif"); // no PANOSE: the IBM class
+    expect(category({})).toBeUndefined();
   });
 
   it("prefers the typographic family, and reads italics and variable weight ranges", () => {

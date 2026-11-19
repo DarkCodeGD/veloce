@@ -5,7 +5,13 @@
  * or a tagged object: a linear, radial or conic (angular) gradient, or an image.
  */
 import { z } from "zod";
-import { AssetRefSchema, ColorSchema, PointSchema, tokenRefSchema } from "./primitives.js";
+import {
+  AssetRefSchema,
+  ColorSchema,
+  colorError,
+  PointSchema,
+  tokenRefSchema,
+} from "./primitives.js";
 import { ShadowSchema } from "./theme.js";
 
 export const GradientStopSchema = z.strictObject({
@@ -53,15 +59,22 @@ export const ImagePaintSchema = z.strictObject({
   fit: z.enum(["cover", "contain", "fill", "tile"]).optional(),
 });
 
-export const PaintSchema = z.union([
-  ColorSchema,
-  z.discriminatedUnion("type", [
-    LinearGradientSchema,
-    RadialGradientSchema,
-    ConicGradientSchema,
-    ImagePaintSchema,
-  ]),
-]);
+export const PaintSchema = z.union(
+  [
+    ColorSchema,
+    z.discriminatedUnion("type", [
+      LinearGradientSchema,
+      RadialGradientSchema,
+      ConicGradientSchema,
+      ImagePaintSchema,
+    ]),
+  ],
+  {
+    // A string can only be meant as a color: say what's wrong with it (an opacity of 150, a
+    // typo), instead of the union's bare "Invalid input".
+    error: (issue) => (typeof issue.input === "string" ? colorError(issue.input) : undefined),
+  },
+);
 export type Paint = z.infer<typeof PaintSchema>;
 export type LinearGradient = z.infer<typeof LinearGradientSchema>;
 export type RadialGradient = z.infer<typeof RadialGradientSchema>;

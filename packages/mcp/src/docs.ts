@@ -8,8 +8,9 @@ import {
   BUNDLED_FONTS,
   type Deck,
   deckFontFamilies,
-  fontStackFor,
+  deckFontStack,
   LINT_RULES,
+  type TextStyle,
   type Theme,
 } from "@veloce/core";
 import type { PluginRegistry } from "@veloce/plugin-api";
@@ -17,7 +18,7 @@ import type { PluginRegistry } from "@veloce/plugin-api";
 export const INSTRUCTIONS = `Veloce builds presentation decks. The user watches the deck update live in the Veloce editor.
 
 Workflow:
-1. get_deck_summary to see the current deck. If it already has slides and the user asks for a new presentation, create_deck (choosing a theme) instead of changing theirs.
+1. get_deck_summary to see the current deck. If it already has slides and the user asks for a new presentation, create_deck (choosing a theme) instead of changing theirs. Your current deck stays yours for this session: create_deck and open_deck set it, and the user (or another agent) switching decks doesn't move it.
 2. Build each slide with upsert_slide: describe structure (frames with stack/grid layout), not pixel positions. The engine lays it out.
 3. Read the lint issues returned with every change and fix them (overflow, contrast, overlaps).
 4. render_preview a slide to check it visually when it matters. Fix, then move on.
@@ -57,7 +58,7 @@ One layer that should sit on top of an auto-layout frame (a badge on a card, a s
 
 ## Frame style (\`style\`)
 \`{ "fill": color | gradient | image, "stroke": { "color", "width" }, "radius": "$radius.lg", "shadow": "$shadow.md", "clip": true }\`
-Paints (a frame's or slide's \`fill\`/\`background\`, a shape's \`fill\`): a color; a gradient, \`{ "type": "linear-gradient", "angle"?: 180, "stops": [{ "offset": 0, "color": "$color.primary" }, { "offset": 1, "color": "$color.secondary/40" }] }\` (angle: 0 = towards the top, 90 = right), \`"radial-gradient"\` (\`center\`: \`{ "x": 0.5, "y": 0.5 }\` as fractions of the box; offset 1 reaches the box sides) or \`"conic-gradient"\` (an angular sweep: \`angle\` where offset 0 starts, clockwise from the top, and \`center\`; repeat the first color last for a seamless wheel); or an image, \`{ "type": "image", "asset": "asset:<sha256>", "fit"?: "cover" | "contain" | "fill" | "tile" }\`. 2–16 stops, offsets 0–1.
+Paints (a frame's or slide's \`fill\`/\`background\`, a shape's \`fill\`): a color; a gradient, \`{ "type": "linear-gradient", "angle"?: 180, "stops": [{ "offset": 0, "color": "$color.primary" }, { "offset": 1, "color": "$color.secondary/40" }] }\` (angle: 0 = towards the top, 90 = right), \`"radial-gradient"\` (\`center\`: \`{ "x": 0.5, "y": 0.5 }\` as fractions of the box; offset 1 reaches the box sides) or \`"conic-gradient"\` (an angular sweep: \`angle\` where offset 0 starts, clockwise from the top, and \`center\`; repeat the first color last for a seamless wheel); or an image, \`{ "type": "image", "asset": "asset:<sha256>", "fit"?: "cover" | "contain" | "fill" | "tile" }\` ("tile" repeats it at its own pixel size from the top-left corner). 2–16 stops, offsets 0–1. A slide background is drawn over the theme's background color, so translucent stops fade into it.
 Strokes are drawn inside the frame's edge and take no room: adding one never moves the content or the free layers (still measured from the outer edge), so a stroked card lines up with unstroked ones.
 
 ## Rotation (\`rotation\` on any node)
@@ -120,8 +121,10 @@ function deckFontsLine(deck: Deck): string {
   const families = deckFontFamilies(deck);
   if (families.length === 0) return "";
   return `This deck's own fonts (added with add_asset): ${families
-    .map((f) => `${f} (\`${fontStackFor(f)}\`)`)
-    .join(", ")}.\n\n`;
+    .map((f) => `${f} (\`${deckFontStack(deck, f)}\`)`)
+    .join(
+      ", ",
+    )}. They have only the weights of their files: other weights snap to the nearest (a weight-600 style on a 400/700 font renders bold, so bold runs inside it don't stand out).\n\n`;
 }
 
 function themeDocs(deck: Deck | null): string {
@@ -164,7 +167,7 @@ Any color token takes an opacity in percent (0–100): \`"$color.primary/30"\`.
 ${list(current.colors, "color", (v: string) => v)}
 
 ## Text styles (use as \`style\` on text)
-${list(current.text, "text", (v: { size: number; weight: number }) => `${v.size}px, weight ${v.weight}`)}
+${list(current.text, "text", (v: TextStyle) => `${v.size}px, weight ${v.weight}, $font.${v.font}${v.transform && v.transform !== "none" ? `, ${v.transform.toUpperCase()}` : ""}`)}
 
 ## Spacing / radius / shadow
 ${list(current.space, "space", (v: number) => `${v}px`)}
@@ -210,7 +213,7 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
         .map(([rule, what]) => `- \`${rule}\`: ${what}`)
         .join(
           "\n",
-        )}\n\nVisual rules (overflow, off-canvas, overlap, contrast, small text) need the headless renderer.`;
+        )}\n\nVisual rules (overflow, off-canvas, overlap, contrast, small text, empty-space) need the headless renderer.\n\nHow they measure:\n- **Contrast:** each text run against what's drawn behind it, translucent layers composited down to the slide. On a gradient, only the part under the text counts. Over an image it can't be measured (check with render_preview).\n- **Overlap:** text and images covering each other. Shapes don't count (they're usually backgrounds or decoration).\n- **off-canvas:** elements, and frames that draw something (fill, stroke, shadow), reported once per box.\n- **empty-space:** the band above or below the content: elements, frames that draw something, and free layers taller than 8% of the slide (a small page number doesn't count).`;
   }
   if (key.startsWith("element/")) {
     const registered = registry.get(key.slice("element/".length));

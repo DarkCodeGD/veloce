@@ -21,7 +21,7 @@ import {
   walkNodes,
 } from "@veloce/core";
 import type { ElementContext, ElementInstance, PluginRegistry } from "@veloce/plugin-api";
-import { cssPaint } from "@veloce/plugin-api";
+import { cssSlideBackground } from "@veloce/plugin-api";
 import {
   applyCss,
   frameLayoutCss,
@@ -95,7 +95,10 @@ export class SlideRenderer {
       return;
     }
     if (slide === this.#slide) return;
-    stage.style.background = cssPaint(slide.background ?? "$color.background", this.#ctx.assetUrl);
+    stage.style.background = cssSlideBackground(
+      slide.background ?? "$color.background",
+      this.#ctx.assetUrl,
+    );
 
     // Dispose nodes that are gone *before* mounting new ones, so heavy plugins (WebGL…) free
     // their resources first. IDs are unique per deck, so an ID still present is the same node.

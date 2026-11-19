@@ -385,7 +385,7 @@ describe.skipIf(problem !== null)("Phase 3: assets", { timeout: 60_000 }, () => 
     await page.keyboard.press("Escape");
     await page.getByRole("combobox", { name: "Heading" }).click();
     await page.getByRole("option", { name: /Zora/ }).click();
-    await expect.poll(() => deck().theme.fonts.heading).toBe('"Zora", system-ui, sans-serif');
+    await expect.poll(() => deck().theme.fonts.heading).toBe('"Zora", system-ui, sans-serif'); // Lora's web build has no PANOSE: unknown kind;
     await h.synced();
     const family = await page
       .locator(".editor-canvas [data-node-id='title'] .v-text")

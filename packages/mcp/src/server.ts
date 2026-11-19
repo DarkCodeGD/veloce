@@ -25,7 +25,14 @@ import type { RenderService, Workspace } from "@veloce/doc-server";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { INSTRUCTIONS } from "./docs.js";
 import { deckSummary } from "./summary.js";
-import { AgentSession, callTool, TOOLS, type ToolContext, toolInputSchema } from "./tools.js";
+import {
+  AgentSession,
+  callTool,
+  sessionDeckId,
+  TOOLS,
+  type ToolContext,
+  toolInputSchema,
+} from "./tools.js";
 
 export interface VeloceMcpOptions {
   workspace: Workspace;
@@ -117,8 +124,8 @@ export class VeloceMcp {
     }));
     server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
-      const id = workspace.activeDeckId;
-      const deck = id ? (await workspace.get(id)).deck : null;
+      const id = sessionDeckId({ workspace, session });
+      const deck = id && workspace.has(id) ? (await workspace.get(id)).deck : null;
       if (uri === "deck://current/summary") {
         const body = deck ? deckSummary(deck) : "No deck is open.";
         return { contents: [{ uri, mimeType: "text/plain", text: body }] };

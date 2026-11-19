@@ -10,7 +10,14 @@ export const ImagePropsSchema = z.strictObject({
   /** Describes the image for screen readers. Use "" for purely decorative images. */
   alt: z.string().max(1000),
   /** Default: `"cover"` (fill the box, cropping as needed). */
-  fit: z.enum(["cover", "contain", "fill"]).optional(),
+  fit: z
+    .enum(["cover", "contain", "fill"], {
+      error: (issue) =>
+        issue.input === "tile"
+          ? 'An image layer can\'t tile. For a tiled pattern, give a frame an image fill: "style": { "fill": { "type": "image", "asset": "asset:…", "fit": "tile" } }'
+          : 'Expected "cover", "contain" or "fill"',
+    })
+    .optional(),
   /** Which part stays visible when cropping, as fractions (0–1). Default: center. */
   focus: PointSchema.optional(),
   radius: RadiusSchema.optional(),
@@ -24,12 +31,14 @@ Photos, logos, screenshots and illustrations. The image must be a deck asset: ad
 **Props**
 - \`asset\` (required): \`"asset:<sha256>"\`
 - \`alt\` (required): what the image shows, for screen readers. Use \`""\` only for decoration.
-- \`fit\`: \`"cover"\` (default, crops to fill), \`"contain"\` (whole image visible), \`"fill"\` (stretch)
+- \`fit\`: \`"cover"\` (default, crops to fill), \`"contain"\` (whole image visible), \`"fill"\` (stretch). To tile a pattern, give a frame an image fill with \`"fit": "tile"\` instead.
 - \`focus\`: \`{ "x": 0.5, "y": 0.2 }\` keeps the top-center visible when cropping (e.g. faces)
 - \`radius\`: rounded corners
 
 **Example**
-\`{ "type": "image", "width": "fill", "height": 480, "props": { "asset": "asset:…", "alt": "Team at the launch event", "fit": "cover" } }\``;
+\`{ "type": "image", "width": "fill", "height": 480, "props": { "asset": "asset:…", "alt": "Team at the launch event", "fit": "cover" } }\`
+
+**Size:** an image is 400 × 300 unless you size it, even in a stretching column: give it \`"width": "fill"\` (and a height, or \`"fill"\`) to span its frame.`;
 
 export const imageElement = defineElement<ImageProps>({
   type: "image",

@@ -59,12 +59,21 @@ export const ColorTokenWithOpacitySchema = patternString<ColorTokenWithOpacity>(
   'Expected a color token with an opacity from 0 to 100, like "$color.primary/30"',
 );
 
+const COLOR_EXPECTED =
+  'Expected a hex color ("#4f46e5"), a color token ("$color.primary"), a color token at an opacity in percent ("$color.primary/30") or "transparent"';
+
+/** What's wrong with a string that isn't a color, as specifically as possible. */
+export function colorError(input: unknown): string {
+  const opacity = typeof input === "string" ? /^\$color\.[a-zA-Z][\w-]*\/(.*)$/.exec(input) : null;
+  if (opacity) {
+    return `The opacity in "${input}" must be a whole percent from 0 to 100, like "$color.primary/30" (got "${opacity[1]}")`;
+  }
+  return COLOR_EXPECTED;
+}
+
 export const ColorSchema = z.union(
   [HexColorSchema, tokenRefSchema("color"), ColorTokenWithOpacitySchema, z.literal("transparent")],
-  {
-    error:
-      'Expected a hex color ("#4f46e5"), a color token ("$color.primary"), a color token at an opacity in percent ("$color.primary/30") or "transparent"',
-  },
+  { error: (issue) => colorError(issue.input) },
 );
 export type Color = z.infer<typeof ColorSchema>;
 

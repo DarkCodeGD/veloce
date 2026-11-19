@@ -18,6 +18,7 @@ import {
   type Deck,
   type ElementNode,
   element,
+  formatBytes,
   isPlainObject,
   type Op,
   type Point,
@@ -312,11 +313,6 @@ export function keepOriginals(
   return swapAssets(deck, replacements, label);
 }
 
-const size = (bytes: number) =>
-  bytes >= 1024 ** 2
-    ? `${(bytes / 1024 ** 2).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-
 /** "beach.png optimized: 3.6 MB → 220 KB (−94%)…", or the total for several. */
 export function optimizedMessage(files: readonly Imported[]): string | null {
   const optimized = optimizedImports(files);
@@ -332,5 +328,5 @@ export function optimizedMessage(files: readonly Imported[]): string | null {
     optimized.length === 1
       ? (optimized[0]?.optimization?.original.info.name ?? "Image")
       : `${optimized.length} images`;
-  return `${what} optimized: ${size(before)} → ${size(after)} (−${saved}%), looks the same`;
+  return `${what} optimized: ${formatBytes(before)} → ${formatBytes(after)} (−${saved}%), looks the same`;
 }

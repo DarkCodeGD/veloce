@@ -60,6 +60,20 @@ export function cssPaint(paint: Paint, assetUrl: AssetUrlResolver): string {
   }
 }
 
+/**
+ * A slide background: `paint` over the theme's background color. A slide is never see-through,
+ * so a translucent color, a gradient fading to transparent or a letterboxed image shows the
+ * theme behind it, never whatever the page under the slide happens to be (white).
+ */
+export function cssSlideBackground(paint: Paint, assetUrl: AssetUrlResolver): string {
+  const base = cssColor("$color.background");
+  if (paint === "$color.background") return base;
+  const css = cssPaint(paint, assetUrl);
+  // Only the last layer may be a plain color: a color paint becomes a one-color image layer.
+  const layer = typeof paint === "string" ? `linear-gradient(${css}, ${css})` : css;
+  return `${layer}, ${base}`;
+}
+
 function gradientStops(stops: ReadonlyArray<{ offset: number; color: Color }>): string {
   return stops.map((s) => `${cssColor(s.color)} ${s.offset * 100}%`).join(", ");
 }

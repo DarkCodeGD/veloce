@@ -6,7 +6,6 @@
  * `verticalAlign: middle`) spills out of both ends, and `scrollHeight` only sees the bottom.
  */
 import {
-  CSS_COLOR_FN,
   compositeOver,
   contrastRatio,
   flattenLayers,
@@ -18,6 +17,7 @@ import {
   type TextSample,
   toRgbString,
 } from "@veloce/core";
+import { type Area, parseGradient, rangesUnder, samplesIn } from "./gradient-sample.js";
 
 const MAX_TEXT_SAMPLES = 12;
 
@@ -153,13 +153,17 @@ function textSamples(
 ): TextSample[] {
   const samples = new Map<string, TextSample>();
   const walker = el.ownerDocument.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
+  const range = el.ownerDocument.createRange();
   for (let n = walker.nextNode(); n && samples.size < MAX_TEXT_SAMPLES; n = walker.nextNode()) {
     const parent = n.parentElement;
     if (!parent || !n.nodeValue?.trim()) continue;
     const s = style(parent);
+    // Where this text is actually drawn: gradients are sampled under it, not everywhere.
+    range.selectNodeContents(n);
+    const drawn = range.getBoundingClientRect();
     const sample: TextSample = {
       color: s.color,
-      background: worstBackground(s.color, backgroundsBehind(parent, stage, style)),
+      background: worstBackground(s.color, backgroundsBehind(parent, stage, style, drawn)),
       fontSize: Number.parseFloat(s.fontSize) || 0,
       fontWeight: fontWeight(s.fontWeight),
     };
@@ -173,15 +177,15 @@ function textSamples(
 const MAX_BACKGROUNDS = 48;
 
 /**
- * Every opaque color that can sit behind an element: its own background composited over its
- * ancestors' down to the stage. Gradients contribute their stops plus points between them
- * (contrast can be worst mid-gradient when the text color sits between two stops).
+ * Every opaque color that can sit behind text drawn at `drawn`: each background down to the
+ * stage, composited. Gradients contribute the stretch under the text (`gradient-sample.ts`).
  * `null` when an image is involved: contrast can't be computed.
  */
 function backgroundsBehind(
   from: Element,
   stage: HTMLElement,
   style: (el: Element) => CSSStyleDeclaration,
+  drawn: DOMRect,
 ): Rgba[] | null {
   const opaque = (stack: readonly Rgba[]) => stack.some((c) => c[3] >= 1);
   let stacks: Rgba[][] = [[]]; // each stack lists layers top-first
@@ -189,7 +193,7 @@ function backgroundsBehind(
     const s = style(el);
     const base = parseCssColor(s.backgroundColor || "transparent");
     if (!base) return null;
-    const options = layerOptions(s.backgroundImage, base);
+    const options = layerOptions(s.backgroundImage, base, el, s, drawn);
     if (!options) return null;
     stacks = stacks
       .flatMap((stack) => (opaque(stack) ? [stack] : options.map((o) => [...stack, ...o])))
@@ -199,25 +203,36 @@ function backgroundsBehind(
   return stacks.map((stack) => flattenLayers(stack.filter((c) => c[3] > 0)));
 }
 
-/** One element's possible paint (top-first layers): its gradient samples over its color. */
-function layerOptions(image: string, base: Rgba): Rgba[][] | null {
+/**
+ * One element's possible paint (top-first layers): the gradient colors under the text over
+ * its background color. A turned (rotated) box is sampled whole: its gradient runs in its
+ * own frame, which the upright rects here don't describe.
+ */
+function layerOptions(
+  image: string,
+  base: Rgba,
+  el: Element,
+  s: CSSStyleDeclaration,
+  drawn: DOMRect,
+): Rgba[][] | null {
   if (!image || image === "none") return [[base]];
   if (/url\(/i.test(image)) return null;
-  // Stops come back as rgb()/rgba(), or color(srgb …) for a theme color at an opacity.
-  const stops = (image.match(CSS_COLOR_FN) ?? []).map(parseCssColor);
-  if (stops.length === 0 || stops.some((c) => c === null)) return null;
-  const colors = stops as Rgba[];
-  const samples: Rgba[] = [];
-  colors.forEach((color, i) => {
-    samples.push(color);
-    const next = colors[i + 1];
-    if (next) for (const t of [0.25, 0.5, 0.75]) samples.push(mix(color, next, t));
-  });
-  return samples.map((sample) => [sample, base]);
-}
-
-function mix(a: Rgba, b: Rgba, t: number): Rgba {
-  return [0, 1, 2, 3].map((i) => (a[i] ?? 0) + ((b[i] ?? 0) - (a[i] ?? 0)) * t) as unknown as Rgba;
+  const gradient = parseGradient(image);
+  if (!gradient) return null;
+  const box = el.getBoundingClientRect();
+  const upright = isUpright(s.transform);
+  const scale = el instanceof HTMLElement && el.offsetWidth > 0 ? box.width / el.offsetWidth : 1;
+  const area: Area = {
+    left: (drawn.left - box.left) / scale,
+    top: (drawn.top - box.top) / scale,
+    right: (drawn.right - box.left) / scale,
+    bottom: (drawn.bottom - box.top) / scale,
+  };
+  const width = box.width / scale;
+  const height = box.height / scale;
+  const usable = upright && drawn.width > 0 && width > 0 && height > 0;
+  const ranges = usable ? rangesUnder(gradient, width, height, area) : [[0, 1] as [number, number]];
+  return samplesIn(gradient, ranges).map((sample) => [sample, base]);
 }
 
 /** The candidate background with the lowest contrast against this text color. */
@@ -230,6 +245,15 @@ function worstBackground(color: string, backgrounds: Rgba[] | null): string | nu
     if (!worst || ratio < worst.ratio) worst = { ratio, bg };
   }
   return worst ? toRgbString(worst.bg) : null;
+}
+
+/** No transform, or only moved/scaled (the stage fitted to the window): not rotated. */
+function isUpright(transform: string): boolean {
+  if (!transform || transform === "none") return true;
+  const m = /^matrix\(([^)]*)\)$/.exec(transform);
+  if (!m) return false;
+  const [, b, c] = (m[1] ?? "").split(",").map(Number);
+  return b === 0 && c === 0;
 }
 
 function fontWeight(value: string): number {

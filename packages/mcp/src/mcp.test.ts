@@ -397,7 +397,7 @@ describe("themes, docs, previews and decks", () => {
     const data = Buffer.from(png).toString("base64");
     const added = await call("add_asset", { files: [{ data, name: "hero.png" }] });
     expect(added.text).toMatch(
-      /hero\.webp: "asset:[0-9a-f]{64}" \(image\/webp, 1×1; optimized from 200 KB PNG 5000×2000 to 0 KB, looking the same\)/,
+      /hero\.webp: "asset:[0-9a-f]{64}" \(image\/webp, 1×1; optimized from 205 KB PNG 5000×2000 to 34 bytes, looking the same\)/,
     );
     const exact = await call("add_asset", { files: [{ data, name: "hero.png", optimize: false }] });
     expect(exact.text).toMatch(/hero\.png: "asset:[0-9a-f]{64}" \(image\/png, 5000×2000\)/);
@@ -471,5 +471,44 @@ describe("themes, docs, previews and decks", () => {
     expect(workspace.activeDeckId).toBe(one?.id);
     const resource = await client.readResource({ uri: "deck://current/summary" });
     expect(resource.contents[0]).toMatchObject({ text: expect.stringMatching(/^Deck "One"/) });
+  });
+
+  it("keeps each session on its own deck when the user or another agent switches (D68)", async () => {
+    await connect();
+    await call("create_deck", { title: "Mine" });
+    const mine = workspace.activeDeckId ?? "";
+    // The user opens another deck in the editor (the sync hub sets the active deck).
+    const theirs = await workspace.create({ title: "Theirs" });
+    expect(workspace.activeDeckId).toBe(theirs.id);
+    const added = await call("upsert_slide", {
+      slide: { id: "s1", children: [{ type: "text", props: { content: "Still mine" } }] },
+    });
+    expect(added.isError).toBe(false);
+    expect((await workspace.get(mine)).deck.slides.map((s) => s.id)).toEqual(["s1"]);
+    expect(theirs.deck.slides).toEqual([]);
+    expect(workspace.activeDeckId).toBe(theirs.id); // agent writes don't yank the editor back
+    const summary = (await call("get_deck_summary")).text;
+    expect(summary).toMatch(/^Deck "Mine"/);
+    expect(summary).toContain(`The user's editor is showing another deck right now.`);
+    expect((await call("list_decks")).text).toMatch(
+      /"Theirs" · 0 slides · theirs\.veloce · in the user's editor[\s\S]*"Mine" · 1 slides · mine\.veloce · CURRENT|"Mine" · 1 slides · mine\.veloce · CURRENT[\s\S]*"Theirs" · 0 slides · theirs\.veloce · in the user's editor/,
+    );
+    const resource = await client.readResource({ uri: "deck://current/summary" });
+    expect(resource.contents[0]).toMatchObject({ text: expect.stringMatching(/^Deck "Mine"/) });
+
+    // A second agent starts on the deck the editor shows, and pins its own.
+    const second = new VeloceMcp({ workspace, registry: createBuiltinRegistry(), render: null });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await second.createServer().connect(serverSide);
+    const other = new Client({ name: "Other agent", version: "1.0.0" });
+    await other.connect(clientSide);
+    const otherSummary = await other.callTool({ name: "get_deck_summary", arguments: {} });
+    expect((otherSummary.content as Array<{ text: string }>)[0]?.text).toMatch(/^Deck "Theirs"/);
+    await other.callTool({ name: "open_deck", arguments: { deckId: mine } });
+    expect(workspace.activeDeckId).toBe(mine);
+    await other.callTool({ name: "create_deck", arguments: { title: "Third" } });
+    // …which doesn't move the first agent either.
+    expect((await call("get_deck_summary")).text).toMatch(/^Deck "Mine"/);
+    await other.close();
   });
 });

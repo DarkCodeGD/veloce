@@ -96,7 +96,19 @@ export const FrameStyleSchema = z.strictObject({
 export type FrameStyle = z.infer<typeof FrameStyleSchema>;
 
 /** Which edge of the frame a free layer's `position` is measured from, on one axis. */
-export const AnchorEdgeSchema = z.enum(["start", "center", "end"]);
+export const AnchorEdgeSchema = z.enum(["start", "center", "end"], {
+  error: (issue) => {
+    const near: Record<string, string> = {
+      left: "start",
+      top: "start",
+      right: "end",
+      bottom: "end",
+      middle: "center",
+    };
+    const guess = typeof issue.input === "string" ? near[issue.input] : undefined;
+    return `Expected "start", "center" or "end"${guess ? ` (for "${issue.input}", use "${guess}")` : ""}`;
+  },
+});
 export type AnchorEdge = z.infer<typeof AnchorEdgeSchema>;
 
 /** Per axis; omitted axes are `"start"` (left / top). See anchor.ts for what each means. */

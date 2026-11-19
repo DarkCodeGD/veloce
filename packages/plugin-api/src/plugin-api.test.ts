@@ -3,7 +3,7 @@ import { applyTransaction, createDeck, createSlide, DEFAULT_THEME, element } fro
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { checkElementConformance } from "./conformance.js";
-import { cssPaint } from "./css.js";
+import { cssPaint, cssSlideBackground } from "./css.js";
 import { PluginRegistry } from "./registry.js";
 import { defineElement, definePlugin, type ElementDefinition } from "./types.js";
 
@@ -169,6 +169,18 @@ describe("css helpers", () => {
       cssPaint({ type: "image", asset: `asset:${"ab".repeat(32)}`, fit: "contain" }, url),
     ).toBe('url("blob:abab") center / contain no-repeat');
     expect(DEFAULT_THEME.colors.primary).toBeDefined();
+  });
+
+  it("puts slide backgrounds over the theme background, never the page", () => {
+    const bg = "var(--v-color-background)";
+    expect(cssSlideBackground("$color.background", url)).toBe(bg);
+    const tint = "color-mix(in srgb, var(--v-color-primary) 30%, transparent)";
+    expect(cssSlideBackground("$color.primary/30", url)).toBe(
+      `linear-gradient(${tint}, ${tint}), ${bg}`,
+    );
+    expect(
+      cssSlideBackground({ type: "image", asset: `asset:${"ab".repeat(32)}`, fit: "contain" }, url),
+    ).toBe(`url("blob:abab") center / contain no-repeat, ${bg}`);
   });
 });
 

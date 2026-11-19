@@ -340,6 +340,75 @@ describe("lint: visual rules (with measurements)", () => {
     expect(issues.find((i) => i.rule === "empty-space")?.message).toMatch(/bottom 83%/);
   });
 
+  it("counts cards and big free layers as content for balance, not labels or backdrops", () => {
+    // A painted card running to y=796 whose text ends at y=460 (agent report B5), a
+    // slide-tall backdrop, and a small free page number at the bottom.
+    const carded = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          rootId: "root",
+          children: [
+            frame({ id: "backdrop", style: { fill: "$color.surface" } }),
+            frame({
+              id: "card",
+              style: { fill: "$color.surface" },
+              children: [text("body", "Body")],
+            }),
+            frame({ id: "plain", children: [text("other", "Other")] }),
+            text("page", "7", { positioning: "free", position: { x: 1800, y: 1040 } }),
+          ],
+        }),
+      ],
+    });
+    const lint = (nodes: Record<string, NodeMeasurement>) =>
+      lintDeck(carded, { measurements: new Map([["s", measured("s", nodes)]]) })
+        .filter((i) => i.rule === "empty-space")
+        .map((i) => i.message);
+    const base = {
+      backdrop: box(0, 0, 1920, 1080),
+      body: box(128, 340, 600, 120),
+      page: box(1800, 1040, 60, 30),
+    };
+    expect(lint({ ...base, card: box(96, 300, 1728, 496) })).toEqual([]);
+    // Without the card's paint, the text alone leaves the bottom bare (the backdrop and the
+    // page number don't hide it).
+    expect(
+      lint({ ...base, plain: box(96, 300, 1728, 496), other: box(128, 340, 600, 120) }),
+    ).toEqual(['The bottom 57% of slide "s" is empty.']);
+  });
+
+  it("reports a box that leaves the slide once, not each text inside it", () => {
+    const diagram = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          rootId: "root",
+          children: [
+            frame({
+              id: "box",
+              style: { fill: "$color.surface" },
+              children: [text("label", "Label")],
+            }),
+            frame({ id: "bare", children: [text("loose", "Loose")] }),
+          ],
+        }),
+      ],
+    });
+    const m = measured("s", {
+      box: box(1736, 300, 360, 200),
+      label: box(1760, 320, 300, 40),
+      bare: box(1800, 600, 300, 100),
+      loose: box(1800, 620, 300, 40),
+    });
+    const offCanvas = lintDeck(diagram, { measurements: new Map([["s", m]]) })
+      .filter((i) => i.rule === "off-canvas")
+      .map((i) => i.nodeIds.join("+"));
+    expect(offCanvas).toEqual(["box", "loose"]);
+  });
+
   it("gives free-layer overlaps advice that fits them", () => {
     const badged = createDeck({
       title: "t",

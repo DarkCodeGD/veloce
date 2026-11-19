@@ -13,7 +13,7 @@ import {
   BUNDLED_FONTS,
   type Deck,
   deckFontFamilies,
-  fontStackFor,
+  deckFontStack,
   primaryFamily,
   type Theme,
 } from "@veloce/core";
@@ -49,10 +49,10 @@ export function ThemeSection({ deck }: { deck: Deck }) {
   const fontOptions = [
     ...deckFontFamilies(deck).map(
       (family): SelectOption => ({
-        value: fontStackFor(family),
+        value: deckFontStack(deck, family),
         label: family,
         hint: "deck",
-        fontFamily: fontStackFor(family),
+        fontFamily: deckFontStack(deck, family),
       }),
     ),
     ...FONT_OPTIONS,

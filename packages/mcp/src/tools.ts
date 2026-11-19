@@ -18,6 +18,7 @@ import {
   findBuiltinTheme,
   findSlide,
   fontStackFor,
+  formatBytes,
   formatIssues,
   lintDeck,
   MAX_ASSET_BYTES,
@@ -56,6 +57,13 @@ export interface ToolContext {
  */
 export class AgentSession {
   readonly #created = new Set<string>();
+  /**
+   * The deck this connection works on (D68): set by create_deck and open_deck, otherwise the
+   * deck the editor showed at this session's first call. The user switching decks in the
+   * editor, or another agent opening one, never moves it, so writes can't land in a deck
+   * this agent never chose.
+   */
+  deckId: string | null = null;
 
   created(deckId: string, slideId: string): boolean {
     return this.#created.has(`${deckId}/${slideId}`);
@@ -116,14 +124,32 @@ class ToolError extends Error {
   }
 }
 
+/** This session's deck (D68), pinned on first use. */
 async function currentDeck(ctx: ToolContext): Promise<OpenDeck> {
-  const id = ctx.workspace.activeDeckId;
+  const pinned = ctx.session.deckId;
+  const id = pinned ?? ctx.workspace.activeDeckId;
   if (!id) {
     throw new VeloceError("NOT_FOUND", "No deck is open", {
       hint: "Create one with create_deck, or list_decks then open_deck.",
     });
   }
-  return ctx.workspace.get(id);
+  if (pinned && !ctx.workspace.has(pinned)) {
+    throw new VeloceError(
+      "NOT_FOUND",
+      `Your current deck (${pinned}) isn't in the workspace anymore`,
+      {
+        hint: "list_decks, then open_deck the one to work on (or create_deck).",
+      },
+    );
+  }
+  const open = await ctx.workspace.get(id);
+  ctx.session.deckId = open.id;
+  return open;
+}
+
+/** This session's deck if it has one yet (read-only uses: docs, listings, resources). */
+export function sessionDeckId(ctx: Pick<ToolContext, "workspace" | "session">): string | null {
+  return ctx.session.deckId ?? ctx.workspace.activeDeckId;
 }
 
 function requireSlide(deck: Deck, slideId: string) {
@@ -204,7 +230,12 @@ const getDeckSummary = defineTool({
   input: z.strictObject({}),
   annotations: { readOnlyHint: true },
   async run(_args, ctx) {
-    return text(deckSummary((await currentDeck(ctx)).deck));
+    const open = await currentDeck(ctx);
+    const elsewhere =
+      ctx.workspace.activeDeckId !== open.id
+        ? `The user's editor is showing another deck right now. Your changes still go to this one; open_deck("${open.id}") shows it to them.`
+        : "";
+    return text(deckSummary(open.deck), elsewhere);
   },
 });
 
@@ -495,15 +526,12 @@ async function readAssetInput(input: z.infer<typeof AssetFileInput>, at: string)
   return { bytes: new Uint8Array(await readFile(input.path)), name: basename(input.path) };
 }
 
-const kb = (bytes: number) =>
-  bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
-
 /** "optimized from 3.6 MB PNG 5120×2880": what the agent should know it got (D67). */
 function describeOptimization(info: AssetInfo, o: Optimization): string {
   const from = o.original.info;
   const format = from.mime.replace("image/", "").toUpperCase();
   const resized = o.resized && from.width && from.height ? ` ${from.width}×${from.height}` : "";
-  return `; optimized from ${kb(from.bytes)} ${format}${resized} to ${kb(info.bytes)}, looking the same`;
+  return `; optimized from ${formatBytes(from.bytes)} ${format}${resized} to ${formatBytes(info.bytes)}, looking the same`;
 }
 
 /** One line per added file: the reference to use, and how. */
@@ -516,7 +544,7 @@ function describeAsset(id: string, info: AssetInfo, optimization?: Optimization)
     const w = Array.isArray(weight)
       ? `weights ${weight[0]}–${weight[1]}`
       : `weight ${weight ?? 400}`;
-    return `${label}font family "${family}" (${w}${style === "italic" ? ", italic" : ""}). Use it in the theme: set_theme({ "theme": { "fonts": { "heading": ${JSON.stringify(fontStackFor(family))} } } }).`;
+    return `${label}font family "${family}" (${w}${style === "italic" ? ", italic" : ""}). Use it in the theme: set_theme({ "theme": { "fonts": { "heading": ${JSON.stringify(fontStackFor(family, info.font.category))} } } }).`;
   }
   const size = info.width && info.height ? `, ${info.width}×${info.height}` : "";
   const saved = optimization ? describeOptimization(info, optimization) : "";
@@ -526,7 +554,7 @@ function describeAsset(id: string, info: AssetInfo, optimization?: Optimization)
 const addAsset = defineTool({
   name: "add_asset",
   title: "Add images or fonts",
-  description: `Add image files (PNG, JPEG, GIF, WebP, AVIF, SVG) or fonts (TTF, OTF, WOFF, WOFF2) to the current deck, up to ${MAX_ASSET_BYTES / 1024 ** 2} MiB each. Give a local file path, or base64 data with a file name. Returns the "asset:<id>" reference for each image, and the family name for each font. Big JPEG, PNG and WebP photos are made smaller on import (at most 3840 px, WebP that looks the same); set optimize: false on a file to keep it exact. Remote URLs aren't fetched: decks stay self-contained.`,
+  description: `Add image files (PNG, JPEG, GIF, WebP, AVIF, SVG) or fonts (TTF, OTF, WOFF, WOFF2) to the current deck, up to ${MAX_ASSET_BYTES / 1024 ** 2} MiB each. Give a local file path, or base64 data with a file name. Returns the "asset:<id>" reference for each image, and the family name for each font. JPEG, PNG and WebP images over 32 KB (photos and screenshots alike) are made smaller on import: at most 3840 px, WebP that looks the same. Set optimize: false on a file to keep its exact bytes. Remote URLs aren't fetched: decks stay self-contained.`,
   input: z.strictObject({ files: z.array(AssetFileInput).min(1).max(20) }),
   async run({ files }, ctx) {
     const open = await currentDeck(ctx);
@@ -653,8 +681,8 @@ const getDocsTool = defineTool({
   input: z.strictObject({ topic: z.string() }),
   annotations: { readOnlyHint: true },
   async run({ topic }, ctx) {
-    const id = ctx.workspace.activeDeckId;
-    const deck = id ? (await ctx.workspace.get(id)).deck : null;
+    const id = sessionDeckId(ctx);
+    const deck = id && ctx.workspace.has(id) ? (await ctx.workspace.get(id)).deck : null;
     const docs = getDocs(topic, ctx.registry, deck);
     if (docs === null) {
       return errorResult({
@@ -681,6 +709,7 @@ const createDeck = defineTool({
     const resolved =
       theme === undefined ? undefined : resolveTheme(theme, BUILTIN_THEMES.light as Theme);
     const open = await ctx.workspace.create({ title, ...(resolved && { theme: resolved }) });
+    ctx.session.deckId = open.id;
     return text(
       `Created deck "${title}" (id ${open.id}). It's now the current deck.`,
       deckSummary(open.deck),
@@ -692,19 +721,20 @@ const createDeck = defineTool({
 const listDecks = defineTool({
   name: "list_decks",
   title: "List decks",
-  description: "Decks in the workspace, most recently changed first. The current deck is marked.",
+  description:
+    "Decks in the workspace, most recently changed first. Your current deck is marked, and so is the one the user's editor shows.",
   input: z.strictObject({}),
   annotations: { readOnlyHint: true },
   async run(_args, ctx) {
     const decks = ctx.workspace.list();
     if (!decks.length) return text("No decks yet. Create one with create_deck.");
-    const active = ctx.workspace.activeDeckId;
+    const mine = sessionDeckId(ctx);
+    const shown = ctx.workspace.activeDeckId;
+    const marks = (id: string) =>
+      `${id === mine ? " · CURRENT" : ""}${id === shown && id !== mine ? " · in the user's editor" : ""}`;
     return text(
       decks
-        .map(
-          (d) =>
-            `- ${d.id}: "${d.title}" · ${d.slideCount} slides · ${d.file}${d.id === active ? " · CURRENT" : ""}`,
-        )
+        .map((d) => `- ${d.id}: "${d.title}" · ${d.slideCount} slides · ${d.file}${marks(d.id)}`)
         .join("\n"),
     );
   },
@@ -714,10 +744,11 @@ const openDeck = defineTool({
   name: "open_deck",
   title: "Open deck",
   description:
-    "Make another deck the current one (the user's editor switches to it). Get IDs from list_decks.",
+    "Make another deck your current one (the user's editor switches to it). Get IDs from list_decks. Your current deck stays yours: the user or other agents switching decks don't change it.",
   input: z.strictObject({ deckId: z.string() }),
   async run({ deckId }, ctx) {
     const open = await ctx.workspace.get(deckId);
+    ctx.session.deckId = open.id;
     ctx.workspace.setActive(open.id);
     return text(deckSummary(open.deck));
   },

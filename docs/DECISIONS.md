@@ -202,6 +202,8 @@ The workspace (a folder of `.veloce` files) has one active deck that the editor 
 share. Agents switch it with `open_deck`/`create_deck`, and editor tabs follow. **Why:** the
 product is "watch the AI build it". If agents and users could point at different decks, users
 would miss the work. Per-session decks can come later if needed.
+**Partly superseded by D68:** each agent session now keeps its own target deck; the editor
+still follows agents when they create or open one.
 
 ### D29: MCP via the SDK's low-level `Server` (2026-11-18)
 
@@ -1367,3 +1369,68 @@ each photo can lose before it shows.
 8. **Packaging (Phase 6):** the Electron build must ship `@jsquash/*`'s `.wasm` files and
    `@veloce/images/dist/worker.js` as real files (unpacked from asar, not bundled into
    one file), because the worker is started from its own URL.
+
+## D68 — Each agent session keeps its own deck
+
+**Status:** Accepted (2026-11-20). Supersedes the agent half of D28. From the round-4 agent test.
+
+The test agent was building its deck while the user browsed other decks in the editor. Its
+next `upsert_slide` went into the user's "SunBrew" deck, and the call after that failed with a
+"did you mean" hint for a slide in a third deck. The active deck was global (D28), so whatever
+the editor or any other agent opened last became every agent's write target. No tool took a
+deck ID, so an agent had no way to protect itself.
+
+1. **Every MCP session pins its deck:** `create_deck` and `open_deck` set it (and still switch
+   the user's editor, as D28 wants). Otherwise it's the deck the editor showed at the
+   session's first call. The user or another agent switching decks never moves it.
+2. **Agent writes don't drag the editor back.** The user chose to look elsewhere.
+   `get_deck_summary` tells the agent so ("The user's editor is showing another deck…;
+   open_deck(…) shows it to them"), and `list_decks` marks both decks. **Why:** the agent can
+   decide whether its work needs the user's eyes; switching the screen under someone is rude.
+3. **Not chosen:** a `deckId` on every write tool (more to send on every call, and agents
+   would still need a "current" one), and failing writes whose target moved (it was the
+   global pointer that was wrong, not the agent).
+4. Docs, deck resources and `list_decks` use the session's deck. A pinned deck that's gone
+   from the workspace gives an error that says to `open_deck` another.
+
+## D69 — Agent feedback round 3: what the round-4 deck test found
+
+**Status:** Accepted (2026-11-20). A 15-slide MCP test deck covering every round-4 feature.
+
+1. **Slide backgrounds sit on the theme background** (`cssSlideBackground`). A translucent
+   gradient on a slide was drawn over the white page under the slide, so a purple glow on
+   Midnight came out as a near-white ellipse. A color paint becomes a one-color gradient
+   layer, since only the last CSS background layer may be a plain color.
+2. **Links take the text's own color, underlined** (renderer and the in-place text editor),
+   instead of the browser's #0000EE, which ignores the theme and failed contrast on dark
+   slides. A run color still wins. **Why not the primary color:** the text color always has
+   the contrast the text already has.
+3. **Contrast lint samples a gradient under the text,** not every stop
+   (`gradient-sample.ts`). The geometry is parsed from the computed CSS: linear projects the
+   text box's corners on the gradient line, radial takes the nearest and farthest points
+   from the centre, and conic takes the angles the box spans (two ranges when it wraps).
+   Text at the faded end of "primary → primary/0" was an error at 1.70:1 though readable. A
+   rotated box is still sampled whole.
+4. **empty-space counts what's drawn:** elements, frames with a fill, stroke or shadow, and
+   free layers taller than 8% of the slide. Still not counted: frames that only arrange, a
+   painted backdrop at least 90% of the slide tall, and small free labels. It fired on 4 of
+   15 balanced slides, which teaches agents to ignore lint.
+5. **off-canvas reports painted frames** (a box in a diagram), once per box rather than once
+   per text inside it. An unpainted frame's elements are reported as before.
+6. **Error messages:** an opacity out of range says so ("must be a whole percent from 0 to
+   100, got 150") instead of the paint union's bare "Invalid input". `anchor.x: "right"`
+   suggests `"end"`. An image layer's `fit: "tile"` points at frame image fills.
+7. **Font stacks fall back to the same kind of face:** imported fonts are classified serif,
+   sans or monospace from their OS/2 table (PANOSE first, then the family class), stored as
+   `font.category` (additive; format v1 hasn't shipped). Caladea now gets
+   `"Caladea", Georgia, serif`. Fonts that don't say (many web builds, like Fontsource's Lora,
+   ship an empty PANOSE and class) keep the sans fallback.
+8. **Sizes are decimal** (`formatBytes`: 3,907,925 bytes is "3.9 MB", like file managers and
+   `ls --si`), shared by add_asset's reply and the editor's toast.
+9. **Docs:** every text run and layer prop, each text style's font and case in the theme
+   docs, an image's 400 × 300 default even in a stretching column, how tiles are sized, how
+   each visual lint rule measures, deck fonts' missing weights, and per-session decks.
+10. **Kept as they are:** text over a shape isn't an `overlap` (shapes are usually
+    backgrounds; documented). Screenshots stay lossy WebP when that's smaller and passes the
+    SSIM bar: the 3× zoom check in D67 showed identical text, and that's TinyPNG's trade too.
+    Contrast messages name the layer, not the run (later, if agents trip on it).

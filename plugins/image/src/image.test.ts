@@ -42,4 +42,10 @@ describe("image element", () => {
       ImagePropsSchema.safeParse({ asset: "https://example.com/x.png", alt: "" }).success,
     ).toBe(false);
   });
+
+  it("points a tiled image at frame image fills", () => {
+    const result = ImagePropsSchema.safeParse({ asset: `asset:${ID}`, alt: "", fit: "tile" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toMatch(/give a frame an image fill.*"fit": "tile"/);
+  });
 });

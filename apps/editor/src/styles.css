@@ -2157,6 +2157,12 @@ html.is-scrubbing * {
   font-weight: 700;
 }
 
+/* Links look like the render's: the text's own color, underlined (a run color still wins). */
+.text-edit-content a {
+  color: inherit;
+  text-decoration-line: underline;
+}
+
 .text-edit-content code {
   font-family: var(--v-font-mono, monospace);
   font-size: 0.9em;

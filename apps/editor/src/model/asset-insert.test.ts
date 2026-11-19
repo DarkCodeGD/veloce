@@ -198,10 +198,10 @@ describe("asset insertion", () => {
     });
 
     expect(optimizedMessage([a])).toBe(
-      "beach.png optimized: 3.4 MB → 98 KB (−97%), looks the same",
+      "beach.png optimized: 3.6 MB → 100 KB (−97%), looks the same",
     );
     expect(optimizedMessage([a, b, png("c")])).toBe(
-      "2 images optimized: 4.8 MB → 195 KB (−96%), looks the same",
+      "2 images optimized: 5.0 MB → 200 KB (−96%), looks the same",
     );
     expect(optimizedMessage([png("c")])).toBeNull();
 

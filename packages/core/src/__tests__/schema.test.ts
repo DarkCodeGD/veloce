@@ -75,6 +75,24 @@ describe("document schema", () => {
     if (!result.success) expect(formatIssues(result.error.issues)).toMatch(/^stops:/);
   });
 
+  it("says what's wrong with a bad color, an opacity or an anchor (agent report B8)", () => {
+    const message = (
+      schema: { safeParse(v: unknown): { success: boolean; error?: unknown } },
+      value: unknown,
+    ) => {
+      const result = schema.safeParse(value);
+      return result.success ? "" : formatIssues((result.error as { issues: never }).issues);
+    };
+    expect(message(PaintSchema, "$color.primary/150")).toMatch(
+      /The opacity in "\$color\.primary\/150" must be a whole percent from 0 to 100/,
+    );
+    expect(message(PaintSchema, "blue")).toMatch(/^Expected a hex color/);
+    const free = { id: "n", kind: "element", type: "text", props: {}, positioning: "free" };
+    expect(message(NodeSchema, { ...free, anchor: { x: "right" } })).toMatch(
+      /anchor\.x: Expected "start", "center" or "end" \(for "right", use "end"\)/,
+    );
+  });
+
   it("validates theme font references", () => {
     const bad = {
       ...DEFAULT_THEME,

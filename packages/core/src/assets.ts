@@ -54,6 +54,16 @@ export function assetUsage(deck: Deck): Map<string, string[]> {
 
 // ── Importable files ────────────────────────────────────────────────────────────────────
 
+/**
+ * A file size for people, in decimal units like file managers and `ls --si` show them:
+ * 3,907,925 bytes is "3.9 MB", 128,400 is "128 KB", 34 is "34 bytes".
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1000) return `${bytes} bytes`;
+  if (bytes < 999_500) return `${Math.round(bytes / 1000)} KB`;
+  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
 /** The largest file that can be imported as an asset (50 MiB). */
 export const MAX_ASSET_BYTES = 50 * 1024 ** 2;
 
@@ -111,7 +121,25 @@ export function deckFontFamilies(deck: Pick<Deck, "assets">): string[] {
   return [...new Set(deckFontFaces(deck).map((f) => f.family))].sort((a, b) => a.localeCompare(b));
 }
 
-/** A theme font stack for an imported family: `"Acme Sans", system-ui, sans-serif`. */
-export function fontStackFor(family: string): string {
-  return `"${family}", system-ui, sans-serif`;
+export type FontCategory = "serif" | "sans-serif" | "monospace";
+
+/** What stands in while a font loads (or for missing glyphs), by kind of face. */
+const FALLBACKS: Record<FontCategory, string> = {
+  serif: "Georgia, serif",
+  "sans-serif": "system-ui, sans-serif",
+  monospace: "ui-monospace, monospace",
+};
+
+/**
+ * A theme font stack for an imported family, with a fallback of the same kind:
+ * `"Acme Sans", system-ui, sans-serif`, `"Caladea", Georgia, serif`.
+ */
+export function fontStackFor(family: string, category: FontCategory = "sans-serif"): string {
+  return `"${family}", ${FALLBACKS[category]}`;
+}
+
+/** The font stack for one of the deck's own families (its faces say what kind it is). */
+export function deckFontStack(deck: Pick<Deck, "assets">, family: string): string {
+  const face = Object.values(deck.assets).find((a) => a.font?.family === family && a.font.category);
+  return fontStackFor(family, face?.font?.category);
 }

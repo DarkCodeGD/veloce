@@ -9,7 +9,7 @@
  * sandboxed, so their scripts never run). Fonts: TTF, OTF, WOFF, WOFF2 (not collections).
  */
 import { brotliDecompressSync, inflateSync } from "node:zlib";
-import { type AssetInfo, MAX_ASSET_BYTES } from "@veloce/core";
+import { type AssetInfo, type FontCategory, MAX_ASSET_BYTES } from "@veloce/core";
 import { displaySize, jpegOrientation } from "@veloce/images";
 
 export type InspectResult = { ok: true; info: AssetInfo } | { ok: false; message: string };
@@ -45,6 +45,7 @@ export function inspectAsset(bytes: Uint8Array, fileName?: string): InspectResul
             family,
             ...(font.weight !== undefined && { weight: font.weight }),
             ...(font.italic && { style: "italic" as const }),
+            ...(font.category && { category: font.category }),
           },
         }),
       },
@@ -211,6 +212,24 @@ interface FontFacts {
   family?: string;
   weight?: number | [number, number];
   italic?: boolean;
+  category?: FontCategory;
+}
+
+/**
+ * Serif, sans or monospace, from the OS/2 table: PANOSE first (Latin text faces say their
+ * serif style and whether they're monospaced), then the IBM family class. Unknown: none.
+ */
+function fontCategory(os2: Reader): FontCategory | undefined {
+  if (os2.has(32, 10) && os2.u8(32) === 2) {
+    if (os2.u8(35) === 9) return "monospace";
+    const serifStyle = os2.u8(33);
+    if (serifStyle >= 11 && serifStyle <= 13) return "sans-serif";
+    if (serifStyle >= 2 && serifStyle <= 10) return "serif";
+  }
+  const familyClass = os2.has(30, 2) ? os2.u8(30) : 0;
+  if (familyClass >= 1 && familyClass <= 7) return "serif";
+  if (familyClass === 8) return "sans-serif";
+  return undefined;
 }
 
 type Tables = Map<string, Uint8Array>;
@@ -363,6 +382,8 @@ function readFontFacts(tables: Tables): Omit<FontFacts, "mime"> {
     if (weight >= 1 && weight <= 1000) facts.weight = weight;
     const selection = r.u16(62);
     if (selection & 0x1 || selection & 0x200) facts.italic = true;
+    const category = fontCategory(r);
+    if (category) facts.category = category;
   }
   if (range) facts.weight = range;
   return facts;
