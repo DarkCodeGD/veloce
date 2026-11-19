@@ -70,22 +70,43 @@ async function centreOf(id: string) {
  * Where each text node's first glyph is on screen. While typing, the plugin's render is still
  * laid out under the editor (hidden), so both can be measured at once.
  */
-const glyphs = (selector: string) =>
-  page.evaluate((sel) => {
-    const root = document.querySelector(sel);
-    if (!root) throw new Error(`no ${sel}`);
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const out: Array<{ text: string; x: number; y: number }> = [];
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!node.textContent?.trim()) continue;
-      const range = document.createRange();
-      range.setStart(node, 0);
-      range.setEnd(node, 1);
-      const r = range.getBoundingClientRect();
-      out.push({ text: node.textContent, x: r.x, y: r.y });
-    }
-    return out;
-  }, selector);
+const glyphsOf = (selectors: string[]) =>
+  page.evaluate((sels) => {
+    return sels.map((sel) => {
+      const root = document.querySelector(sel);
+      if (!root) throw new Error(`no ${sel}`);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const out: Array<{ text: string; x: number; y: number }> = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.setStart(node, 0);
+        range.setEnd(node, 1);
+        const r = range.getBoundingClientRect();
+        out.push({ text: node.textContent, x: r.x, y: r.y });
+      }
+      return out;
+    });
+  }, selectors);
+const glyphs = async (selector: string) => (await glyphsOf([selector]))[0] ?? [];
+
+/**
+ * How far apart the editor's glyphs are from the (hidden) render's, at worst. Both lists come
+ * from ONE snapshot: the layout can still be moving (a taller paragraph grows the box, and a
+ * centered slide shifts it), so two separate measurements could straddle that move.
+ */
+async function editorDrift(id: string) {
+  const [rendered = [], typed = []] = await glyphsOf([
+    `.editor-canvas [data-node-id='${id}'] .v-text`,
+    `.editor-canvas [data-node-id='${id}'] .text-edit-content`,
+  ]);
+  if (typed.length !== rendered.length || typed.length === 0) return Number.POSITIVE_INFINITY;
+  return Math.max(
+    ...typed.map((g, i) =>
+      Math.max(Math.abs(g.x - (rendered[i]?.x ?? 0)), Math.abs(g.y - (rendered[i]?.y ?? 0))),
+    ),
+  );
+}
 
 /** Click the layer (selects Card), double-click it (enters Card → the text: typing). */
 async function startTyping(id: string) {
@@ -314,21 +335,7 @@ describe.skipIf(problem !== null)("Phase 3: typing on the slide", { timeout: 60_
     expect(await styleMenu().getAttribute("aria-label")).toBe("Text style: h2");
     // The live render underneath (hidden) and the editor agree glyph for glyph: the paragraph
     // style is mirrored whole (letter-spacing and case included).
-    await expect
-      .poll(async () => (await glyphs(".editor-canvas [data-node-id='body'] .v-text"))[0]?.y)
-      .toBeCloseTo(
-        (await glyphs(".editor-canvas [data-node-id='body'] .text-edit-content"))[0]?.y ?? 0,
-        0,
-      );
-    const [rendered, typed] = [
-      await glyphs(".editor-canvas [data-node-id='body'] .v-text"),
-      await glyphs(".editor-canvas [data-node-id='body'] .text-edit-content"),
-    ];
-    expect(typed.length).toBe(rendered.length);
-    typed.forEach((g, i) => {
-      expect(Math.abs(g.x - (rendered[i]?.x ?? 0)), g.text).toBeLessThan(0.5);
-      expect(Math.abs(g.y - (rendered[i]?.y ?? 0)), g.text).toBeLessThan(0.5);
-    });
+    await expect.poll(() => editorDrift("body")).toBeLessThan(0.5);
     await oneTransaction(() => page.keyboard.press("Escape"));
     expect(content("body")).toEqual([{ ...BODY[0], style: "$text.h2" }, BODY[1], BODY[2]]);
     expect(h.stored("body").props?.style).toBe("$text.body"); // not the whole text: per paragraph
