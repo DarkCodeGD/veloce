@@ -858,3 +858,34 @@ guess was `"x": null, "y": null`.
 `json.test.ts` covers the rule and the `diffPatch` round trips. `ops.test.ts` switches a
 frame's padding form through `node.update` and back with its inverse, and checks the error
 wording.
+
+## D53 — Product shape: Blender-style workspaces, Figma-clean panels, and a 1.0 line
+
+**Status:** Accepted (2026-11-19).
+
+The user's direction for the app: a Blender and Figma hybrid. Blender's **workspaces**, one
+per kind of work (designing, animating, presenting, later 3D), and its app-level menus and
+Preferences. Figma's **easy panels**, with the important options always in reach.
+
+1. **Workspaces are views, not modes of the document.** Each workspace is a preset of panels
+   over the same deck, the same ops and the same server (golden rules 1 and 2), so nothing in
+   core changes per workspace. **Why:** the editor is already a client; Blender works the
+   same way (one file, many workspaces).
+2. **Fixed presets first.** Panels resize and collapse, but there's no Blender-style "split
+   any area into any editor" before 1.0. **Why:** that freedom is a large part of why Blender
+   is hard to learn, and "Figma-easy" is half the goal. Custom layouts wait for user demand.
+3. **A workspace appears only when its phase ships.** Design now; Animate and Present with
+   Phase 4; 3D after 1.0. No empty tabs.
+4. **AI stays global.** The deck switcher, Follow AI / Live and Present stay in the top bar on
+   every workspace. **Why:** AI-first means agent activity is never hidden in one workspace.
+5. **Preferences are app settings, not document content.** They're stored in a user settings
+   file owned by the server, outside `.veloce` files and outside ops. Deck-level settings
+   (stage size, theme) stay in the deck. GPU choice is a launch switch, so it arrives with
+   Electron (Phase 6) and needs a restart.
+6. **The app shell comes before Motion** (Phase 3, round 5). **Why:** Phase 4 then lands as
+   the Animate and Present workspaces instead of being squeezed into today's screen and
+   rebuilt later.
+7. **A 1.0 shipping line.** The roadmap's phases hold only 1.0 work; everything else waits in
+   "After 1.0" (3D, custom layouts, PPTX, phone remote, recording, suggestion mode,
+   community plugins…). **Why:** the user wants to ship; a roadmap where everything is
+   "next" never ships. Items move up only when the user says so.

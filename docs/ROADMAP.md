@@ -3,6 +3,24 @@
 > **Source of truth for what to build next.** Claude: read "Current status" first, work on the
 > first unchecked item in the active phase, tick boxes as items land, and update "Current status"
 > before the session ends. Decisions and their reasons live in [DECISIONS.md](DECISIONS.md).
+>
+> **Phases 0–9 hold only what ships in 1.0.** Everything else waits in "After 1.0" at the
+> bottom: don't start those items before 1.0 ships unless the user moves one up.
+
+## Veloce 1.0 (the shipping line)
+
+1.0 ships when all of this is true:
+
+- **Design, Animate and Present workspaces** are polished: a Blender-style workspace switcher
+  with Figma-clean panels, an app menu bar, a command palette and Preferences (D53).
+- Decks are built and edited by hand **and** by AI: over MCP (Claude Code and other clients)
+  and with the built-in assistant (bring your own key).
+- Decks animate (steps, effects, transitions, morph) and present well (presenter view,
+  second screen, laser pointer).
+- Reuse: components and slide layouts; slide numbers, footers and sections.
+- The core plugins (chart, icon, code, math, video, Lottie) pass conformance.
+- Export to PDF, PNG, standalone HTML and MP4.
+- It installs and updates on Linux, Windows and macOS, signed, and opens `.veloce` files.
 
 ## Current status
 
@@ -65,8 +83,12 @@
     `tests/integration/phase3-layers.test.ts` covers it.
   - **Round 4 and 5 grew (2026-11-19)** from an MCP-only agent run (a badge on an existing
     deck, then a 5-slide deck from scratch): a padding patch bug agents hit, anchors for
-    free layers, opacity on color tokens, and a new round 5 for reusable components. Batch
+    free layers, opacity on color tokens, and a round for reusable components. Batch
     previews, shape geometry and a cross-slide consistency lint went to Phases 4, 5 and 8.
+  - **Product shape and the 1.0 line (D53, 2026-11-19):** Blender-style workspaces with
+    Figma-clean panels; a new round 5 (app shell: menu bar, workspaces, Preferences, command
+    palette, snapshots) before Motion. The roadmap now holds only 1.0 work; the rest waits
+    in "After 1.0".
   - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
     replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
     says how to write it.
@@ -75,8 +97,8 @@
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
     the README; Electron will start the server automatically.
-  - **Still open:** the "current slide ±1" plugin-mount policy (thumbnails are live and lazily
-    mounted for now; it matters once heavy plugins arrive).
+  - **Still open:** the "current slide ±1" plugin-mount policy, now a Phase 5 item (thumbnails
+    are live and lazily mounted for now; it matters once heavy plugins arrive).
   - `desktop` is still a placeholder.
 
 ---
@@ -204,7 +226,7 @@ identically, and per-origin undo/redo works. Built-in plugins pass the conforman
 **Renderer**
 
 - [x] Deck → DOM; frames map to CSS flexbox; stage scaled to fit via CSS transform
-- [ ] Plugin host: mount current slide ±1 only; others show static thumbnails
+- Plugin host mount policy (current slide ±1): moved to Phase 5, where heavy plugins arrive
 - [x] Theme tokens → CSS variables; font loading (await fonts before measuring)
 - [x] Measurement pass: computed bounds per node, text overflow detection → reported to server
 
@@ -298,40 +320,77 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       editor's token color picker (the system picker has no alpha, D47)
 - [ ] Unused uploads are cleaned up: files uploaded but never registered with `asset.add`
       (a cancelled drop, a failed paste) are swept on save and on close
+- [ ] Image optimization on import: photos far larger than the stage are downscaled, and
+      heavy formats re-encoded (WebP/AVIF, keeping PNG where transparency or sharp edges
+      need it), so a phone photo doesn't add 40 MB to a deck. The original is never needed
+      again; the user is told what was done
 
-**Round 5: reuse (components)**
+**Round 5: app shell (D53)**
+
+The editor becomes an app: Blender's workspaces for different kinds of work, Figma's clean
+panels with the important options in reach. Done before Motion, so Phase 4 lands as the
+Animate and Present workspaces instead of being squeezed into today's screen.
+
+- [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
+      and its shortcut; the deck switcher, Follow AI / Live and Present stay in the bar on
+      every workspace (AI activity is never hidden in one workspace)
+- [ ] Workspaces: a switcher with fixed presets of resizable, collapsible panels. Design is
+      the first (today's editor); a workspace appears only once its phase ships (Animate
+      and Present in Phase 4). Panel sizes and the last workspace are remembered
+- [ ] Preferences window, stored in a user settings file owned by the server (app settings,
+      not deck content, so not ops): Interface (UI scale, dark/light), Editing (undo steps,
+      snapping, nudge distance), Files (decks folder, autosave interval), Keymap (every
+      shortcut, searchable; rebinding after 1.0), AI (MCP port, connect instructions, Follow
+      AI default). System settings (GPU, hardware acceleration) arrive with Phase 6
+- [ ] Command palette (Ctrl/Cmd+K): search every command, setting, slide and layer; shows
+      shortcuts. The glue that keeps a big app easy to use
+- [ ] Snapshots: File → Save version (named), a version list, open read-only, restore (one
+      transaction, undoable). A safety net when an agent rewrites a deck
+
+**Round 6: reuse (components and slide layouts)**
 
 Agents rebuild the same card 4–8 times per slide and can't reuse a drawing they made from
-shapes, which means large, repetitive MCP payloads and drifting styles.
+shapes, which means large, repetitive MCP payloads and drifting styles. Humans want the
+same slide structure every time without rebuilding it.
 
-- [ ] Components, step 1 (copy on insert): save any subtree as a named component with a few
+- [ ] Components (copy on insert): save any subtree as a named component with a few
       declared params (e.g. `color`, `label`, `level`) that map to node fields. Inserting
       makes a plain copy with fresh IDs, so the document never links to it: undo, morph and
       export work as they do today. Stored per deck (`components` in `document.json`, a
-      format addition with its decision entry) and in a user library
-      (`~/.config/veloce/library/`). Pure data, no code, so safe to share
+      format addition with its decision entry). Pure data, no code
 - [ ] MCP: `save_component`, `list_components`, and `node.insert` with
       `{ "use": "<name>", "with": { … } }`, expanded where MCP input is normalized, so core
       ops and the undo log only ever see plain nodes (golden rule 1)
-- [ ] Editor: "Save as component" on a selection, and a library panel next to Layers to
-      insert from
-- [ ] Frame style presets in the theme (`$style.card` = fill + radius + padding, like
-      `$text.*` for text), decided together with components so there's one way to reuse
-      styling, not two
+- [ ] Editor: "Save as component" on a selection, and a components panel to insert from
+- [ ] Slide layouts are slide-level components: "Save slide as layout", "New slide from
+      layout" (title, title + content, two columns, section header…), with built-in ones
+      per theme. Agents use them with the same `use`/`with`
+- [ ] Slide numbers, footers and sections: dynamic fields (slide number, total, date, deck
+      title) usable in any text; named sections that group slides in the rail and in
+      presenter view
 
 **Done when:** a full deck can be built by hand, with layers placed exactly where you want
-them, including inside the AI's auto-layout slides; an agent can define a card once and
-reuse it across the deck; human and agent edit concurrently without conflicts; Ctrl+Z never
-undoes the agent's work.
+them, including inside the AI's auto-layout slides; every command is reachable from the
+menu bar and the command palette, and Preferences persist; an agent can define a card once
+and reuse it across the deck; human and agent edit concurrently without conflicts; Ctrl+Z
+never undoes the agent's work.
 
 ## Phase 4 — Motion
 
+**Blocker:** resolve the GSAP license question (Open questions) before starting.
+
+- [ ] Visual regression tests first: reference decks rendered in CI and compared with
+      stored screenshots, so the renderer work below can't silently move a pixel in
+      existing decks
 - [ ] Timeline schema: per-slide steps (click triggers); animations `{ target, effect | keyframes, trigger: onClick | withPrevious | afterPrevious, delay, duration, easing }`
 - [ ] Core clock: `seek(slideId, step, t)`; plugins driven via `seek(t)`
 - [ ] `AnimationDriver` interface; GSAP as default driver (swap-able)
 - [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), extensible by plugins
 - [ ] Slide transitions (fade, push, zoom) + **morph** (match nodes by id across slides)
-- [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window synced
+- [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
+      synced, laser pointer
+- [ ] Animate workspace (timeline, steps, effect and transition pickers) and Present
+      workspace (rehearse in presenter view), both on the round 5 shell
 - [ ] MCP: `set_animations(slideId, steps)`, `render_preview` at a step/time
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide
@@ -343,22 +402,16 @@ undoes the agent's work.
 
 Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
 
+- [ ] Plugin host mount policy: mount the current slide ±1 only; others show static thumbnails
 - [ ] `chart` (ECharts): bar/line/pie/area/scatter, data in props, animated entry
 - [ ] `lottie` (dotLottie): play/seek, segment control
-- [ ] `rive`: state machine inputs as props, seekable via clock
 - [ ] `code` (Shiki): syntax highlight, line highlight steps
 - [ ] `math` (KaTeX)
 - [ ] `icon` (Lucide/Iconify). Motivation from an agent transcript: agents used `↕` and other
       symbol characters as icons, and they render in a fallback font (Inter only covers text). Until
       this lands, the design docs tell agents not to use them.
 - [ ] `video`: seek-synced to the clock
-- [ ] More shape geometry: per-corner radius, and a `path`/`polygon` shape for custom
-      silhouettes (a tapered glass, a flat-topped container, arrows) that `icon` won't cover.
-      Path data gets a strict grammar validator before it reaches the SVG
-- [ ] `diagram` (Mermaid)
-- [ ] `three`: declarative scene (models, lights, camera, presets) + WebGL context manager (budget < 16 live contexts)
-- [ ] `custom-component`: AI/user-written code in a sandboxed iframe with a declared param schema → inspector knobs
-- [ ] Optional: `physics` (Matter.js) with fixed timestep + seeded RNG, or pre-baked keyframes
+- [ ] Per-corner radius on shapes and frames
 
 **Done when:** all plugins pass conformance; the agent can discover and use them via `list_element_types` + `get_docs`.
 
@@ -368,24 +421,27 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
 - [ ] Security: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, minimal preload IPC
 - [ ] `.veloce` file associations (Windows registry, macOS UTI/Info.plist, Linux .desktop + shared-mime-info), `open-file` handling, single-instance lock
 - [ ] `veloce://` protocol handler
-- [ ] Native menus, recent files, window state, crash recovery from autosave
+- [ ] Native menus (macOS mirrors round 5's menu bar), recent files, window state, crash
+      recovery from autosave
+- [ ] Preferences → System: GPU preference (high-performance / power saving; applied at
+      launch, so it asks for a restart; on Linux the launcher sets the PRIME environment)
+      and hardware acceleration on/off
 - [ ] "Connect AI" panel: copy-paste config for Claude Code / Claude Desktop / Cursor; stdio shim for clients that need it
 - [ ] Packaging: AppImage + deb + rpm, NSIS (Windows), dmg (macOS); electron-updater
 
 **Done when:** installs on all 3 OSes, double-clicking a `.veloce` opens it, and Claude Code connects.
 
-## Phase 7 — Import & export
+## Phase 7 — Export
 
 - [ ] PDF (printToPDF / Playwright), one page per slide (option: per step)
 - [ ] PNG/JPEG per slide
 - [ ] Standalone HTML: self-contained animated deck playable in any browser
 - [ ] MP4: frame-by-frame render through the seekable clock + ffmpeg
-- [ ] PPTX import (shapes, text, images, basic layout; best-effort animations)
-- [ ] PPTX export (static, using fallbacks for plugin elements)
 
-**Done when:** a deck can be shared with someone who doesn't have Veloce, and old PowerPoints can be brought in.
+**Done when:** a deck can be shared with someone who doesn't have Veloce: as a PDF, images,
+a self-contained HTML file that plays the animations, or a video.
 
-## Phase 8 — AI knowledge
+## Phase 8 — AI knowledge and the built-in assistant
 
 - [ ] Reference docs generated from Zod schemas + plugin `aiDocs` (no hand-written API docs)
 - [ ] MCP `instructions` + `get_docs` topics finalized
@@ -396,18 +452,78 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
       drifts between content slides (usually `justify: "center"` with different content
       heights). Until then, the layout docs tell agents to use `justify: "start"` on content
       slides
+- [ ] Built-in assistant: a chat panel in the editor for people without an MCP client.
+      Bring your own key: Anthropic, or any OpenAI-compatible endpoint (which also covers
+      local models like Ollama). It's one more MCP client of the same server (origin
+      `agent:assistant`), so undo, history and Follow AI work as for any agent. Keys are
+      stored with the OS keychain, never in decks or logs
 
-**Done when:** a fresh agent with only the MCP (no skill) can make a decent deck, and with the skill makes a great one.
+**Done when:** a fresh agent with only the MCP (no skill) can make a decent deck, and with
+the skill makes a great one; someone with only an API key can do the same inside the app.
 
 ## Phase 9 — Launch prep
 
-- [ ] Community plugin sandbox (iframe + postMessage RPC, permission prompts) + install UX
 - [ ] Code signing: Apple Developer + notarization; Windows signing certificate
 - [ ] Opt-in crash reporting & telemetry
 - [ ] Performance budget: 60fps playback, memory stable across 100+ slides, no leaks
 - [ ] Accessibility (keyboard nav, screen reader labels, alt text)
 - [ ] Starter templates & themes, onboarding
 - [ ] Trademark check for "Veloce", dependency license audit
+- [ ] `.veloce` format spec and stability promise (what 1.x will always open), plus fuzz tests
+      for the reader: files from the internet are untrusted
+- [ ] UI strings kept in one place so translating the app later is a data change (the
+      translations themselves come after 1.0)
+
+**Done when:** everything in "Veloce 1.0" at the top is true, on all three OSes.
+
+---
+
+## After 1.0
+
+Parked on purpose: valuable, but not needed to ship. Don't start these before 1.0 unless the
+user moves one into a phase.
+
+**Workspaces and app**
+
+- 3D workspace (with the `three` plugin)
+- Custom workspace layouts (split any area, Blender-style) and keymap rebinding
+- Translated UI (strings are already centralized in Phase 9)
+
+**Editing**
+
+- Find and replace across the deck; auto-fit text (shrink to fit its box)
+- Right-to-left and CJK text layout
+- `path`/`polygon` shapes for custom silhouettes, with a strict path-data validator
+- Frame style presets in the theme (`$style.card`), decided together with components
+- A user component library shared between decks (`~/.config/veloce/library/`)
+- Linked components: a main component with instances and overrides (an override model,
+  invertible ops across instances, detach). Also makes deck-wide slide-layout edits possible
+
+**Presenting**
+
+- Phone as a remote (scan a QR code: advance slides, read notes)
+- Pen/ink annotations while presenting; rehearsal with per-slide timings
+- Recording a talk with a webcam bubble, exported as video
+- Audio: background music, per-slide narration, auto-advance (kiosk loops)
+
+**AI**
+
+- Suggestion mode: an agent's edits arrive as a change set to accept or reject per slide
+  (see Open questions: check the design before Phase 4)
+- Deck translation that keeps the layout (lint catches overflow); generated speaker notes
+
+**Plugins**
+
+- `rive`, `diagram` (Mermaid), `three` (scene, camera, lights; WebGL context manager with a
+  budget under 16 live contexts), optional `physics` (fixed timestep, seeded RNG)
+- `custom-component` (AI/user code in a sandboxed iframe with a param schema) and the
+  community plugin sandbox (iframe + postMessage RPC, permission prompts, install UX)
+
+**Import and export**
+
+- PPTX import (shapes, text, images, basic layout; best-effort animations) and PPTX export
+  (static, with fallbacks for plugin elements)
+- Handouts and notes pages as PDF; accessible (tagged) PDF
 
 ---
 
@@ -420,8 +536,8 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes.
       default driver and GSAP ships as an optional plugin. **Resolve before Phase 4.**
 - [ ] **Name:** trademark search for "Veloce" in the software class.
 - [x] **Extension:** `.veloce` confirmed by the user (2026-11-18).
-- [ ] **Linked components** (a main component + instances with overrides, edits flow to
-      every copy): only if users ask for it after components step 1. Much harder: an
-      override model, invertible ops across instances, detach.
+- [ ] **Suggestion mode (after 1.0, but check now):** before Phase 4 changes the document
+      model, confirm that agent edits could later be held as a reviewable change set (per
+      origin, like undo) without a format break. A short design note is enough.
 - [ ] **Sync:** server op log now; move to Yjs only if cloud multi-user collaboration becomes a goal.
 - [ ] **Business:** hosted web viewer / cloud sync / plugin marketplace (post-launch).
