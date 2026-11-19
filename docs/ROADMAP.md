@@ -417,6 +417,20 @@ The editor becomes an app: Blender's workspaces for different kinds of work, Fig
 panels with the important options in reach. Done before Motion, so Phase 4 lands as the
 Animate and Present workspaces instead of being squeezed into today's screen.
 
+- [ ] **Parity with agents** (golden rule #1: whatever an agent can do, the user can do in the
+      editor). Audit from 2026-11-20, most important first:
+  - [ ] Review AI changes: a "Revert" on agent groups in the History panel (what
+        `undo_agent_changes` does), so the user can reject an agent's work
+  - [ ] Lint in the editor: a panel (or badges on slides and layers) with the issues agents
+        see, select-on-click, and each issue's fix hint
+  - [ ] Frame border and shadow in the inspector (`style.stroke`, `style.shadow`)
+  - [ ] Per-side padding (today it's read-only: "set by AI")
+  - [ ] Deck info: rename the deck, description, authors, language (`deck.updateMeta`)
+  - [ ] New deck from the editor (File → New, with a theme), like `create_deck`
+  - [ ] Theme editor beyond colors and fonts: text styles (size, weight, line height,
+        letter spacing, case), and the spacing, radius and shadow scales
+  - [ ] Nested object props in the generated inspector (an image's focus point `{x, y}`,
+        and any plugin prop that's an object), not read-only
 - [ ] Tool bar in the top bar's centre (D62): Select (V), Frame (F), Shape (R / O, with a
       menu for other shapes), Text (T), Image and Hand (H). Click to place at the default
       size, or drag to draw; the new layer is selected, and a new text layer starts typing.
