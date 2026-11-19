@@ -5,9 +5,14 @@
  *   - objects merge recursively, arrays and primitives are replaced,
  *   - `null` deletes a field (so stored documents never contain `null`).
  *
- * One deliberate extension, the "discriminator rule": when a patch changes the variant of a
- * tagged object known to core (layout `mode`, paint `type`), the object is replaced instead of
- * merged. Otherwise `{ mode: "grid" }` merged into a stack layout would keep stack-only keys.
+ * Two deliberate extensions, both "a different kind of object is replaced, not merged":
+ *   - the discriminator rule: when a patch changes the variant of a tagged object known to
+ *     core (layout `mode`, paint `type`). Otherwise `{ mode: "grid" }` merged into a stack
+ *     layout would keep stack-only keys.
+ *   - the shape rule: for fields whose object forms have no tag but disjoint keys (`padding`
+ *     is `{ x, y }` or `{ top, right, bottom, left }`), a patch written in the other form.
+ *     Otherwise switching forms yields `{ x, y, top, … }`, which matches no form at all.
+ * `diffPatch` applies the same rules, so undo inverses stay exact.
  */
 
 export type JsonObject = Record<string, unknown>;
@@ -38,11 +43,33 @@ const DISCRIMINATORS: ReadonlyArray<readonly [key: string, values: ReadonlySet<s
   ["type", new Set(["linear-gradient", "radial-gradient", "image"])],
 ];
 
-function variantChanged(target: JsonObject, patch: JsonObject): boolean {
-  return DISCRIMINATORS.some(([key, values]) => {
+/** Untagged fields, by name, whose object forms are told apart by their keys. */
+const SHAPES: ReadonlyMap<string, ReadonlyArray<ReadonlySet<string>>> = new Map([
+  ["padding", [new Set(["x", "y"]), new Set(["top", "right", "bottom", "left"])]],
+]);
+
+/** Which of `forms` an object uses (by its first non-null key that belongs to one), or -1. */
+function formOf(forms: ReadonlyArray<ReadonlySet<string>>, value: JsonObject): number {
+  for (const [key, v] of Object.entries(value)) {
+    if (v === null || v === undefined) continue;
+    const form = forms.findIndex((f) => f.has(key));
+    if (form >= 0) return form;
+  }
+  return -1;
+}
+
+/** Whether `patch` describes a different kind of object than `target` (see the header). */
+function variantChanged(target: JsonObject, patch: JsonObject, field?: string): boolean {
+  const tagged = DISCRIMINATORS.some(([key, values]) => {
     const next = patch[key];
     return typeof next === "string" && values.has(next) && target[key] !== next;
   });
+  if (tagged) return true;
+  const forms = field === undefined ? undefined : SHAPES.get(field);
+  if (!forms) return false;
+  const from = formOf(forms, target);
+  const to = formOf(forms, patch);
+  return from >= 0 && to >= 0 && from !== to;
 }
 
 /**
@@ -53,13 +80,18 @@ const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "p
 
 /** Apply a JSON Merge Patch. Pure: never mutates `target` or `patch`. */
 export function mergePatch(target: unknown, patch: unknown): unknown {
+  return merge(target, patch);
+}
+
+/** `field`: the key this value sits under (the shape rule is per field). */
+function merge(target: unknown, patch: unknown, field?: string): unknown {
   if (!isPlainObject(patch)) return patch;
-  const base = isPlainObject(target) && !variantChanged(target, patch) ? target : {};
+  const base = isPlainObject(target) && !variantChanged(target, patch, field) ? target : {};
   const out: JsonObject = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined || UNSAFE_KEYS.has(key)) continue;
     if (value === null) delete out[key];
-    else out[key] = mergePatch(out[key], value);
+    else out[key] = merge(out[key], value, key);
   }
   return out;
 }
@@ -70,15 +102,19 @@ export function mergePatch(target: unknown, patch: unknown): unknown {
  * Used to compute the inverse of an update for undo.
  */
 export function diffPatch(from: unknown, to: unknown): unknown {
+  return diff(from, to);
+}
+
+function diff(from: unknown, to: unknown, field?: string): unknown {
   if (deepEqual(from, to)) return undefined;
-  if (!isPlainObject(from) || !isPlainObject(to) || variantChanged(from, to)) return to;
+  if (!isPlainObject(from) || !isPlainObject(to) || variantChanged(from, to, field)) return to;
   const patch: JsonObject = {};
   for (const key of Object.keys(from)) {
     if (from[key] !== undefined && to[key] === undefined) patch[key] = null;
   }
   for (const [key, value] of Object.entries(to)) {
     if (value === undefined) continue;
-    const inner = diffPatch(from[key], value);
+    const inner = diff(from[key], value, key);
     if (inner !== undefined) patch[key] = inner;
   }
   return patch;

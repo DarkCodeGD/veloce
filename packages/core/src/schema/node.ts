@@ -15,16 +15,22 @@ import { IdSchema, PointSchema, RadiusSchema, SizingSchema, SpaceSchema } from "
 
 // ── Layout ─────────────────────────────────────────────────────────────────────────
 
-export const PaddingSchema = z.union([
-  SpaceSchema,
-  z.strictObject({ x: SpaceSchema.optional(), y: SpaceSchema.optional() }),
-  z.strictObject({
-    top: SpaceSchema.optional(),
-    right: SpaceSchema.optional(),
-    bottom: SpaceSchema.optional(),
-    left: SpaceSchema.optional(),
-  }),
-]);
+export const PaddingSchema = z.union(
+  [
+    SpaceSchema,
+    z.strictObject({ x: SpaceSchema.optional(), y: SpaceSchema.optional() }),
+    z.strictObject({
+      top: SpaceSchema.optional(),
+      right: SpaceSchema.optional(),
+      bottom: SpaceSchema.optional(),
+      left: SpaceSchema.optional(),
+    }),
+  ],
+  {
+    error:
+      'Expected padding as one form: pixels or a space token ("$space.md"), { x, y }, or { top, right, bottom, left } (not a mix of the two objects)',
+  },
+);
 export type Padding = z.infer<typeof PaddingSchema>;
 
 const AlignSchema = z.enum(["start", "center", "end", "stretch"]);

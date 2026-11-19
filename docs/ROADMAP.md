@@ -9,7 +9,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (360 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (365 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -67,7 +67,10 @@
     deck, then a 5-slide deck from scratch): a padding patch bug agents hit, anchors for
     free layers, opacity on color tokens, and a new round 5 for reusable components. Batch
     previews, shape geometry and a cross-slide consistency lint went to Phases 4, 5 and 8.
-  - **Next:** round 4: fix padding patches, then group / ungroup (Ctrl+G / Ctrl+Shift+G).
+  - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
+    replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
+    says how to write it.
+  - **Next:** round 4: group / ungroup (Ctrl+G / Ctrl+Shift+G).
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -270,7 +273,7 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       rendered positions (and sizes where they were stretched), in one transaction
 - [x] Layers panel drag and drop: reorder, and move layers into or out of frames (same ops as
       canvas drags; keyboard path stays Alt+↑/↓)
-- [ ] Fix: `node.update` can't switch `padding` to another form. Merge-patching
+- [x] Fix: `node.update` can't switch `padding` to another form. Merge-patching
       `{ x, y }` with `{ top, right, bottom, left }` yields `{ x, y, top, … }`, which matches
       no padding shape and fails with a bare `set.layout.padding: Invalid input`. Replace a
       padding object whole when the patch switches its form (like the layout `mode` rule in

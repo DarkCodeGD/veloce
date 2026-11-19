@@ -112,6 +112,22 @@ describe("ops: apply + exact inverse", () => {
     });
   });
 
+  it("node.update can switch a frame's padding to another form, and undo restores it", () => {
+    const { deck: axes } = applyOp(deck, {
+      op: "node.update",
+      id: "cards",
+      set: { layout: { padding: { x: 10, y: 20 } } },
+    });
+    const next = roundTrip(axes, {
+      op: "node.update",
+      id: "cards",
+      set: { layout: { padding: { top: 1, right: 2, bottom: 3, left: 4 } } },
+    });
+    expect(findNode(next, "cards")?.node).toMatchObject({
+      layout: { padding: { top: 1, right: 2, bottom: 3, left: 4 } },
+    });
+  });
+
   it("deck.updateMeta / deck.setTheme", () => {
     roundTrip(deck, { op: "deck.updateMeta", set: { title: "Renamed", authors: ["Ada"] } });
     roundTrip(deck, { op: "deck.setTheme", theme: { ...deck.theme, name: "Dark" } });
@@ -211,6 +227,23 @@ describe("ops: helpful failures", () => {
     const err = failure(deck, { op: "node.update", id: "title", set: { opacity: 2 } });
     expect(err.code).toBe("INVALID");
     expect(err.path).toBe("set.opacity");
+  });
+
+  it("explains how to write padding when a patch mixes its forms", () => {
+    const err = failure(deck, {
+      op: "node.update",
+      id: "cards",
+      set: { layout: { padding: { x: 10, top: 4 } } },
+    });
+    expect(err.path).toBe("set.layout.padding");
+    expect(err.message).toMatch(/\{ x, y \}, or \{ top, right, bottom, left \}/);
+    // A bad value inside a valid form still points at that value.
+    const value = failure(deck, {
+      op: "node.update",
+      id: "cards",
+      set: { layout: { padding: { left: -5 } } },
+    });
+    expect(value.message).toMatch(/set\.layout\.padding\.left: Too small/);
   });
 
   it("requires assets to be registered and refuses to remove assets in use", () => {

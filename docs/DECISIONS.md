@@ -122,7 +122,8 @@ Optional fields are omitted rather than stored with default values, and document
 object's variant (layout `mode`, paint `type` with core-known values), the object is replaced, not
 merged. Keys `__proto__`/`constructor`/`prototype` are dropped. **Why:** compact JSON is cheaper
 for agents to read, merge patch is a standard agents already know, and the discriminator rule
-lets `{ layout: { mode: "grid", columns: 3 } }` work in one call.
+lets `{ layout: { mode: "grid", columns: 3 } }` work in one call. Extended by D52 (the shape
+rule for untagged unions like `padding`).
 
 ### D19: Undo applies inverse ops as a new change (2026-11-18)
 
@@ -827,3 +828,33 @@ frames, by themselves or with the whole selection.
 `model/layer-drop.test.ts` covers the zones and the move replay.
 `tests/integration/phase3-layers.test.ts` checks in Chromium: reorder, drop into a frame,
 pull out to the left, drop into a free frame without moving, Escape, and click-to-select.
+
+## D52 — Merge patch "shape rule": switching `padding` to another form replaces it
+
+**Status:** Accepted (2026-11-19). Extends D18.
+
+`padding` is a number/token, `{ x, y }`, or `{ top, right, bottom, left }`. The two object
+forms have no tag, so D18's discriminator rule didn't apply. Patching `{ x, y }` with
+`{ top, … }` merged into `{ x, y, top, … }`, which matches no form, and failed with a bare
+`set.layout.padding: Invalid input`. An agent run hit this, and the workaround it had to
+guess was `"x": null, "y": null`.
+
+1. **The shape rule.** In `json.ts`, fields whose object forms have disjoint keys are listed
+   by field name (only `padding` today). When a patch's first non-null form key belongs to
+   a different form than the target's, the object is replaced, not merged. `diffPatch`
+   applies the same rule, so undo inverses stay exact
+   (`mergePatch(from, diffPatch(from, to)) = to`). **Why per field name:** plugin props are
+   arbitrary JSON, and `{ x }` merged with `{ top }` must still merge there (the same
+   scoping D18 uses for `type`).
+2. **Errors say how to fix the call.** `PaddingSchema` has its own union message: one form,
+   pixels/token, `{ x, y }`, or `{ top, right, bottom, left }`, "not a mix of the two
+   objects". A bad value inside a valid form is still reported at that value
+   (`padding.left: Too small`).
+3. **Swept for the same trap.** Every other union in core and the built-in plugins is either
+   tagged (layout `mode`, paint `type`) or a union with primitives, which merge patch
+   replaces anyway. Future untagged unions of objects (anchors were designed with a single
+   `{ x, y }` shape partly for this reason) go in the same table.
+
+`json.test.ts` covers the rule and the `diffPatch` round trips. `ops.test.ts` switches a
+frame's padding form through `node.update` and back with its inverse, and checks the error
+wording.

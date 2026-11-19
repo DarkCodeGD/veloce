@@ -26,6 +26,20 @@ describe("mergePatch (RFC 7386)", () => {
     });
   });
 
+  it("replaces padding when a patch switches its form (shape rule)", () => {
+    const axes = { padding: { x: 10, y: 20 } };
+    const sides = { top: 1, right: 2, bottom: 3, left: 4 };
+    expect(mergePatch(axes, { padding: sides })).toEqual({ padding: sides });
+    expect(mergePatch({ padding: sides }, { padding: { y: 8 } })).toEqual({ padding: { y: 8 } });
+    // Same form: an ordinary merge. Nulls don't count toward the form.
+    expect(mergePatch(axes, { padding: { y: 5 } })).toEqual({ padding: { x: 10, y: 5 } });
+    expect(mergePatch(axes, { padding: { x: null, top: 4 } })).toEqual({ padding: { top: 4 } });
+    // From or to a single value: plain replacement, as before.
+    expect(mergePatch({ padding: 24 }, { padding: { top: 4 } })).toEqual({ padding: { top: 4 } });
+    // Only the `padding` field: other objects with these keys still merge (plugin props).
+    expect(mergePatch({ box: { x: 1 } }, { box: { top: 2 } })).toEqual({ box: { x: 1, top: 2 } });
+  });
+
   it("ignores prototype-polluting keys from untrusted JSON", () => {
     const patch = JSON.parse('{"__proto__": {"polluted": true}, "constructor": {"x": 1}, "ok": 1}');
     const result = mergePatch({}, patch) as Record<string, unknown>;
@@ -50,6 +64,12 @@ describe("diffPatch", () => {
     ["arrays", { l: [1, 2] }, { l: [2] }],
     ["object → string", { fill: { type: "image", asset: "x" } }, { fill: "#fff" }],
     ["variant change", { l: { mode: "stack", gap: 1 } }, { l: { mode: "grid", columns: 2 } }],
+    [
+      "padding form change",
+      { layout: { mode: "stack", padding: { x: 1, y: 2 } } },
+      { layout: { mode: "stack", padding: { top: 3, left: 4 } } },
+    ],
+    ["padding value → form", { padding: 8 }, { padding: { x: 1 } }],
   ];
 
   it.each(cases)("round-trips: %s", (_name, from, to) => {
