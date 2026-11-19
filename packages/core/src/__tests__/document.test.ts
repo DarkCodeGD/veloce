@@ -148,6 +148,43 @@ describe("DeckDocument: per-origin undo/redo", () => {
     expect(doc.canUndo("system")).toBe(false);
   });
 
+  it("knows which assets an undo or redo could add back (their bytes must be kept)", () => {
+    const [a, b] = ["a".repeat(64), "b".repeat(64)];
+    const info = { mime: "image/png", bytes: 3, name: "x.png", width: 1, height: 1 };
+    const add = (origin: "user" | "agent:x", id: string) => ({
+      origin,
+      label: "Add",
+      ops: [{ op: "asset.add", id, asset: info }],
+    });
+    const remove = (origin: "user" | "agent:x", id: string) => ({
+      origin,
+      label: "Remove",
+      ops: [{ op: "asset.remove", id }],
+    });
+    const doc = new DeckDocument(fixtureDeck(), { historyLimit: 1 });
+    expect(doc.restorableAssetIds()).toEqual(new Set());
+    doc.apply(add("user", a)); // undo would remove it: nothing to restore
+    expect(doc.restorableAssetIds()).toEqual(new Set());
+    doc.apply(remove("user", a)); // undo adds it back
+    expect(doc.restorableAssetIds()).toEqual(new Set([a]));
+    doc.undo("user"); // back in the deck; redo would remove it again
+    expect(doc.restorableAssetIds()).toEqual(new Set());
+    doc.apply(add("agent:x", b));
+    doc.undo("agent:x"); // another origin's redo would add b
+    expect(doc.restorableAssetIds()).toEqual(new Set([b]));
+    // A new change clears that origin's redo: b is no longer held.
+    doc.apply(remove("agent:x", a));
+    expect(doc.restorableAssetIds()).toEqual(new Set([a]));
+    // A step that falls off the history limit (1 here) stops holding its asset.
+    doc.apply(remove("user", a)); // nothing to remove: fails, the history is unchanged
+    doc.apply({
+      origin: "agent:x",
+      label: "Rename",
+      ops: [{ op: "deck.updateMeta", set: { title: "t" } }],
+    });
+    expect(doc.restorableAssetIds()).toEqual(new Set());
+  });
+
   it("returns errors without changing the document", () => {
     const doc = new DeckDocument(fixtureDeck());
     const before = doc.deck;

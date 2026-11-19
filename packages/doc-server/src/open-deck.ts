@@ -37,6 +37,13 @@ export interface DeckChange {
 /** How many changes the history keeps per open deck (older ones drop off). */
 export const HISTORY_LIMIT = 500;
 
+/**
+ * How long an upload waits for its `asset.add` before a sweep may drop it. The editor and
+ * agents send the add right after the upload returns; this only has to outlast a slow
+ * client, not a person deciding (D65).
+ */
+export const UPLOAD_GRACE_MS = 10 * 60_000;
+
 export interface OpenDeckOptions {
   deck: Deck;
   assets?: ReadonlyMap<string, Uint8Array>;
@@ -45,6 +52,8 @@ export interface OpenDeckOptions {
   context?: ApplyContext;
   /** When the file was first created (kept in the manifest across saves). */
   createdAt?: Date;
+  /** The clock (ms since the epoch), for tests. */
+  now?: () => number;
 }
 
 export class OpenDeck {
@@ -56,6 +65,9 @@ export class OpenDeck {
   readonly #assets: Map<string, Uint8Array>;
   /** What `importAsset` found each file to be: `asset.add` must agree (the server decides). */
   readonly #inspected = new Map<string, AssetInfo>();
+  /** When each asset's bytes last arrived (upload or store), for the sweep's grace period. */
+  readonly #arrived = new Map<string, number>();
+  readonly #now: () => number;
   readonly #listeners = new Set<(change: DeckChange) => void>();
   #modifiedAt = new Date();
   /** Who changed each slide last (this session only), so agents don't clobber human work. */
@@ -71,6 +83,7 @@ export class OpenDeck {
     this.createdAt = options.createdAt ?? new Date();
     this.#doc = new DeckDocument(options.deck, options.context ? { context: options.context } : {});
     this.#assets = new Map(options.assets);
+    this.#now = options.now ?? Date.now;
     this.#emitted = this.#doc.deck;
   }
 
@@ -138,7 +151,33 @@ export class OpenDeck {
   async storeAsset(bytes: Uint8Array): Promise<string> {
     const id = await sha256Hex(bytes);
     if (!this.#assets.has(id)) this.#assets.set(id, bytes);
+    // Restart the grace period even for known bytes: an orphan uploaded again is about to be
+    // added, and must not be swept in between.
+    this.#arrived.set(id, this.#now());
     return id;
+  }
+
+  /**
+   * Drop asset bytes nothing can use any more (D65): not in the deck, not restorable by any
+   * origin's undo or redo, and not a recent upload still waiting for its `asset.add`. That's
+   * a cancelled drop, a failed paste, an agent's upload it never added, or an asset removed
+   * so long ago its undo step has fallen off the history. Saving never writes these (see
+   * `bundle`); this frees the memory they'd hold for the rest of the session. Returns the
+   * IDs dropped.
+   */
+  sweepAssets(): string[] {
+    const keep = this.#doc.restorableAssetIds();
+    for (const id of Object.keys(this.deck.assets)) keep.add(id);
+    const cutoff = this.#now() - UPLOAD_GRACE_MS;
+    const dropped: string[] = [];
+    for (const id of this.#assets.keys()) {
+      if (keep.has(id) || (this.#arrived.get(id) ?? Number.NEGATIVE_INFINITY) > cutoff) continue;
+      this.#assets.delete(id);
+      this.#inspected.delete(id);
+      this.#arrived.delete(id);
+      dropped.push(id);
+    }
+    return dropped;
   }
 
   assetBytes(id: string): Uint8Array | undefined {
@@ -209,7 +248,7 @@ export class OpenDeck {
         return {
           code: "NOT_FOUND" as const,
           message: `asset.add: the bytes for asset ${id} haven't been uploaded to this deck`,
-          hint: "Upload the file first; its SHA-256 is the asset ID.",
+          hint: "Upload the file first; its SHA-256 is the asset ID. Uploads not added within 10 minutes are cleaned up, so upload it again.",
         };
       }
       const known = this.#inspected.get(id);

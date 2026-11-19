@@ -75,6 +75,23 @@ export class DeckDocument {
     return (this.#stacks.get(origin)?.redo.length ?? 0) > 0;
   }
 
+  /**
+   * Asset IDs some undo or redo step (any origin's) would add back: an undone `asset.remove`,
+   * a redone `asset.add`. Their bytes must outlive their removal from the deck. An asset can
+   * only come back through `asset.add` (node references must point at deck assets), so this
+   * plus the deck's own assets is everything still needed.
+   */
+  restorableAssetIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const { undo, redo } of this.#stacks.values()) {
+      for (const entry of undo)
+        for (const op of entry.ops) if (op.op === "asset.add") ids.add(op.id);
+      for (const entry of redo)
+        for (const op of entry.ops) if (op.op === "asset.add") ids.add(op.id);
+    }
+    return ids;
+  }
+
   /** Labels of the undoable steps for `origin`, most recent last. */
   undoLabels(origin: Origin): string[] {
     return this.#stacks.get(origin)?.undo.map((e) => e.label) ?? [];

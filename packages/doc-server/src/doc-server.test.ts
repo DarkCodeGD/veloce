@@ -11,7 +11,7 @@ import {
 } from "@veloce/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { atomicWriteFile, slugify } from "./fs.js";
-import { HISTORY_LIMIT } from "./open-deck.js";
+import { HISTORY_LIMIT, UPLOAD_GRACE_MS } from "./open-deck.js";
 import { CachedRenderService, type RenderService } from "./render.js";
 import { SyncHub } from "./sync-hub.js";
 import { Workspace } from "./workspace.js";
@@ -139,6 +139,86 @@ describe("Workspace", () => {
     const junk = await deck.importAsset(new TextEncoder().encode("#!/bin/sh"));
     expect(junk).toEqual({ ok: false, message: expect.stringContaining("Unsupported file type") });
     await ws.close();
+  });
+
+  describe("sweeping unused asset bytes (D65)", () => {
+    let now = 1_000_000;
+    const clock = () => now;
+    const gif = (w: number) =>
+      Uint8Array.from([...new TextEncoder().encode("GIF89a"), w, 0, 1, 0, 0, 0]);
+    const setup = async (sweepIntervalMs: number) => {
+      const ws = await Workspace.open({
+        dir,
+        context,
+        autosaveDelayMs: 5,
+        sweepIntervalMs,
+        now: clock,
+      });
+      const deck = await ws.create({ title: "Sweep" });
+      const upload = async (w: number) => {
+        const result = await deck.importAsset(gif(w));
+        if (!result.ok) throw new Error(result.message);
+        return result;
+      };
+      const run = (label: string, ops: unknown[]) =>
+        expect(deck.apply({ origin: "user", label, ops }).ok).toBe(true);
+      return { ws, deck, upload, run };
+    };
+
+    it("after a save: drops what nothing uses, never what the deck or undo needs", async () => {
+      const { ws, deck, upload, run } = await setup(1e9); // no timer: only saves sweep
+      const used = await upload(1); // added to the deck
+      const removed = await upload(2); // added, then removed: undo can bring it back
+      const orphan = await upload(3); // a cancelled drop: never added
+      run("add", [
+        { op: "asset.add", id: used.id, asset: used.info },
+        { op: "asset.add", id: removed.id, asset: removed.info },
+      ]);
+      run("remove", [{ op: "asset.remove", id: removed.id }]);
+      await ws.flush();
+      expect(deck.assetBytes(orphan.id)).toBeDefined(); // still in its grace period
+
+      now += UPLOAD_GRACE_MS + 1;
+      run("rename", [{ op: "deck.updateMeta", set: { title: "Sweep 2" } }]);
+      await ws.flush();
+      expect(deck.assetBytes(orphan.id)).toBeUndefined();
+      expect(deck.assetBytes(used.id)).toBeDefined();
+      expect(deck.assetBytes(removed.id)).toBeDefined();
+      // A late asset.add for it is refused, with the usual "upload it first" hint.
+      const late = deck.apply({
+        origin: "user",
+        label: "late add",
+        ops: [{ op: "asset.add", id: orphan.id, asset: orphan.info }],
+      });
+      expect(late.ok).toBe(false);
+      // Undo still brings the removed asset back, with its bytes.
+      expect(deck.undo("user")?.ok).toBe(true); // the rename
+      expect(deck.undo("user")?.ok).toBe(true); // the removal
+      expect(deck.deck.assets[removed.id]).toBeDefined();
+      await ws.close();
+    });
+
+    it("re-uploading known bytes restarts their grace period", async () => {
+      const { ws, deck, upload } = await setup(1e9);
+      const orphan = await upload(4);
+      now += UPLOAD_GRACE_MS - 1000; // almost expired…
+      expect((await upload(4)).id).toBe(orphan.id); // …uploaded again, about to be added
+      now += 2000; // past the first upload's grace, within the second's
+      expect(deck.sweepAssets()).toEqual([]);
+      now += UPLOAD_GRACE_MS;
+      expect(deck.sweepAssets()).toEqual([orphan.id]);
+      await ws.close();
+    });
+
+    it("on a timer too: an orphan in a deck nobody edits is freed", async () => {
+      const { ws, deck, upload } = await setup(20);
+      const orphan = await upload(5);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(deck.assetBytes(orphan.id)).toBeDefined(); // timer ran, grace still holds it
+      now += UPLOAD_GRACE_MS + 1;
+      await expect.poll(() => deck.assetBytes(orphan.id)).toBeUndefined();
+      await ws.close();
+    });
   });
 
   it("gives copied files their own deck ID and skips broken files", async () => {

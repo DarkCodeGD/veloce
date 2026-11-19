@@ -5,6 +5,9 @@
  * - Every change is autosaved after a short pause (debounced), atomically.
  * - One deck is "active": what the user is looking at, and what agents work on by default.
  *
+ * Asset bytes nothing can use any more (a cancelled drop, an upload never added) are swept
+ * after each save and every few minutes, so they don't hold memory for the whole session (D65).
+ *
  * Decks are identified by their deck ID. If a folder holds two files with the same ID (a copied
  * file), the copy gets a fresh ID when it's opened so the two never get mixed up.
  */
@@ -23,7 +26,7 @@ import {
 } from "@veloce/core";
 import { FILE_EXTENSION, inspectVeloce, readVeloce, writeVeloce } from "@veloce/format";
 import { atomicWriteFile, slugify } from "./fs.js";
-import { type DeckChange, OpenDeck } from "./open-deck.js";
+import { type DeckChange, OpenDeck, UPLOAD_GRACE_MS } from "./open-deck.js";
 
 export interface WorkspaceOptions {
   /** Folder holding the .veloce files (created if missing). */
@@ -34,6 +37,13 @@ export interface WorkspaceOptions {
   autosaveDelayMs?: number;
   /** Recorded in saved files' manifests. */
   generator?: { name: string; version: string };
+  /**
+   * How often open decks drop asset bytes nothing uses, besides after each save, so an
+   * orphan upload in a deck nobody edits is freed too. Default: the upload grace period.
+   */
+  sweepIntervalMs?: number;
+  /** The clock (ms since the epoch) open decks use, for tests. */
+  now?: () => number;
   log?: (message: string) => void;
 }
 
@@ -57,12 +67,17 @@ export class Workspace {
   readonly #listeners = new Set<(event: WorkspaceEvent) => void>();
   readonly #saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #saving = new Map<string, Promise<void>>();
+  readonly #sweepTimer: ReturnType<typeof setInterval>;
   #active: string | null = null;
   #closed = false;
 
   private constructor(options: WorkspaceOptions) {
     this.dir = options.dir;
     this.#options = options;
+    this.#sweepTimer = setInterval(() => {
+      for (const open of this.#open.values()) open.sweepAssets();
+    }, options.sweepIntervalMs ?? UPLOAD_GRACE_MS);
+    this.#sweepTimer.unref?.(); // never keeps the process alive on its own
   }
 
   /** Open (or create) a workspace folder and index the decks in it. */
@@ -158,6 +173,7 @@ export class Workspace {
     if (this.#closed) return;
     await this.flush();
     this.#closed = true;
+    clearInterval(this.#sweepTimer);
     this.#listeners.clear();
   }
 
@@ -208,8 +224,15 @@ export class Workspace {
     assets: ReadonlyMap<string, Uint8Array>,
     createdAt: Date,
   ): OpenDeck {
-    const context = this.#options.context;
-    const open = new OpenDeck({ deck, path, assets, createdAt, ...(context && { context }) });
+    const { context, now } = this.#options;
+    const open = new OpenDeck({
+      deck,
+      path,
+      assets,
+      createdAt,
+      ...(context && { context }),
+      ...(now && { now }),
+    });
     open.subscribe((change) => {
       this.#scheduleSave(open);
       for (const listener of this.#listeners) listener({ type: "change", change });
@@ -257,6 +280,8 @@ export class Workspace {
           `Saving ${basename(open.path)} failed: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+      // The file never holds unused assets (`bundle`); this frees their memory too.
+      open.sweepAssets();
     });
     this.#saving.set(open.id, next);
     void next.finally(() => {

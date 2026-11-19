@@ -1228,3 +1228,30 @@ invisible input it's anchored to. So the editor now draws its own picker.
    was. In the text toolbar the picker sits inline in the Color menu and the selection stays
    highlighted while you drag (D61). The popover closes on Esc (without deselecting the
    layer) or on a press outside it; a hex typed but not entered still commits.
+
+## D65 — Unused asset bytes are swept from memory, keeping what undo can restore
+
+**Status:** Accepted (2026-11-19).
+
+An upload is stored before anything is added: the server inspects the bytes, returns the ID,
+and the client then sends `asset.add` (golden rule 1: the same path for agents and the
+editor). A cancelled drop, a paste that fails halfway, or an agent's `add_asset` batch with
+one bad file leaves bytes nothing uses. Saving never wrote them (`bundle` writes only the
+deck's assets), but they stayed in the open deck's memory for the whole server session,
+and a phone photo can be 40 MB.
+
+1. **Keep exactly what can still be used:** the deck's assets, every asset some origin's
+   undo or redo would add back (`DeckDocument.restorableAssetIds`: the `asset.add` ops in
+   its stacks), and uploads younger than 10 minutes. Everything else is dropped.
+   **Why:** an asset can only come back through `asset.add` (a node can't reference an
+   asset that isn't in the deck), so undo never finds its bytes missing. Steps that fall off
+   the history limit stop holding their assets, which bounds the memory too.
+2. **A 10-minute grace period for uploads,** restarted when the same bytes arrive again.
+   **Why:** the gap between an upload and its `asset.add` is a network round trip, not a
+   person deciding, so 10 minutes is far more than any client needs, and still bounded.
+   The restart covers an orphan that's uploaded again just before it would expire. A late
+   `asset.add` gets "upload it again" in its error, so an agent can fix the call.
+3. **When:** after every save (saves follow edits), and on a timer (every 10 minutes,
+   `unref`'d) for decks nobody edits. **Why:** "on close" was the plan, but nothing is
+   staged on disk, and decks stay open for the server's life, so closing frees everything
+   anyway. The timer does what a sweep on close would have done, while the server runs.

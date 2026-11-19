@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (493 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (497 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -138,7 +138,11 @@
     editor draws its own: square, hue, opacity, eyedropper, hex. It sits beside the inspector,
     always inside the window, and inline in the text toolbar's Color menu. Palette colors can
     be translucent now.
-  - **Next:** round 4: clean up unused uploads.
+  - **Unused uploads (D65):** uploads that are never added (a cancelled drop, an agent's
+    batch that failed halfway) and assets removed so long ago that undo can't restore them
+    are dropped from memory after each save and every 10 minutes. Uploads get 10 minutes
+    to be added. Files never held them.
+  - **Next:** round 4: image optimization on import.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -366,8 +370,10 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       translucent colors follow theme switches instead of being hard-coded hex with alpha.
       Token resolution, contrast lint (already flattens alpha), and an opacity control in the
       editor's token color picker (the system picker has no alpha, D47) (D63)
-- [ ] Unused uploads are cleaned up: files uploaded but never registered with `asset.add`
-      (a cancelled drop, a failed paste) are swept on save and on close
+- [x] Unused uploads are cleaned up: files uploaded but never registered with `asset.add`
+      (a cancelled drop, a failed paste) are swept on save and on close. Saves never wrote
+      them; now their memory is freed after each save and on a timer, keeping what undo can
+      bring back (D65)
 - [ ] Image optimization on import: photos far larger than the stage are downscaled, and
       heavy formats re-encoded (WebP/AVIF, keeping PNG where transparency or sharp edges
       need it), so a phone photo doesn't add 40 MB to a deck. The original is never needed
