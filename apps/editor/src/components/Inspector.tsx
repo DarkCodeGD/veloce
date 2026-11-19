@@ -13,11 +13,23 @@ import {
   type Slide,
 } from "@veloce/core";
 import { NODE_ID_ATTR } from "@veloce/renderer";
-import { ArrowDown, ArrowRight, Copy, LayoutGrid, Move, Rows3, Trash } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  Copy,
+  Group,
+  LayoutGrid,
+  Move,
+  Rows3,
+  Trash,
+  Ungroup,
+} from "lucide-react";
 import { run } from "../actions.js";
 import { registry, resolvedSizing } from "../editor-context.js";
+import { groupSelection, ungroupSelection } from "../group-actions.js";
 import { replaceAsset } from "../model/asset-insert.js";
 import { type Command, deleteNodes, duplicateNodes, updateNode } from "../model/commands.js";
+import { ungroupable } from "../model/group.js";
 import {
   freeSizing,
   type Measured,
@@ -130,6 +142,32 @@ function LayerActions({
       >
         <Copy size={14} /> Duplicate
       </button>
+      <button
+        type="button"
+        className="button"
+        data-tip="Group"
+        {...shortcutAttrs(SHORTCUTS.group)}
+        onClick={async () => {
+          const select = await groupSelection(index, ids);
+          if (select) onSelect(select);
+        }}
+      >
+        <Group size={14} /> Group
+      </button>
+      {ungroupable(index, ids).length > 0 && (
+        <button
+          type="button"
+          className="button"
+          data-tip="Ungroup"
+          {...shortcutAttrs(SHORTCUTS.ungroup)}
+          onClick={async () => {
+            const select = await ungroupSelection(index, ids);
+            if (select) onSelect(select);
+          }}
+        >
+          <Ungroup size={14} /> Ungroup
+        </button>
+      )}
       <button
         type="button"
         className="button button-danger"

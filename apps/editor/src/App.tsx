@@ -15,6 +15,7 @@ import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
 import { syncDeckFonts } from "./deck-fonts.js";
 import { assetUrl, client } from "./editor-context.js";
+import { groupSelection, ungroupSelection } from "./group-actions.js";
 import { deckKeysPassThrough, typing } from "./keyboard.js";
 import {
   deleteNodes,
@@ -132,6 +133,12 @@ export function App() {
         handled();
         const command = duplicateNodes(slideIndex, selection);
         void run(command).then((ok) => ok && setSelection(command?.select ?? []));
+        return;
+      }
+      if (mod && key === "g" && selection.length > 0) {
+        handled();
+        const action = e.shiftKey ? ungroupSelection : groupSelection;
+        void action(slideIndex, selection).then((ids) => ids && setSelection(ids));
         return;
       }
       if (mod && key === "a") return act(() => setSelection(selectSiblings(slideIndex, selection)));

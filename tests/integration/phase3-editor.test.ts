@@ -40,9 +40,15 @@ async function select(layer: string) {
   await expect.poll(() => page.locator(".inspector-head strong").textContent()).toBe(layer);
 }
 
+/** A field's label, scrolled into view (the inspector scrolls; the mouse needs it on screen). */
+async function labelBox(name: string) {
+  await label(name).scrollIntoViewIfNeeded();
+  return label(name).boundingBox();
+}
+
 /** Press on a field's label and drag it `dx` pixels, leaving the button down. */
 async function startScrub(name: string, dx: number) {
-  const box = await label(name).boundingBox();
+  const box = await labelBox(name);
   if (!box) throw new Error(`no label ${name}`);
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -274,7 +280,7 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
     const rendered = Number.parseFloat((await canvasStyle("body", "font-size", true)) ?? "");
     const original = stored("body").props?.fontSize as number | undefined;
     const start = original ?? rendered; // unset: scrubbing starts from the rendered size
-    const box = await label("Font size").boundingBox();
+    const box = await labelBox("Font size");
     if (!box) throw new Error("no label");
     const x = Math.round(box.x + box.width / 2);
     const y = Math.round(box.y + box.height / 2);

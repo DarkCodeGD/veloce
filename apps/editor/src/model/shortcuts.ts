@@ -9,6 +9,8 @@ export const SHORTCUTS = {
   undo: "Mod+Z",
   redo: "Mod+Shift+Z",
   duplicate: "Mod+D",
+  group: "Mod+G",
+  ungroup: "Mod+Shift+G",
   delete: "Delete",
   selectSiblings: "Mod+A",
   rename: "F2",

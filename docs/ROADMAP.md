@@ -27,7 +27,7 @@
 - **Active phase:** Phase 3: Manual editor, round 4 (free positioning and pro-tool basics)
 - **Last updated:** 2026-11-19
 - **Notes:** Renderer, doc-server, lint, MCP (14 tools), `apps/server` and the view-only editor
-  are done. `pnpm check` is green (365 tests, including real-Chromium lint, preview and editor tests).
+  are done. `pnpm check` is green (382 tests, including real-Chromium lint, preview and editor tests).
   Run it with `pnpm start` (opens on `http://127.0.0.1:4321`, decks in `./decks`).
   A scripted agent built a 4-slide deck end to end; lint caught real contrast bugs (fixed in the
   Midnight theme).
@@ -89,10 +89,14 @@
     Figma-clean panels; a new round 5 (app shell: menu bar, workspaces, Preferences, command
     palette, snapshots) before Motion. The roadmap now holds only 1.0 work; the rest waits
     in "After 1.0".
+  - **Round 4, group / ungroup (D54):** Ctrl+G (or the inspector's Group button) wraps the
+    selection in a frame and Ctrl+Shift+G dissolves it, one undo step each, without moving
+    anything: flow layers get a frame with their parent's flow, free layers an absolute frame
+    cut to their box (rotation included). `tests/integration/phase3-group.test.ts` covers it.
   - **Padding patches (D52):** switching `padding` between `{ x, y }` and per-side values now
     replaces it (a merge-patch "shape rule", undo-exact), and mixed forms get an error that
     says how to write it.
-  - **Next:** round 4: group / ungroup (Ctrl+G / Ctrl+Shift+G).
+  - **Next:** round 4: align and distribute for multi-selection.
   - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
     server must be running first. Register it with
     `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -301,8 +305,8 @@ Then: review agent transcripts and redesign any tool the agent struggled with.
       padding object whole when the patch switches its form (like the layout `mode` rule in
       `json.ts`, so undo inverses stay right), check other union-of-objects fields for the
       same trap, and make any remaining error say how to fix the call
-- [ ] Group / ungroup (Ctrl+G / Ctrl+Shift+G): wrap the selection in a frame that keeps its
-      layout, and unwrap it
+- [x] Group / ungroup (Ctrl+G / Ctrl+Shift+G): wrap the selection in a frame that keeps its
+      layout, and unwrap it (D54)
 - [ ] Align and distribute for multi-selection (left/center/right, top/middle/bottom; space
       evenly), in free frames
 - [ ] Anchors for free layers: `anchor: { x: "start" | "center" | "end", y: … }` says which

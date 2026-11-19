@@ -1267,14 +1267,16 @@ textarea::placeholder {
   font-size: 12px;
 }
 
+/* Two buttons per row; an odd one out takes the whole last row. */
 .inspector-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 14px 16px 8px;
 }
 
 .inspector-actions .button {
-  flex: 1;
+  flex: 1 1 calc(50% - 4px);
   justify-content: center;
   padding: 0 8px;
 }

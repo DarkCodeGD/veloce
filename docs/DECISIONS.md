@@ -889,3 +889,35 @@ Preferences. Figma's **easy panels**, with the important options always in reach
    "After 1.0" (3D, custom layouts, PPTX, phone remote, recording, suggestion mode,
    community plugins…). **Why:** the user wants to ship; a roadmap where everything is
    "next" never ships. Items move up only when the user says so.
+
+## D54 — Group and ungroup keep every pixel where the layout allows it
+
+**Status:** Accepted (2026-11-19). Extends D49 and D50.
+
+Ctrl+G wraps the selection in a new frame named "Group"; Ctrl+Shift+G dissolves selected
+frames into their parents. Both are editor op builders (`apps/editor/src/model/group.ts`)
+over existing ops (`node.insert`, `node.move`, `node.update`, `node.remove`) in one
+transaction. There's no new op and no MCP tool: an agent groups with the same ops.
+
+1. **Two kinds of group, picked by how the members are placed.**
+   - Members placed by a stack's or grid's flow get a **flow group** with the same layout
+     (direction, gap, align, wrap; a grid keeps its gap with as many columns as it has
+     members). It takes the first member's slot and fits its content. It fills the main
+     axis when a member did, so the space stays taken.
+   - Members placed freely (an absolute parent, or `positioning: "free"`) get a **free
+     group**: an absolute frame cut to their bounding box, rotation included. Positions are
+     rebased onto it, and it goes where the frontmost member was, so stacking order holds.
+
+   **Why:** "keeps its layout" was the requirement. One rule for both kinds would either
+   drag flow layers out of the flow (breaking agents' auto-layout slides) or reflow free
+   layers.
+2. **Mixed or cross-frame selections are refused with a toast** that says what to do, not
+   guessed at. **Why:** a mix has no layout that keeps both kinds in place; cross-frame
+   grouping would silently move layers.
+3. **Ungroup keeps pixels whenever a child ends up free.** That's when the new parent is
+   absolute, the child was free, or the frame was free. The child gets its measured spot,
+   the frame's rotation added to its own, and the sizes the frame's flow was stretching
+   (`freeSizing`, D50). Opacity and hidden carry over. Otherwise children join the parent's
+   flow in the frame's slot. Fill, stroke and padding go with the frame, as in Figma.
+4. **Measurements come from the canvas, the decisions from the model.** The model takes a
+   `GroupMeasure` (sizes, sizing, `positionIn`), so it's unit-tested without a browser.
