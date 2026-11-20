@@ -27,6 +27,11 @@ export type FieldKind =
    * focus. Dragged on a preview of that picture (D82).
    */
   | { kind: "focus"; asset: string }
+  /**
+   * A rectangle (`{ x, y, w, h }`, fractions) of the picture of the schema's `asset` prop:
+   * an image's crop. Edited in crop mode on the canvas (D84).
+   */
+  | { kind: "crop"; asset: string }
   /** Not editable in the inspector yet (nested objects): shown read-only. */
   | { kind: "readonly" };
 
@@ -82,6 +87,14 @@ function isPoint(s: JsonSchema): boolean {
   return fieldKind(p.x).kind === "number" && fieldKind(p.y).kind === "number";
 }
 
+/** `CropSchema`'s shape: exactly numbers `x`, `y`, `w` and `h`. */
+function isFractionRect(s: JsonSchema): boolean {
+  const p = s.properties;
+  const keys = ["x", "y", "w", "h"];
+  if (s.type !== "object" || !p || Object.keys(p).length !== keys.length) return false;
+  return keys.every((k) => p[k] !== undefined && fieldKind(p[k]).kind === "number");
+}
+
 export function fieldKind(s: JsonSchema): FieldKind {
   if (isStroke(s)) return { kind: "stroke" };
   const options = flatten(s);
@@ -134,11 +147,17 @@ export function propFields(definition: Pick<ElementDefinition, "propsSchema">): 
     unrepresentable: "any",
   }) as JsonSchema;
   const entries = Object.entries(json.properties ?? {});
-  // A point is a focus on the element's picture when it has one (the first asset prop).
+  // A point is a focus on the element's picture when it has one (the first asset prop), and
+  // a fraction rectangle is its crop.
   const asset = entries.find(([, schema]) => fieldKind(schema).kind === "asset")?.[0];
   const fields = entries.map(([key, schema]): FieldSpec => {
-    const kind: FieldKind =
-      asset && flatten(schema).some(isPoint) ? { kind: "focus", asset } : fieldKind(schema);
+    const kind: FieldKind = !asset
+      ? fieldKind(schema)
+      : flatten(schema).some(isPoint)
+        ? { kind: "focus", asset }
+        : flatten(schema).some(isFractionRect)
+          ? { kind: "crop", asset }
+          : fieldKind(schema);
     return { key, label: labelFor(key), ...kind };
   });
   cache.set(definition.propsSchema, fields);

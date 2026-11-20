@@ -104,6 +104,29 @@ export type Sizing = z.infer<typeof SizingSchema>;
 export const PointSchema = z.strictObject({ x: z.number(), y: z.number() });
 export type Point = z.infer<typeof PointSchema>;
 
+/**
+ * The part of a picture a layer shows (D84), as fractions of the picture: `x`/`y` its
+ * top-left, `w`/`h` its size. It must stay on the picture (a crop can't add empty space).
+ */
+export const CropSchema = z
+  .strictObject({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    w: z
+      .number()
+      .gt(0, { error: "w is a fraction of the picture's width: above 0, up to 1" })
+      .max(1),
+    h: z
+      .number()
+      .gt(0, { error: "h is a fraction of the picture's height: above 0, up to 1" })
+      .max(1),
+  })
+  .refine((c) => c.x + c.w <= 1.0001 && c.y + c.h <= 1.0001, {
+    error:
+      "The crop must stay on the picture: x + w and y + h can't exceed 1 (e.g. { x: 0.25, y: 0, w: 0.5, h: 1 } keeps the middle half)",
+  });
+export type Crop = z.infer<typeof CropSchema>;
+
 // ── Assets ───────────────────────────────────────────────────────────────────────
 
 /** Assets are identified by the SHA-256 (lowercase hex) of their bytes. */

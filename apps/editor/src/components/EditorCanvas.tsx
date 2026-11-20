@@ -12,14 +12,20 @@
  * the Hand tool pans. A right-click opens the Add menu at the click.
  * Zoom and pan (useCanvasCamera) only move the picture: the overlay re-measures from the
  * rendered DOM, so outlines, handles and guides stay on their layers at every zoom.
+ * Double-clicking a picture layer enters crop mode (D84): the whole picture shows dimmed
+ * around the layer; drag inside the layer to move it over the picture, drag the dimmed
+ * picture to pan it, drag the layer's edges to trim, drag the picture's corners to scale it. Enter, Esc, a double-click or a click elsewhere leaves.
  */
 import type { Deck, TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { openAddMenu } from "../add-menu.js";
+import { enterCrop, exitCrop, pictureOf, useCropping } from "../crop-mode.js";
 import { assetUrl, registry } from "../editor-context.js";
 import { addLayer, afterInsert, elementInfos, type InsertContext } from "../insert-actions.js";
 import { typing } from "../keyboard.js";
+import { type Crop, pictureRect, startingCrop } from "../model/crop.js";
+import { focusOf } from "../model/focus-point.js";
 import {
   type Box,
   boundingRect,
@@ -36,7 +42,16 @@ import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js"
 import { type Measure, measureBetween } from "../model/spacing.js";
 import { textBoxOf } from "../model/text-box.js";
 import { isDrawTool, useTool } from "../tools.js";
-import { drawDrag, marqueeDrag, moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
+import {
+  type CropPart,
+  type CropPicture,
+  cropDrag,
+  drawDrag,
+  marqueeDrag,
+  moveDrag,
+  resizeDrag,
+  rotateDrag,
+} from "./canvas-drags.js";
 import { CanvasSpace } from "./canvas-space.js";
 import {
   type Caret,
@@ -45,7 +60,7 @@ import {
   TextEditSession,
 } from "./TextEditSession.js";
 import { useCanvasCamera } from "./useCanvasCamera.js";
-import { useCanvasGestures } from "./useCanvasGestures.js";
+import { DRAG_THRESHOLD, useCanvasGestures } from "./useCanvasGestures.js";
 import { useFileDrop } from "./useFileDrop.js";
 import { ZoomControl } from "./ZoomControl.js";
 
@@ -282,8 +297,76 @@ export function EditorCanvas({
     },
   });
 
+  // ── Crop mode (D84) ─────────────────────────────────────────────────────────────
+  const cropping = useCropping();
+  /** A layer's picture and its pixel size (the asset's info, else the rendered image). */
+  const cropPicture = (id: string): CropPicture | undefined => {
+    const picture = pictureOf(deck, index.nodes.get(id)?.node);
+    if (!picture) return undefined;
+    const img = view.current?.stage.querySelector<HTMLImageElement>(
+      `[${NODE_ID_ATTR}="${CSS.escape(id)}"] img`,
+    );
+    const natural = img?.naturalWidth ? { w: img.naturalWidth, h: img.naturalHeight } : null;
+    const size = picture.size ?? natural;
+    return size ? { cropKey: picture.cropKey, focusKey: picture.focusKey, size } : undefined;
+  };
+  // Crop mode lasts while its layer is the one selected, with the Select tool, not typing.
+  const cropId =
+    cropping !== null &&
+    selection.length === 1 &&
+    selection[0] === cropping &&
+    tool === "select" &&
+    !editing &&
+    pictureOf(deck, index.nodes.get(cropping)?.node) !== null
+      ? cropping
+      : null;
+  useEffect(() => {
+    if (cropping !== null && cropId === null) exitCrop();
+  }, [cropping, cropId]);
+  // Another slide, or the canvas going away, ends it too.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the slide changes
+  useEffect(() => () => exitCrop(), [slideId]);
+  // Enter or Esc leaves crop mode (Esc during a crop drag cancels the drag instead).
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  useEffect(() => {
+    if (!cropId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (activeRef.current || typing(e.target)) return;
+      if (e.key !== "Escape" && e.key !== "Enter") return;
+      e.preventDefault();
+      e.stopImmediatePropagation(); // not the editor's "select parent"
+      exitCrop();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [cropId]);
+
+  const onCropDown = (e: React.PointerEvent, part: CropPart) => {
+    if (camera.startPan(e)) return;
+    if (e.button !== 0 || !cropId) return;
+    e.stopPropagation(); // not a click on the slide (which would leave crop mode)
+    const id = cropId;
+    const picture = cropPicture(id);
+    if (!picture) return;
+    const start = { x: e.clientX, y: e.clientY };
+    begin(
+      e,
+      "crop",
+      () => {
+        const ctx = context();
+        return ctx ? cropDrag(ctx, id, part, start, picture) : null;
+      },
+      {
+        threshold: part.kind === "pan" ? DRAG_THRESHOLD : 1,
+        capture: wrapperRef.current ?? e.currentTarget,
+      },
+    );
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (camera.startPan(e)) return; // Space + drag, the middle button, or the Hand tool
+    if (cropId) exitCrop(); // a press off the picture leaves crop mode
     if (inTextEditor(e.target)) return; // placing the caret, selecting text
     if (editing) onEditText(null); // a press anywhere else on the canvas ends typing
     if (e.button !== 0 || e.detail > 1) return;
@@ -350,7 +433,7 @@ export function EditorCanvas({
         if (!ctx) return null;
         return handle === "rotate"
           ? rotateDrag(ctx, id, start)
-          : resizeDrag(ctx, id, handle, start);
+          : resizeDrag(ctx, id, handle, start, cropPicture(id));
       },
       { threshold: 1, capture: wrapperRef.current ?? e.currentTarget },
     );
@@ -371,6 +454,18 @@ export function EditorCanvas({
     primary.id !== index.rootId &&
     !index.nodes.get(primary.id)?.node.locked;
   const { stage } = boxes;
+  /** What crop mode draws: the crop as shown now (live preview included), and the picture. */
+  const cropView = (() => {
+    const box = cropId ? boxes.selected.find((b) => b.id === cropId) : undefined;
+    const node = cropId ? shownIndex?.nodes.get(cropId)?.node : undefined;
+    const picture = cropId ? cropPicture(cropId) : undefined;
+    const asset = pictureOf(deck, node)?.assetId;
+    if (!box || node?.kind !== "element" || !picture || !asset) return null;
+    const size = { w: box.w / stage.scale, h: box.h / stage.scale };
+    const focus = focusOf(picture.focusKey ? node.props[picture.focusKey] : undefined);
+    const crop = startingCrop(node.props[picture.cropKey], picture.size, size, focus);
+    return { box, crop, size, src: assetUrl(deckId, asset) };
+  })();
   /** Slide pixels → overlay pixels. */
   const toOverlay = (p: Point): Point => ({
     x: stage.x + p.x * stage.scale,
@@ -398,11 +493,15 @@ export function EditorCanvas({
         if (inTextEditor(e.target)) return; // selects a word
         // Two quick Space + drags are a double-click too: the hand tool never edits.
         if (handUp || camera.panning || isDrawTool(tool)) return;
+        if (cropId) return exitCrop(); // a double-click in crop mode is done (Figma's too)
         const ids = pick(index, hitAt(e.target), selection, { deep: true });
         onSelect(ids);
-        // Reaching a text layer starts typing, caret under the pointer.
-        if (ids.length === 1 && editableText(index, ids[0])) {
-          onEditText({ id: ids[0] as string, caret: { x: e.clientX, y: e.clientY } });
+        // Reaching a text layer starts typing, caret under the pointer; a picture crops.
+        const [only] = ids;
+        if (ids.length === 1 && editableText(index, only)) {
+          onEditText({ id: only as string, caret: { x: e.clientX, y: e.clientY } });
+        } else if (only && ids.length === 1 && cropPicture(only)) {
+          enterCrop(only);
         }
       }}
       onPointerMove={(e) =>
@@ -424,14 +523,26 @@ export function EditorCanvas({
           <div className="outline outline-hover" style={boxStyle(boxes.hover)} />
         )}
         {feedback?.target && <div className="drop-target" style={rectStyle(feedback.target)} />}
-        {boxes.selected.map((box) => (
-          <div key={box.id} className="outline outline-selected" style={boxStyle(box)}>
-            {box === primary && editable && active !== "move" && (
-              <Handles box={box} onHandleDown={(e, handle) => onHandleDown(e, box.id, handle)} />
-            )}
-          </div>
-        ))}
-        {primary && !active && !editing && (
+        {boxes.selected
+          .filter((box) => box.id !== cropView?.box.id)
+          .map((box) => (
+            <div key={box.id} className="outline outline-selected" style={boxStyle(box)}>
+              {box === primary && editable && active !== "move" && (
+                <Handles box={box} onHandleDown={(e, handle) => onHandleDown(e, box.id, handle)} />
+              )}
+            </div>
+          ))}
+        {cropView && (
+          <CropOverlay
+            box={cropView.box}
+            crop={cropView.crop}
+            size={cropView.size}
+            scale={stage.scale}
+            src={cropView.src}
+            onDown={onCropDown}
+          />
+        )}
+        {primary && !active && !editing && !cropView && (
           <div className="outline-label" style={labelStyle(primary)}>
             {labelFor(primary.id)}
           </div>
@@ -527,6 +638,77 @@ function textContentOf(index: SlideIndex, id: string): TextContent {
   return typeof content === "string" || Array.isArray(content) ? (content as TextContent) : "";
 }
 
+const CORNERS = ["nw", "ne", "se", "sw"] as const;
+
+/**
+ * Crop mode's overlay (D84), in the layer's own (rotated) box: the whole picture, dimmed
+ * outside the layer, which pans when dragged; round knobs on its corners that scale it; and
+ * the layer itself, which moves over the picture when dragged, its edges trim handles.
+ */
+function CropOverlay({
+  box,
+  crop,
+  size,
+  scale,
+  src,
+  onDown,
+}: {
+  box: OverlayBox;
+  crop: Crop;
+  size: { w: number; h: number };
+  scale: number;
+  src: string;
+  onDown(e: React.PointerEvent, part: CropPart): void;
+}) {
+  const p = pictureRect(crop, size);
+  const px = (v: number) => v * scale;
+  return (
+    <div className="crop-frame" style={boxStyle(box)}>
+      <div
+        className="crop-picture"
+        data-crop="pan"
+        style={{ left: px(p.x), top: px(p.y), width: px(p.w), height: px(p.h) }}
+        onPointerDown={(e) => onDown(e, { kind: "pan" })}
+      >
+        <img src={src} alt="" draggable={false} />
+        <div
+          className="crop-hole"
+          style={{ left: px(-p.x), top: px(-p.y), width: box.w, height: box.h }}
+        />
+      </div>
+      {CORNERS.map((c) => (
+        <div
+          key={c}
+          className="crop-scale"
+          data-crop={`scale-${c}`}
+          style={{
+            left: px(p.x + (c.includes("e") ? p.w : 0)),
+            top: px(p.y + (c.startsWith("s") ? p.h : 0)),
+            cursor: resizeCursor(c, box.rotation),
+          }}
+          onPointerDown={(e) => onDown(e, { kind: "scale", corner: c })}
+        />
+      ))}
+      <div className="crop-window">
+        <div
+          className="crop-move"
+          data-crop="move"
+          onPointerDown={(e) => onDown(e, { kind: "move" })}
+        />
+        {HANDLES.map((h) => (
+          <div
+            key={h}
+            className={`handle handle-${h}`}
+            data-crop={`trim-${h}`}
+            style={{ cursor: resizeCursor(h, box.rotation) }}
+            onPointerDown={(e) => onDown(e, { kind: "trim", handle: h })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Resize handles (sides are edge strips, corners squares) and the rotate knob. */
 function Handles({
   box,
@@ -592,6 +774,7 @@ const GESTURE_CLASS = {
   rotate: "is-rotating",
   marquee: "is-selecting",
   draw: "is-drawing",
+  crop: "is-cropping",
 } as const;
 
 const toCentre = (p: Point) => ({ cx: p.x, cy: p.y });

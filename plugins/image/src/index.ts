@@ -2,7 +2,14 @@
  * Built-in `image` element. Images are deck assets (`"asset:<sha256>"`), never remote URLs:
  * decks stay self-contained, work offline, and opening one never pings a third-party server.
  */
-import { AssetRefSchema, PointSchema, parseAssetRef, RadiusSchema } from "@veloce/core";
+import {
+  AssetRefSchema,
+  type Crop,
+  CropSchema,
+  PointSchema,
+  parseAssetRef,
+  RadiusSchema,
+} from "@veloce/core";
 import { cssLength, defineElement, definePlugin, z } from "@veloce/plugin-api";
 
 export const ImagePropsSchema = z.strictObject({
@@ -20,6 +27,8 @@ export const ImagePropsSchema = z.strictObject({
     .optional(),
   /** Which part stays visible when cropping, as fractions (0–1). Default: center. */
   focus: PointSchema.optional(),
+  /** The part of the picture shown, as fractions of it (D84). `fit` and `focus` apply to it. */
+  crop: CropSchema.optional(),
   radius: RadiusSchema.optional(),
 });
 export type ImageProps = z.infer<typeof ImagePropsSchema>;
@@ -33,6 +42,7 @@ Photos, logos, screenshots and illustrations. The image must be a deck asset: ad
 - \`alt\` (required): what the image shows, for screen readers. Use \`""\` only for decoration.
 - \`fit\`: \`"cover"\` (default, crops to fill), \`"contain"\` (whole image visible), \`"fill"\` (stretch). To tile a pattern, give a frame an image fill with \`"fit": "tile"\` instead.
 - \`focus\`: \`{ "x": 0.5, "y": 0.2 }\` keeps the top-center visible when cropping (e.g. faces)
+- \`crop\`: \`{ "x": 0.1, "y": 0, "w": 0.6, "h": 0.8 }\` shows only that part of the picture (fractions of it: top-left, then size), as if the file had been cut there; \`fit\` and \`focus\` then apply to that part. Give the layer the same aspect ratio as the part (picture width × w : height × h) or \`cover\` trims it further. The user crops by double-clicking an image.
 - \`radius\`: rounded corners
 
 **Example**
@@ -68,6 +78,7 @@ export const imageElement = defineElement<ImageProps>({
       s.objectFit = p.fit ?? "cover";
       const { x, y } = p.focus ?? { x: 0.5, y: 0.5 };
       s.objectPosition = `${x * 100}% ${y * 100}%`;
+      if (p.crop) s.setProperty("object-view-box", viewBox(p.crop));
       if (p.radius !== undefined) s.borderRadius = cssLength(p.radius);
     };
     render(props);
@@ -78,6 +89,16 @@ export const imageElement = defineElement<ImageProps>({
     };
   },
 });
+
+/**
+ * A crop as CSS \`object-view-box\` (D84): the picture is cut to that part before \`object-fit\`
+ * and \`object-position\` place it, and percentages are of the picture itself, so the plugin
+ * never needs its pixel size. Chromium-only, like every surface that renders a deck today.
+ */
+export function viewBox(crop: Crop): string {
+  const pct = (v: number) => `${Math.round(Math.max(0, v) * 1e6) / 1e4}%`;
+  return `inset(${pct(crop.y)} ${pct(1 - crop.x - crop.w)} ${pct(1 - crop.y - crop.h)} ${pct(crop.x)})`;
+}
 
 export const imagePlugin = definePlugin({
   manifest: {

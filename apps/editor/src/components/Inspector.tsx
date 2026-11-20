@@ -77,6 +77,7 @@ import { shortcutAttrs } from "../platform.js";
 import { setPreview } from "../preview.js";
 import { AlignBar } from "./AlignBar.js";
 import { AssetField } from "./AssetField.js";
+import { CropField } from "./CropField.js";
 import { mainCanvasSpace } from "./canvas-space.js";
 import { FocusField } from "./FocusField.js";
 import {
@@ -898,6 +899,8 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
   }
   const props = node.props as Record<string, unknown>;
   const fields = propFields(definition);
+  // A cropped picture's focus only matters if the layer's shape strays from the crop's.
+  const cropped = fields.some((f) => f.kind === "crop" && props[f.key] !== undefined);
   return (
     <>
       <Section title={definition.title}>
@@ -1019,7 +1022,20 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
                   }
                 />
               );
+            case "crop":
+              return (
+                <CropField
+                  key={field.key}
+                  label={field.label}
+                  nodeId={node.id}
+                  value={value}
+                  onReset={() =>
+                    void run(updateNode(node.id, { props: { [field.key]: null } }, "Reset crop"))
+                  }
+                />
+              );
             case "focus":
+              if (cropped) return null;
               return (
                 <FocusField
                   key={field.key}

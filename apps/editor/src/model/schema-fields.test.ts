@@ -1,5 +1,5 @@
 import { createBuiltinRegistry } from "@veloce/builtins";
-import { AssetRefSchema, PointSchema, StrokeSchema } from "@veloce/core";
+import { AssetRefSchema, CropSchema, PointSchema, StrokeSchema } from "@veloce/core";
 import { z } from "@veloce/plugin-api";
 import { describe, expect, it } from "vitest";
 import { labelFor, propFields } from "./schema-fields.js";
@@ -32,6 +32,7 @@ describe("inspector fields from plugin schemas", () => {
     expect(fields("image").alt).toMatchObject({ kind: "text" });
     expect(fields("image").asset).toMatchObject({ kind: "asset" });
     expect(fields("image").focus).toMatchObject({ kind: "focus", asset: "asset" });
+    expect(fields("image").crop).toMatchObject({ kind: "crop", asset: "asset" });
     expect(labelFor("lineHeight")).toBe("Line height");
   });
 
@@ -68,5 +69,14 @@ describe("inspector fields from plugin schemas", () => {
         aim: z.strictObject({ x: z.number(), y: z.number(), z: z.number() }),
       }),
     ).toEqual(["asset", "readonly"]);
+  });
+
+  it("knows a crop by its shape: a fraction rectangle on an element with a picture (D84)", () => {
+    const kinds = (shape: Record<string, z.ZodType>) =>
+      propFields({ propsSchema: z.strictObject(shape) }).map((f) => f.kind);
+    expect(kinds({ photo: AssetRefSchema, cut: CropSchema.optional() })).toEqual(["asset", "crop"]);
+    expect(kinds({ cut: CropSchema })).toEqual(["readonly"]); // no picture to crop
+    const box = z.strictObject({ x: z.number(), y: z.number(), w: z.number(), h: z.string() });
+    expect(kinds({ photo: AssetRefSchema, cut: box })).toEqual(["asset", "readonly"]);
   });
 });

@@ -1741,6 +1741,92 @@ textarea::placeholder {
   transform: scale(1.25);
 }
 
+.crop-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.crop-readout {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Crop mode (D84): the whole picture behind the layer, dimmed outside it. Drag the picture
+   to pan, its round corner knobs to scale it, the layer's edges to trim. */
+.crop-frame {
+  position: absolute;
+}
+
+.crop-picture {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  outline: 1px dashed rgb(255 255 255 / 0.6);
+}
+
+.crop-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The layer's area stays bright: a hole in a shade that the picture clips. */
+.crop-hole {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgb(10 11 15 / 0.6);
+  pointer-events: none;
+}
+
+.crop-window {
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 3px rgb(13 14 18 / 0.5);
+  pointer-events: none;
+}
+
+/* The layer itself: drag it over the picture. */
+.crop-move {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: move;
+}
+
+.crop-scale {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 2;
+}
+
+.crop-scale::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: transform var(--fast) var(--ease);
+}
+
+.crop-scale:hover::after {
+  transform: scale(1.25);
+}
+
 /* Rotate: a knob on a short stem below the layer (it turns with the layer). Below, not
    above, so it never collides with the name tag on narrow layers. */
 .rotate-knob {

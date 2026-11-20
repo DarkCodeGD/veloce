@@ -1868,3 +1868,46 @@ canvas at the slide level, with structure opted into per block.
 `model/auto-layout.test.ts` covers the flow guess and each case; `phase3-free-canvas.test.ts`
 covers it in real Chromium (Free without a pixel moving, Ctrl+Alt+A, the toast's Undo, new
 slides Free).
+
+## D84 — Crop mode: a `crop` rectangle, edited on the canvas like Figma's
+
+**Status:** Accepted (2026-11-20). Extends D82 (focus point) and D83.
+
+Images could only be fitted (cover/contain/fill) and aimed (focus), so resizing one re-fitted
+the picture and nothing kept a chosen part of it.
+
+1. **`crop: { x, y, w, h }`, fractions of the picture** (`CropSchema` in core), on the image
+   element. It must stay on the picture (x + w ≤ 1, y + h ≤ 1), so a crop never shows empty
+   space; the error shows a valid example. Fractions, not pixels, so replacing the asset or
+   optimizing it (D67) keeps the crop. No format version change: it's an optional prop.
+2. **Rendered as CSS `object-view-box`.** The picture is cut to the crop first, then `fit`
+   and `focus` apply to that part as before, and the percentages are of the picture itself,
+   so the plugin never needs its pixel size. **Why:** a few lines instead of a wrapper that
+   needs the picture's size before it loads. Chromium only, which is every surface that
+   renders a deck today (Electron, the headless renderer, export). An HTML export for other
+   browsers will need a fallback (a positioned `<img>` in a clipping box).
+3. **Found by its shape, like the focus (D82):** an `{ x, y, w, h }` number prop next to an
+   asset prop is a crop field, so a plugin's picture element gets crop mode too.
+4. **Crop mode on the canvas.** Double-click an image (or Crop image in the inspector) to
+   enter it. The whole picture shows behind the layer, dimmed outside it: drag inside the
+   layer to move it over the picture, drag the dimmed picture to pan it behind the layer,
+   drag the layer's edges to trim, drag the picture's round corner knobs to scale it (Alt:
+   from its centre). Moving and trimming keep the picture put on the slide and change the
+   layer's position and size. **Why move, not pan, inside:** you grab the selection, as in
+   Photoshop, Canva and phone photo editors (the first version panned there, and moving the
+   selection is what people reached for). A layer its stack or grid places can't move, so
+   there the picture pans the other way: the same part comes into view. Enter, Esc, a double-click, a click elsewhere or another selection leaves.
+   Entering and leaving are view state; each gesture is one "Crop image" transaction (crop,
+   plus size and position for a trim). The maths (`model/crop.ts`) works in the layer's own
+   axes, so rotated layers crop the same way. With no crop yet, it starts from what the
+   layer shows now (cover, aimed by the focus).
+5. **Outside crop mode:** dragging an image's corner keeps its aspect ratio unless Shift is
+   held (the other way round from other layers, like Keynote and Canva), so resizing scales
+   the picture instead of re-cropping it; edges still change the shape. Ctrl/Cmd-dragging any
+   handle trims, like crop mode (Figma's quick crop), read live during the drag.
+6. **The inspector:** Crop shows Crop image / Done, how much is kept, and Reset (the whole
+   picture again). Focus hides while a crop is set: with the layer at the crop's shape there's
+   nothing left for it to aim.
+
+`model/crop.test.ts` covers the maths; `phase3-crop.test.ts` covers crop mode, both resize
+rules and reset in real Chromium.

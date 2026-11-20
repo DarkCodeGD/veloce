@@ -9,6 +9,16 @@ import { createId, type Layout } from "@veloce/core";
 import { resolvedSizing } from "../editor-context.js";
 import type { Command } from "../model/commands.js";
 import {
+  cropFor,
+  moveWindow,
+  panPicture,
+  pictureRect,
+  scalePicture,
+  startingCrop,
+  trimWindow,
+} from "../model/crop.js";
+import { focusOf, type Size } from "../model/focus-point.js";
+import {
   anchoredBox,
   type Box,
   type Handle,
@@ -300,12 +310,26 @@ function pullOut(
  * e.g. a text's "hug" height), corners both. Shift keeps the ratio, Alt resizes around the
  * centre. Unrotated free layers snap their moving edges.
  */
-export function resizeDrag(ctx: Context, id: string, handle: Handle, start: Point): Drag | null {
+/**
+ * Resize one layer by a handle. A picture layer (D84, `picture` given) keeps its aspect
+ * ratio on corner handles unless Shift is held (the other way round from other layers), so
+ * resizing scales the picture instead of re-cropping it; with Ctrl/Cmd held, any handle trims
+ * it like crop mode does (read live, so pressing Ctrl mid-drag switches).
+ */
+export function resizeDrag(
+  ctx: Context,
+  id: string,
+  handle: Handle,
+  start: Point,
+  picture?: CropPicture,
+): Drag | null {
   const { index, space } = ctx;
   const node = index.nodes.get(id)?.node;
   const size = space.size(id);
   const rect = space.rect(id);
   if (!node || !size || !rect) return null;
+  const trim = picture ? cropDrag(ctx, id, { kind: "trim", handle }, start, picture) : null;
+  const corner = handle.length === 2;
   const turn = ancestorRotation(index, id);
   const rotation = node.rotation ?? 0;
   const free = isFree(index, id);
@@ -322,15 +346,17 @@ export function resizeDrag(ctx: Context, id: string, handle: Handle, start: Poin
 
   return {
     update(pointer, mods) {
+      if (trim && mods.mod) return trim.update(pointer, mods);
       const p = space.toSlide(pointer);
       const d = rotateVector(sub(p, p0), -turn);
-      const raw = resizeBox(b0, handle, d, { keepRatio: mods.shift, fromCenter: mods.alt });
+      const keepRatio = picture && corner ? !mods.shift : mods.shift;
+      const raw = resizeBox(b0, handle, d, { keepRatio, fromCenter: mods.alt });
       let w = Math.max(1, Math.round(raw.w));
       let h = Math.max(1, Math.round(raw.h));
 
       // Snap the dragged edge(s) (plain resizes of unrotated free layers only).
       const snapped = { x: false, y: false };
-      if (targets.length > 0 && !mods.shift && !mods.alt) {
+      if (targets.length > 0 && !keepRatio && !mods.alt) {
         const reach = SNAP_PX / space.scale;
         const lines = (axis: "x" | "y") =>
           targets.flatMap((t) => (axis === "x" ? [t.x, t.x + t.w] : [t.y, t.y + t.h]));
@@ -367,6 +393,106 @@ export function resizeDrag(ctx: Context, id: string, handle: Handle, start: Poin
     },
   };
 }
+
+// ── Crop (D84) ──────────────────────────────────────────────────────────────────────
+
+/** What a crop gesture needs about the layer's picture (crop-mode.ts's `Picture`). */
+export interface CropPicture {
+  cropKey: string;
+  focusKey: string | undefined;
+  /** The picture's pixel size. */
+  size: Size;
+}
+
+/** The part of crop mode being dragged. */
+export type CropPart =
+  | { kind: "move" }
+  | { kind: "pan" }
+  | { kind: "trim"; handle: Handle }
+  | { kind: "scale"; corner: Handle };
+
+/**
+ * A crop gesture on one picture layer (model/crop.ts has the maths): move the layer over a
+ * fixed picture, pan the picture behind the layer, trim the layer's edges over a fixed
+ * picture, or scale the picture by a corner (Alt: from its centre). Worked out in the
+ * layer's own axes, so rotated layers crop too. One transaction: the crop, plus the size and
+ * position a move or trim gives the layer. A layer its stack or grid places can't move, so
+ * there a move pans the picture the other way instead: the same part ends up in view.
+ */
+export function cropDrag(
+  ctx: Context,
+  id: string,
+  part: CropPart,
+  start: Point,
+  picture: CropPicture,
+): Drag | null {
+  const { index, space } = ctx;
+  const node = index.nodes.get(id)?.node;
+  const size = space.size(id);
+  if (node?.kind !== "element" || !size || size.w <= 0 || size.h <= 0) return null;
+  const turn = ancestorRotation(index, id);
+  const rotation = node.rotation ?? 0;
+  const free = isFree(index, id);
+  const focus = focusOf(picture.focusKey ? node.props[picture.focusKey] : undefined);
+  const crop0 = startingCrop(node.props[picture.cropKey], picture.size, size, focus);
+  const window0: Rect = { x: 0, y: 0, w: size.w, h: size.h };
+  const picture0 = pictureRect(crop0, size);
+  const b0: Box = { cx: size.w / 2, cy: size.h / 2, w: size.w, h: size.h, rotation };
+  const p0 = space.toSlide(start);
+
+  return {
+    update(pointer, mods) {
+      const p = space.toSlide(pointer);
+      // Into the layer's own axes: undo its frames' rotation, then its own.
+      const d = rotateVector(rotateVector(sub(p, p0), -turn), -rotation);
+      let shown = picture0;
+      let window = window0;
+      if (part.kind === "pan") shown = panPicture(picture0, window0, d);
+      if (part.kind === "move" && !free) shown = panPicture(picture0, window0, scaleBy(d, -1));
+      if (part.kind === "move" && free) window = moveWindow(picture0, window0, d);
+      if (part.kind === "scale") shown = scalePicture(picture0, window0, part.corner, d, mods.alt);
+      let resize: Command | null = null;
+      if (part.kind === "trim") {
+        const trimmed = trimWindow(picture0, window0, part.handle, d);
+        // Whole pixels, like any resize; the crop is read from the rounded window.
+        window = { ...trimmed, w: Math.round(trimmed.w), h: Math.round(trimmed.h) };
+      }
+      if (window !== window0) {
+        // The window's centre moved in the layer's axes: turn that into the parent's.
+        const shift = rotateVector(
+          { x: window.x + window.w / 2 - size.w / 2, y: window.y + window.h / 2 - size.h / 2 },
+          rotation,
+        );
+        const next: Box = { ...b0, cx: b0.cx + shift.x, cy: b0.cy + shift.y, ...wh(window) };
+        const moved = sub(topLeft(next), topLeft(b0));
+        const grow = { w: window.w - size.w, h: window.h - size.h };
+        resize = resizeTo(index, id, {
+          width: window.w,
+          height: window.h,
+          ...(free ? { position: movedPosition(node, moved, grow) } : {}),
+        });
+      }
+      const crop = cropFor(shown, window);
+      const command: Command = {
+        label: "Crop image",
+        ops: [
+          ...(resize?.ops ?? []),
+          { op: "node.update", id, set: { props: { [picture.cropKey]: crop } } },
+        ],
+      };
+      return {
+        command,
+        feedback:
+          part.kind === "trim"
+            ? { badge: { text: `${window.w} × ${window.h}`, at: p } }
+            : { badge: { text: `${Math.round((shown.w / picture.size.w) * 100)}%`, at: p } },
+      };
+    },
+  };
+}
+
+const wh = (r: Rect) => ({ w: r.w, h: r.h });
+const scaleBy = (p: Point, k: number): Point => ({ x: p.x * k, y: p.y * k });
 
 // ── Rotate ──────────────────────────────────────────────────────────────────────────
 
