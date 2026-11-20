@@ -1680,6 +1680,34 @@ textarea::placeholder {
   text-transform: uppercase;
 }
 
+/* A title with an action at its right (AddableSection's + / −, D74). */
+.inspector-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.inspector-section-header .inspector-section-title {
+  margin: 0;
+}
+
+/* Nothing added yet (no border, no shadow): one short row, not a block of empty fields. */
+.inspector-section.is-empty {
+  padding-block: 10px;
+}
+
+.inspector-section.is-empty .inspector-section-header {
+  margin-bottom: 0;
+}
+
+.section-action {
+  width: 24px;
+  height: 24px;
+  margin-right: -4px;
+}
+
 .inspector-hint {
   margin: 0;
   color: var(--text-muted);

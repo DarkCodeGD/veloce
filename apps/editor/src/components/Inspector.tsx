@@ -12,7 +12,11 @@ import {
   isFreeLayer,
   type Layout,
   type Node,
+  type Shadow,
+  type ShadowValue,
   type Slide,
+  type Stroke,
+  type Theme,
 } from "@veloce/core";
 import { NODE_ID_ATTR } from "@veloce/renderer";
 import {
@@ -38,6 +42,17 @@ import { registry, resolvedSizing } from "../editor-context.js";
 import { groupSelection, ungroupSelection } from "../group-actions.js";
 import { type Imported, replaceAsset } from "../model/asset-insert.js";
 import { type Command, deleteNodes, duplicateNodes, updateNode } from "../model/commands.js";
+import {
+  addBorder,
+  addShadow,
+  CUSTOM,
+  DEFAULT_STROKE,
+  removeBorder,
+  removeShadow,
+  setShadowPreset,
+  shadowColor,
+  shadowPreset,
+} from "../model/frame-style.js";
 import { ungroupable } from "../model/group.js";
 import {
   freeSizing,
@@ -58,6 +73,7 @@ import { AlignBar } from "./AlignBar.js";
 import { AssetField } from "./AssetField.js";
 import { mainCanvasSpace } from "./canvas-space.js";
 import {
+  AddableSection,
   ColorField,
   type Commit,
   LengthField,
@@ -614,7 +630,175 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
           onCommit={setStyle("clip", "Toggle clipping")}
         />
       </Section>
+      <BorderSection deck={deck} node={node} stroke={node.style?.stroke} />
+      <ShadowSection theme={deck.theme} node={node} shadow={node.style?.shadow} />
     </>
+  );
+}
+
+const BORDER_STYLES = ["solid", "dashed", "dotted"];
+
+/** A frame's border (`style.stroke`, D74): **+** adds one; color, width and line style. */
+function BorderSection({ deck, node, stroke }: { deck: Deck; node: FrameNode; stroke?: Stroke }) {
+  /** Live-previewed edit of one border key; `null` (cleared) is ignored: they're required. */
+  const liveStroke = (key: "color" | "width", label: string) =>
+    live((value) =>
+      value === null ? null : updateNode(node.id, { style: { stroke: { [key]: value } } }, label),
+    );
+  return (
+    <AddableSection
+      title="Border"
+      noun="border"
+      present={stroke !== undefined}
+      onAdd={() => void run(addBorder(node.id))}
+      onRemove={() => void run(removeBorder(node.id))}
+    >
+      {stroke && (
+        <>
+          <ColorField
+            label="Color"
+            value={stroke.color}
+            theme={deck.theme}
+            required
+            {...liveStroke("color", "Change border color")}
+          />
+          <NumberField
+            label="Width"
+            value={stroke.width}
+            min={0.5}
+            max={1000}
+            step={1}
+            suffix="px"
+            required
+            fallback={() => DEFAULT_STROKE.width}
+            {...liveStroke("width", "Change border width")}
+          />
+          <SelectField
+            label="Style"
+            value={stroke.style}
+            options={BORDER_STYLES}
+            defaultValue="solid"
+            onCommit={(value) =>
+              void run(
+                updateNode(node.id, { style: { stroke: { style: value } } }, "Change border style"),
+              )
+            }
+          />
+        </>
+      )}
+    </AddableSection>
+  );
+}
+
+/** The Shadow menu: the theme's shadows, then Custom (explicit values). */
+function shadowOptions(theme: Theme) {
+  return [
+    ...Object.entries(theme.shadow).map(([name, value]) => ({
+      value: `$shadow.${name}`,
+      label: name,
+      hint: `${value.y}px · blur ${value.blur}`,
+    })),
+    { value: CUSTOM, label: "Custom" },
+  ];
+}
+
+/**
+ * A frame's drop shadow (`style.shadow`, D74): **+** adds the theme's; pick another theme
+ * shadow, or Custom to set its offset, blur, spread and color.
+ */
+function ShadowSection({
+  theme,
+  node,
+  shadow,
+}: {
+  theme: Theme;
+  node: FrameNode;
+  shadow?: ShadowValue;
+}) {
+  const custom = shadow !== undefined && typeof shadow !== "string" ? shadow : undefined;
+  /**
+   * Live-previewed edit of one value of a custom shadow. They're required, so a cleared field
+   * (`null`) is ignored; `toValue` can reject a value the same way.
+   */
+  const liveShadow = (
+    key: keyof Shadow,
+    label: string,
+    toValue: (v: unknown) => unknown = (v) => v,
+  ) =>
+    live((value) => {
+      const next = value === null ? null : toValue(value);
+      return next === null
+        ? null
+        : updateNode(node.id, { style: { shadow: { [key]: next } } }, label);
+    });
+  return (
+    <AddableSection
+      title="Shadow"
+      noun="shadow"
+      present={shadow !== undefined}
+      onAdd={() => void run(addShadow(node.id, theme))}
+      onRemove={() => void run(removeShadow(node.id))}
+    >
+      {shadow !== undefined && (
+        <>
+          <SelectField
+            label="Preset"
+            value={shadowPreset(shadow)}
+            options={shadowOptions(theme)}
+            onCommit={(preset) =>
+              typeof preset === "string" &&
+              void run(setShadowPreset(node.id, theme, shadow, preset))
+            }
+          />
+          {custom && (
+            <>
+              <NumberField
+                label="X"
+                value={custom.x}
+                suffix="px"
+                required
+                {...liveShadow("x", "Change shadow offset")}
+              />
+              <NumberField
+                label="Y"
+                value={custom.y}
+                suffix="px"
+                required
+                {...liveShadow("y", "Change shadow offset")}
+              />
+              <NumberField
+                label="Blur"
+                value={custom.blur}
+                min={0}
+                suffix="px"
+                required
+                {...liveShadow("blur", "Change shadow blur")}
+              />
+              <NumberField
+                label="Spread"
+                value={custom.spread}
+                placeholder="0"
+                suffix="px"
+                {...live((value) =>
+                  updateNode(
+                    node.id,
+                    { style: { shadow: { spread: value } } },
+                    "Change shadow spread",
+                  ),
+                )}
+              />
+              <ColorField
+                label="Color"
+                value={custom.color}
+                theme={theme}
+                required
+                {...liveShadow("color", "Change shadow color", (v) => shadowColor(theme, v))}
+              />
+            </>
+          )}
+        </>
+      )}
+    </AddableSection>
   );
 }
 

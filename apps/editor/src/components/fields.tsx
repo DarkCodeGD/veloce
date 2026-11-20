@@ -4,7 +4,7 @@
  * Token-aware: colors and lengths offer the theme's tokens first, raw values second.
  */
 import { type Deck, primaryFamily, resolveColor, type Theme } from "@veloce/core";
-import { RotateCcw } from "lucide-react";
+import { Minus, Plus, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { assetUrl } from "../editor-context.js";
 import type { Imported } from "../model/asset-insert.js";
@@ -85,8 +85,12 @@ export function Field({
   );
 }
 
-/** A draft that follows the document until the user types, then commits on Enter/blur. */
-function useDraft(value: string, commit: (text: string) => void) {
+/**
+ * A draft that follows the document until the user types, then commits on Enter/blur. A commit
+ * that returns `false` rejected the text (not a color, a required value cleared): the field
+ * shows the document's value again instead of keeping text that was never applied.
+ */
+function useDraft(value: string, commit: (text: string) => boolean | undefined) {
   const [draft, setDraft] = useState(value);
   const editing = useRef(false);
   useEffect(() => {
@@ -95,7 +99,7 @@ function useDraft(value: string, commit: (text: string) => void) {
   const finish = () => {
     if (!editing.current) return;
     editing.current = false;
-    if (draft !== value) commit(draft);
+    if (draft !== value && commit(draft) === false) setDraft(value);
   };
   return {
     value: draft,
@@ -130,7 +134,10 @@ export function TextField({
   onCommit: Commit;
 }) {
   const id = useId();
-  const draft = useDraft(value ?? "", (text) => onCommit(text === "" ? null : text));
+  const draft = useDraft(value ?? "", (text) => {
+    onCommit(text === "" ? null : text);
+    return undefined;
+  });
   return (
     <Field label={label} htmlFor={id}>
       {multiline ? (
@@ -152,11 +159,14 @@ export function NumberField({
   integer,
   suffix,
   fallback,
+  required,
   onCommit,
   onPreview,
 }: {
   label: string;
   value: number | undefined;
+  /** The value can't be unset (a border's width): no reset button. */
+  required?: boolean;
   placeholder?: string;
   min?: number;
   max?: number;
@@ -183,7 +193,7 @@ export function NumberField({
     <Field
       label={label}
       htmlFor={id}
-      isSet={value !== undefined}
+      isSet={!required && value !== undefined}
       onReset={() => onCommit(null)}
       scrub={control.labelProps}
       scrubbing={control.scrubbing}
@@ -400,10 +410,13 @@ export function ColorField({
   onCommit,
   onPreview,
   paint,
+  required,
 }: {
   label: string;
   value: unknown;
   theme: Theme;
+  /** The color can't be unset (a border's, a shadow's): no reset, and clearing it is ignored. */
+  required?: boolean;
   /** One change; `imported` is a file uploaded for an image fill (paint fields only). */
   onCommit: (value: Value | null, imported?: Imported) => void;
   /** Show a value live while the opacity or picker is dragged; `null` drops the preview. */
@@ -425,9 +438,14 @@ export function ColorField({
   /** Any new color, at the opacity the current one has. */
   const pick = (color: string) => onCommit(keepOpacity(value, color));
   const draft = useDraft(colorLabel(value), (typed) => {
-    if (typed.trim() === "") return onCommit(null);
+    if (typed.trim() === "") {
+      if (required) return false;
+      onCommit(null);
+      return;
+    }
     const color = parseTypedColor(typed, theme.colors, value);
-    if (color !== null && color !== value) onCommit(color);
+    if (color === null) return false;
+    if (color !== value) onCommit(color);
   });
   const shown = pickerColor(resolved, value);
   /** The picker's color as a document color (a token stays a token if only alpha moved). */
@@ -483,7 +501,12 @@ export function ColorField({
     </ColorPopover>
   );
   return (
-    <Field label={label} htmlFor={id} isSet={value !== undefined} onReset={() => onCommit(null)}>
+    <Field
+      label={label}
+      htmlFor={id}
+      isSet={!required && value !== undefined}
+      onReset={() => onCommit(null)}
+    >
       <div className="color">
         {isObject && !paint ? (
           <span className="color-note">
@@ -664,13 +687,73 @@ export function SizingField({
   );
 }
 
-/** A top-level inspector block ("Layer", "Theme"), divided from the next by a rule. */
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * A top-level inspector block ("Layer", "Theme"), divided from the next by a rule. `action`
+ * sits at the right of the title (AddableSection's + / −); with no children the block is just
+ * its title row.
+ */
+export function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children?: ReactNode;
+}) {
+  const empty = children === undefined || children === null || children === false;
   return (
-    <section className="inspector-section">
-      <h3 className="inspector-section-title">{title}</h3>
+    <section className={`inspector-section${empty ? " is-empty" : ""}`}>
+      {action ? (
+        <div className="inspector-section-header">
+          <h3 className="inspector-section-title">{title}</h3>
+          {action}
+        </div>
+      ) : (
+        <h3 className="inspector-section-title">{title}</h3>
+      )}
       {children}
     </section>
+  );
+}
+
+/**
+ * A section for something a layer may not have (a border, a shadow), Figma style: just its
+ * title and **+** until it's added; then its fields, and **−** removes it. `noun` names it for
+ * screen readers ("Add border").
+ */
+export function AddableSection({
+  title,
+  noun,
+  present,
+  onAdd,
+  onRemove,
+  children,
+}: {
+  title: string;
+  noun: string;
+  present: boolean;
+  onAdd(): void;
+  onRemove(): void;
+  children: ReactNode;
+}) {
+  return (
+    <Section
+      title={title}
+      action={
+        <button
+          type="button"
+          className="icon-button section-action"
+          aria-label={present ? `Remove ${noun}` : `Add ${noun}`}
+          data-tip={present ? "Remove" : "Add"}
+          onClick={present ? onRemove : onAdd}
+        >
+          {present ? <Minus size={14} /> : <Plus size={14} />}
+        </button>
+      }
+    >
+      {present ? children : null}
+    </Section>
   );
 }
 

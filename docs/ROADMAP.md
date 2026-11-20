@@ -26,9 +26,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: frame border and shadow), then the
-  tool bar (D62).
-- **State:** `pnpm check` is green (585 tests, including real-Chromium lint, preview and editor
+- **Next:** round 5's "Parity with agents" checklist (next: per-side padding), then the tool bar
+  (D62).
+- **State:** `pnpm check` is green (595 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -41,7 +41,7 @@
   - Agent feedback rounds 1–3 and a fix-check retest: lint accuracy, clearer errors, and
     per-session decks for agents (D58, D59, D68–D70).
   - Round 5: reverting AI changes from History, and agents told what the user changed, retested
-    and tightened (D71, D72); lint in the editor (D73).
+    and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -171,9 +171,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
         upsert_slide won't bring back removed slides (D71, D72)
   - [x] Lint in the editor: an Issues tab with the issues agents see, worded for people,
         badges on the tab, thumbnails and layers, click to select (D73)
-  - [ ] Frame border and shadow in the inspector (`style.stroke`, `style.shadow`), Figma
-        style: a "Border" / "Shadow" header with **+** until one is added (**−** removes
-        it), so an unbordered card shows two short rows, not empty fields
+  - [x] Frame border and shadow in the inspector: Border / Shadow headers with **+** / **−**,
+        theme shadow presets or Custom values (D74)
   - [ ] Per-side padding (today it's read-only: "set by AI"): one field, plus an
         "individual sides" toggle that opens the four. Same control as per-corner radius
   - [ ] Deck info: rename the deck, description, authors, language (`deck.updateMeta`),

@@ -1557,3 +1557,27 @@ findings).
    server has no renderer, the panel says the layout checks are off and why.
 4. **Later:** a Preferences switch (lint on/off, which rules), and ignoring an issue on one
    element, which agents should respect too.
+
+## D74 — Frame border and shadow in the inspector
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist.
+
+1. **Absent until added, Figma style.** "Border" and "Shadow" are inspector sections whose
+   header carries **+** (add) or **−** (remove). **Why:** most frames have neither, and five
+   empty fields per section would bury Fill & shape (D47's airy rule). An unbordered card
+   shows two one-line headers. `Section` gained an optional header `action` and a compact
+   `is-empty` state, so later optional sections (effects, per-corner radius) reuse it.
+2. **Theme-first defaults.** A new border is 2px (1px is a hairline on a 1920px slide) in
+   `$color.border`. A new shadow is the theme's `$shadow.md` token (else the first token, else
+   explicit soft values), so it follows theme switches. **Why:** the AI and the theme speak
+   in tokens; a hand-added shadow should look like the ones agents add.
+3. **Presets, then Custom.** The Shadow menu lists the theme's shadows plus Custom. Custom
+   copies the token's values into the frame, so nothing jumps and X, Y, Blur, Spread and
+   Color appear to tweak. Picking a theme color for a shadow stores its hex (`ShadowSchema`
+   takes hex only), at the shadow's current opacity like any new color, so it stays soft.
+4. **Required fields have no reset.** Fields gained `required`: no reset button, and
+   clearing one is ignored. A text draft whose commit is rejected (a cleared required color,
+   or text that isn't a color) now snaps back to the document's value instead of leaving
+   text on screen that was never applied. That also fixes the existing quirk for typos.
+5. Edits are ordinary `node.update` merge patches (`{style: {stroke: {width: 6}}}`), the same
+   ops agents send (golden rule 1). Pure logic lives in `model/frame-style.ts`.
