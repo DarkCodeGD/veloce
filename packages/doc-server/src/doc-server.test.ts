@@ -7,12 +7,14 @@ import {
   createSlide,
   type Deck,
   element,
+  type LintReport,
   type ServerMessage,
   type SlideMeasurement,
 } from "@veloce/core";
 import { optimizeInWorker, stopOptimizer } from "@veloce/images";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { atomicWriteFile, slugify } from "./fs.js";
+import { DeckLinter, lintWithRender } from "./lint.js";
 import { HISTORY_LIMIT, UPLOAD_GRACE_MS } from "./open-deck.js";
 import { CachedRenderService, type RenderService } from "./render.js";
 import { SyncHub } from "./sync-hub.js";
@@ -661,6 +663,174 @@ describe("Reverting agent changes", () => {
     expect(history.filter((e) => e.reverted).map((e) => e.version)).toEqual([1, 2]);
     tab.conn.close();
     late.conn.close();
+    await ws.close();
+  });
+});
+
+describe("Lint for editor tabs (D73)", () => {
+  /** "Measures" every text as overflowing by 50px, and counts what it measured. */
+  function overflowingRender() {
+    const measured: string[][] = [];
+    const render: RenderService = {
+      async measure(deck, { slideIds }) {
+        const slides = deck.slides.filter((s) => !slideIds || slideIds.includes(s.id));
+        measured.push(slides.map((s) => s.id));
+        return slides.map((slide) => ({
+          slideId: slide.id,
+          stage: deck.stage,
+          nodes: Object.fromEntries(
+            slide.root.children.map((n, i) => [
+              n.id,
+              {
+                bounds: { x: 100, y: 100 + i * 200, width: 800, height: 100 },
+                overflow: { x: 0, y: 50 },
+              },
+            ]),
+          ),
+        }));
+      },
+      screenshot: async () => ({ data: new Uint8Array(), mimeType: "image/png" }),
+      close: async () => {},
+    };
+    return { render, measured };
+  }
+  const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+
+  it("lints with measurements, or says why visual checks were skipped", async () => {
+    const ws = await open();
+    const deck = await ws.create({ title: "L" });
+    deck.apply({ origin: "user", label: "a", ops: [{ op: "slide.insert", slide: titleSlide() }] });
+    const { render } = overflowingRender();
+    const measured = await lintWithRender(deck.deck, { deckId: deck.id, render });
+    expect(measured.visual).toBe(true);
+    expect(measured.issues.map((i) => i.rule)).toContain("overflow");
+    const none = await lintWithRender(deck.deck, {
+      deckId: deck.id,
+      render: null,
+      unavailable: "off",
+    });
+    expect(none).toMatchObject({ visual: "off" });
+    expect(none.issues.map((i) => i.rule)).not.toContain("overflow");
+    const broken: RenderService = {
+      ...render,
+      measure: async () => Promise.reject(new Error("boom")),
+    };
+    expect(await lintWithRender(deck.deck, { deckId: deck.id, render: broken })).toMatchObject({
+      visual: "renderer failed (boom)",
+    });
+    await ws.close();
+  });
+
+  it("reports on watch and after each burst of changes, never an outdated version", async () => {
+    const ws = await open();
+    const deck = await ws.create({ title: "L" });
+    const { render, measured } = overflowingRender();
+    const linter = new DeckLinter({ render: () => render, delayMs: 20 });
+    const reports: LintReport[] = [];
+    const stop = linter.watch(deck, (r) => reports.push(r));
+    await tick();
+    expect(reports).toEqual([{ version: 0, issues: [], visual: true }]);
+
+    // Three quick changes: one run, for the latest version.
+    deck.apply({ origin: "user", label: "a", ops: [{ op: "slide.insert", slide: titleSlide() }] });
+    deck.apply({
+      origin: "user",
+      label: "b",
+      ops: [{ op: "slide.insert", slide: createSlide({ id: "s2" }) }],
+    });
+    deck.apply({
+      origin: "user",
+      label: "c",
+      ops: [{ op: "slide.update", id: "s2", set: { name: "Two" } }],
+    });
+    await tick(60);
+    expect(reports.map((r) => r.version)).toEqual([0, 3]);
+    expect(measured).toHaveLength(2);
+    expect(reports[1]?.issues.map((i) => [i.rule, i.slideId])).toEqual(
+      expect.arrayContaining([
+        ["overflow", "s1"],
+        ["empty-slide", "s2"],
+      ]),
+    );
+
+    // A second watcher gets the current report at once, without another run.
+    const late: LintReport[] = [];
+    const stopLate = linter.watch(deck, (r) => late.push(r));
+    expect(late.map((r) => r.version)).toEqual([3]);
+    expect(measured).toHaveLength(2);
+
+    // Nobody watching: changes don't lint.
+    stop();
+    stopLate();
+    deck.apply({ origin: "user", label: "d", ops: [{ op: "slide.remove", id: "s2" }] });
+    await tick(60);
+    expect(measured).toHaveLength(2);
+    linter.close();
+    await ws.close();
+  });
+
+  it("drops a report that a change made outdated while it ran", async () => {
+    const ws = await open();
+    const deck = await ws.create({ title: "L" });
+    let release: () => void = () => {};
+    const slow: RenderService = {
+      ...overflowingRender().render,
+      measure: (d, o) =>
+        new Promise((resolve) => {
+          release = () => void overflowingRender().render.measure(d, o).then(resolve);
+        }),
+    };
+    const linter = new DeckLinter({ render: () => slow, delayMs: 0 });
+    const reports: LintReport[] = [];
+    linter.watch(deck, (r) => reports.push(r));
+    await tick();
+    deck.apply({ origin: "user", label: "a", ops: [{ op: "slide.insert", slide: titleSlide() }] });
+    release(); // version 0's run finishes after the change: dropped
+    await tick();
+    release(); // the rerun, for version 1
+    await tick();
+    expect(reports.map((r) => r.version)).toEqual([1]);
+    linter.close();
+    await ws.close();
+  });
+
+  it("over sync: a tab gets its open deck's lint, and stops when it leaves", async () => {
+    const ws = await open();
+    const deck = await ws.create({ title: "L" });
+    let runs = 0;
+    const linter = new DeckLinter({
+      render: () => {
+        runs++; // asked once per lint run
+        return null;
+      },
+      unavailable: () => "no browser",
+      delayMs: 0,
+    });
+    const tab = client(new SyncHub(ws, { linter }));
+    await tab.send({ type: "open", deckId: deck.id });
+    await tick();
+    expect(tab.last("lint")).toEqual({
+      type: "lint",
+      deckId: deck.id,
+      version: 0,
+      issues: [],
+      visual: "no browser",
+    });
+    deck.apply({
+      origin: "agent:x",
+      label: "a",
+      ops: [{ op: "slide.insert", slide: createSlide({ id: "e" }) }],
+    });
+    await tick();
+    expect(tab.last("lint")).toMatchObject({ version: 1, issues: [{ rule: "empty-slide" }] });
+    tab.conn.close();
+    const count = tab.inbox.length;
+    const ran = runs;
+    deck.apply({ origin: "agent:x", label: "b", ops: [{ op: "slide.remove", id: "e" }] });
+    await tick();
+    expect(tab.inbox).toHaveLength(count);
+    expect(runs).toBe(ran); // a closed tab stops the linting too, not just the messages
+    linter.close();
     await ws.close();
   });
 });

@@ -20,7 +20,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { MAX_ASSET_BYTES, type ServerMessage } from "@veloce/core";
-import { type RenderService, SyncHub, type Workspace } from "@veloce/doc-server";
+import { DeckLinter, type RenderService, SyncHub, type Workspace } from "@veloce/doc-server";
 import { VeloceMcp } from "@veloce/mcp";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { WebSocketServer } from "ws";
@@ -86,8 +86,13 @@ export const UPLOAD_HEADER = "x-veloce-upload";
 export async function startVeloceServer(options: VeloceServerOptions): Promise<VeloceServer> {
   const host = options.host ?? "127.0.0.1";
   const log = options.log ?? ((m: string) => console.log(m));
-  const hub = new SyncHub(options.workspace);
   let render: RenderService | null = null;
+  // Editor tabs get live lint from the same renderer agents use (built once the URL is known).
+  const linter = new DeckLinter({
+    render: () => render,
+    unavailable: () => "the server was started without a renderer",
+  });
+  const hub = new SyncHub(options.workspace, { linter });
   let mcp: VeloceMcp | null = null;
   let allowedHosts = new Set<string>();
   let allowedOrigins = new Set<string>();
@@ -281,6 +286,7 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
     async close() {
       for (const client of wss.clients) client.terminate();
       wss.close();
+      linter.close();
       await mcp?.close();
       await render?.close();
       server.closeAllConnections();

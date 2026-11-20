@@ -26,9 +26,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: lint in the editor), then the tool
-  bar (D62).
-- **State:** `pnpm check` is green (571 tests, including real-Chromium lint, preview and editor
+- **Next:** round 5's "Parity with agents" checklist (next: frame border and shadow), then the
+  tool bar (D62).
+- **State:** `pnpm check` is green (585 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -41,7 +41,7 @@
   - Agent feedback rounds 1–3 and a fix-check retest: lint accuracy, clearer errors, and
     per-session decks for agents (D58, D59, D68–D70).
   - Round 5: reverting AI changes from History, and agents told what the user changed, retested
-    and tightened (D71, D72).
+    and tightened (D71, D72); lint in the editor (D73).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -169,8 +169,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
   - [x] Review AI changes: Revert one change or an agent's run from the History panel, as
         the user's own undoable step; agents get a "since your last call" digest and
         upsert_slide won't bring back removed slides (D71, D72)
-  - [ ] Lint in the editor: a panel (or badges on slides and layers) with the issues agents
-        see, select-on-click, and each issue's fix hint. Its own panel, not the inspector
+  - [x] Lint in the editor: an Issues tab with the issues agents see, worded for people,
+        badges on the tab, thumbnails and layers, click to select (D73)
   - [ ] Frame border and shadow in the inspector (`style.stroke`, `style.shadow`), Figma
         style: a "Border" / "Shadow" header with **+** until one is added (**−** removes
         it), so an unbordered card shows two short rows, not empty fields
@@ -204,7 +204,7 @@ Animate and Present workspaces instead of being squeezed into today's screen.
       and Present in Phase 4). Panel sizes and the last workspace are remembered
 - [ ] Preferences window, stored in a user settings file owned by the server (app settings,
       not deck content, so not ops): Interface (UI scale, dark/light), Editing (undo steps,
-      snapping, nudge distance), Files (decks folder, autosave interval), Keymap (every
+      snapping, nudge distance, lint on/off and which rules, D73), Files (decks folder, autosave interval), Keymap (every
       shortcut, searchable; rebinding after 1.0), AI (MCP port, connect instructions, Follow
       AI default). System settings (GPU, hardware acceleration) arrive with Phase 6
 - [ ] Command palette (Ctrl/Cmd+K): search every command, setting, slide and layer; shows

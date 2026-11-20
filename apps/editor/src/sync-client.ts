@@ -17,6 +17,7 @@ import {
   type DeckListing,
   type ErrorInfo,
   type HistoryEntry,
+  type LintReport,
   type Op,
   type Origin,
   randomId,
@@ -50,6 +51,11 @@ export interface SyncState {
   lastChange: LastChange | null;
   /** The open deck's recent changes, oldest first (the history panel). */
   history: HistoryEntry[];
+  /**
+   * The open deck's lint, as the server last checked it (D73). Its `version` trails the
+   * deck's while a re-check is running; null until the first check arrives.
+   */
+  lint: LintReport | null;
 }
 
 /** Matches the server's limit (doc-server HISTORY_LIMIT). */
@@ -64,6 +70,7 @@ const INITIAL: SyncState = {
   version: 0,
   lastChange: null,
   history: [],
+  lint: null,
 };
 
 export class SyncClient {
@@ -197,8 +204,16 @@ export class SyncClient {
           deck: message.deck,
           version: message.version,
           history: message.history ?? [], // older servers don't send it
+          // Another deck's issues don't apply; a resync of this one keeps them until re-checked.
+          ...(message.deckId !== state.deckId && { lint: null }),
         });
         return;
+      case "lint": {
+        if (message.deckId !== state.deckId) return;
+        const { version, issues, visual } = message;
+        this.#set({ lint: { version, issues, visual } });
+        return;
+      }
       case "change": {
         if (message.deckId !== state.deckId || !state.deck) return;
         const next = applyChange({ deck: state.deck, version: state.version }, message);

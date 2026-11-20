@@ -12,6 +12,7 @@
  */
 import { z } from "zod";
 import type { ErrorInfo } from "./errors.js";
+import type { LintIssue } from "./lint.js";
 import type { Op } from "./ops/schema.js";
 import { OpSchema } from "./ops/schema.js";
 import type { Deck } from "./schema/deck.js";
@@ -91,12 +92,25 @@ export type ServerMessage =
       /** When the server applied it (ms since the epoch). */
       at: number;
     } & RevertMarks)
+  /**
+   * The open deck's lint (D73): the issues agents get, re-checked shortly after each change.
+   * `version` is the deck version it describes (older than the replica's while re-checking).
+   */
+  | ({ type: "lint"; deckId: string } & LintReport)
   | { type: "result"; requestId: string; ok: true; version: number }
   | { type: "result"; requestId: string; ok: false; error: ErrorInfo }
   /** A protocol-level problem (malformed message, unknown deck). */
   | { type: "error"; message: string };
 
 export type ChangeMessage = Extract<ServerMessage, { type: "change" }>;
+
+/** A deck's lint at one version. */
+export interface LintReport {
+  version: number;
+  issues: LintIssue[];
+  /** `true` when visual checks (overflow, contrast, overlaps…) ran; otherwise why not. */
+  visual: true | string;
+}
 
 /** What a change did to earlier changes, through a revert (or undoing / redoing one). */
 export interface RevertMarks {

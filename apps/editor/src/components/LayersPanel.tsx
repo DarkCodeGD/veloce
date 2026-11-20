@@ -4,7 +4,7 @@
  * layers into or out of frames (useLayerDrag); Alt+↑/↓ reorders from the keyboard (handled
  * by the app's shortcuts).
  */
-import type { Node, Slide } from "@veloce/core";
+import type { LintSeverity, Node, Slide } from "@veloce/core";
 import {
   ChevronDown,
   ChevronRight,
@@ -30,11 +30,13 @@ import { INDENT, ROW_PAD, useLayerDrag } from "./useLayerDrag.js";
 interface Props {
   slide: Slide;
   selection: readonly string[];
+  /** Layers with a lint problem, and the worst one (D73). */
+  issues?: ReadonlyMap<string, LintSeverity>;
   onSelect(ids: string[], additive: boolean): void;
   onHover(id: string | null): void;
 }
 
-export function LayersPanel({ slide: live, selection, onSelect, onHover }: Props) {
+export function LayersPanel({ slide: live, selection, issues, onSelect, onHover }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -154,6 +156,14 @@ export function LayersPanel({ slide: live, selection, onSelect, onHover }: Props
               >
                 {label}
               </button>
+            )}
+            {issues?.has(node.id) && (
+              <span
+                className={`layer-issue is-${issues.get(node.id)}`}
+                role="img"
+                aria-label={issues.get(node.id) === "error" ? "Has an error" : "Has a warning"}
+                data-tip="See the Issues tab"
+              />
             )}
             <span className="layer-actions">
               <button

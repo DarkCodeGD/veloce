@@ -15,6 +15,7 @@ import {
   type TransactionResult,
   VeloceError,
 } from "@veloce/core";
+import type { DeckLinter } from "./lint.js";
 import type { Workspace } from "./workspace.js";
 
 export interface SyncConnection {
@@ -28,18 +29,28 @@ export interface ConnectOptions {
   origin?: Origin;
 }
 
+export interface SyncHubOptions {
+  /** Sends each client its open deck's lint, kept current (D73). Without it: no lint. */
+  linter?: DeckLinter;
+}
+
 export class SyncHub {
   readonly #workspace: Workspace;
+  readonly #linter: DeckLinter | undefined;
 
-  constructor(workspace: Workspace) {
+  constructor(workspace: Workspace, options: SyncHubOptions = {}) {
     this.#workspace = workspace;
+    this.#linter = options.linter;
   }
 
   connect(send: (message: ServerMessage) => void, options: ConnectOptions = {}): SyncConnection {
     const workspace = this.#workspace;
+    const linter = this.#linter;
     const origin = options.origin ?? "user";
     let deckId: string | null = null;
     let closed = false;
+    /** Stops following the open deck's lint. */
+    let stopLint: (() => void) | undefined;
     const safeSend = (message: ServerMessage) => {
       if (!closed) send(message);
     };
@@ -126,6 +137,10 @@ export class SyncHub {
               deck: deck.deck,
               history: deck.history,
             });
+            stopLint?.();
+            stopLint = linter?.watch(deck, (report) =>
+              safeSend({ type: "lint", deckId: deck.id, ...report }),
+            );
             return;
           case "transaction": {
             const result = deck.apply({ origin, label: message.label, ops: message.ops });
@@ -163,6 +178,7 @@ export class SyncHub {
       },
       close() {
         closed = true;
+        stopLint?.();
         unsubscribe();
       },
     };

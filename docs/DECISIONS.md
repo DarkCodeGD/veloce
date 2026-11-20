@@ -1531,3 +1531,29 @@ findings).
    other editing tools.
 7. **Kept out:** text diffs in the digest (`"Revert Test" → "Edited by me"`). They'd cost tokens
    on every call, and get_slide is one call away.
+
+## D73 — Lint in the editor: the agents' issues, worded for people
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist.
+
+1. **The server lints, the editor shows.** A `DeckLinter` in the doc-server re-lints a deck
+   250 ms after a burst of changes, only while an editor tab has it open, never twice at once,
+   and drops a result a newer change made stale. It pushes a `lint` sync message (`version`,
+   `issues`, `visual`). **Why:** the issues are then exactly the ones agents get, from the same
+   headless renderer and the same core rules. With `CachedRenderService`, a slide is measured
+   once per version, whoever asks first, so the editor costs almost nothing extra. Measuring
+   in the user's tab would compete with editing and could disagree with what agents see.
+   `lintWithRender` is the one code path; MCP's lint uses it too.
+2. **Core's wording stays agent-shaped; the editor rewrites it.** Agents need IDs and prop
+   syntax (`text "nd_x7"`, `height: "hug"`); people need names and the inspector's words. The
+   editor keeps core's measurement (which layers, by how much). It swaps IDs for layer names
+   ("Text "Our tagline"", "this slide"), adds a short title per rule ("Text doesn't fit"),
+   and writes fixes in UI terms ("Set its height to Hug content"). Unknown rules from a newer
+   server fall back to core's text.
+3. **Quiet by default.** An Issues tab (inactive tabs shrink to their icon, so four fit in the
+   248 px panel), badges with the problem count on the tab and the thumbnails (bottom corner,
+   clear of the slide actions), and a dot on layers. Tips (info) don't badge and stay folded
+   behind "Show N tips". Clicking an issue goes to its slide and selects its layers. When the
+   server has no renderer, the panel says the layout checks are off and why.
+4. **Later:** a Preferences switch (lint on/off, which rules), and ignoring an issue on one
+   element, which agents should respect too.

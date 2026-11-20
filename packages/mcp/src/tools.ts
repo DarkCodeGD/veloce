@@ -22,19 +22,23 @@ import {
   formatBytes,
   formatIssues,
   type HistoryEntry,
-  lintDeck,
   MAX_ASSET_BYTES,
   type Node,
   notFoundHint,
   type Op,
   type Origin,
-  type SlideMeasurement,
   type Theme,
   ThemeSchema,
   VeloceError,
   walkNodes,
 } from "@veloce/core";
-import type { OpenDeck, Optimization, RenderService, Workspace } from "@veloce/doc-server";
+import {
+  lintWithRender,
+  type OpenDeck,
+  type Optimization,
+  type RenderService,
+  type Workspace,
+} from "@veloce/doc-server";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { z } from "zod";
 import { othersChanges } from "./changes.js";
@@ -206,30 +210,20 @@ function requireSlide(deck: Deck, slideId: string) {
   return found;
 }
 
-/** Measure (if a renderer is available) and lint. Never fails: visual problems degrade to a note. */
+/**
+ * Measure (if a renderer is available) and lint, the same way the editor's Issues panel does
+ * (D73). Never fails: visual problems degrade to a note.
+ */
 async function lintReport(
   ctx: ToolContext,
   open: OpenDeck,
   slideIds?: readonly string[],
 ): Promise<string> {
-  const deck = open.deck;
-  let measurements: Map<string, SlideMeasurement> | undefined;
-  let visual: string | true = ctx.renderUnavailable ?? "no renderer";
-  if (ctx.render) {
-    try {
-      const measured = await ctx.render.measure(deck, {
-        deckId: open.id,
-        ...(slideIds && { slideIds }),
-      });
-      measurements = new Map(measured.map((m) => [m.slideId, m]));
-      visual = true;
-    } catch (error) {
-      visual = `renderer failed (${error instanceof Error ? error.message : String(error)})`;
-    }
-  }
-  const issues = lintDeck(deck, {
+  const { issues, visual } = await lintWithRender(open.deck, {
+    deckId: open.id,
+    render: ctx.render,
+    ...(ctx.renderUnavailable && { unavailable: ctx.renderUnavailable }),
     ...(slideIds && { slideIds }),
-    ...(measurements && { measurements }),
   });
   return formatLint(issues, visual);
 }

@@ -1,5 +1,5 @@
 import type { Slide } from "@veloce/core";
-import { History, Layers, PanelsTopLeft } from "lucide-react";
+import { History, Layers, ListChecks, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { redo, revertAgentChanges, run, undo } from "./actions.js";
 import { alignSelection, distributeSelection } from "./align-actions.js";
@@ -7,6 +7,7 @@ import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
 import { HistoryPanel } from "./components/HistoryPanel.js";
 import { Inspector } from "./components/Inspector.js";
+import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { Toasts } from "./components/Toasts.js";
@@ -26,6 +27,7 @@ import {
   moveSlide,
   reorderNode,
 } from "./model/commands.js";
+import { layerSeverities, slideBadges } from "./model/lint-view.js";
 import {
   editableText,
   pickTarget,
@@ -47,7 +49,15 @@ const ALIGN_KEYS: Record<string, AlignEdge> = {
   KeyV: "middle",
   KeyS: "bottom",
 };
-type Panel = "slides" | "layers" | "history";
+type Panel = "slides" | "layers" | "history" | "issues";
+
+/** The left panel's tabs. Inactive ones show just their icon (the name is a tooltip). */
+const TABS: Array<{ id: Panel; label: string; icon: typeof History }> = [
+  { id: "slides", label: "Slides", icon: PanelsTopLeft },
+  { id: "layers", label: "Layers", icon: Layers },
+  { id: "history", label: "History", icon: History },
+  { id: "issues", label: "Issues", icon: ListChecks },
+];
 
 export function App() {
   const state = useSyncExternalStore(client.subscribe, client.getState);
@@ -88,8 +98,41 @@ export function App() {
   useEffect(() => {
     if (assets && deckId) void syncDeckFonts({ assets }, (id) => assetUrl(deckId, id));
   }, [assets, deckId]);
+  /** Layers to select once the slide being opened shows (an issue clicked on another slide). */
+  const pendingSelection = useRef<string[] | null>(null);
+  // A different slide: nothing selected, unless we came here to select something.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the slide changes
-  useEffect(() => setSelection([]), [current?.id]);
+  useEffect(() => {
+    setSelection(pendingSelection.current ?? []);
+    pendingSelection.current = null;
+  }, [current?.id]);
+  const reveal = useCallback(
+    (target: string, ids: string[]) => {
+      if (target === current?.id) setSelection(ids);
+      else {
+        pendingSelection.current = ids;
+        setSlideId(target);
+      }
+    },
+    [current?.id],
+  );
+  // Lint (D73): badges on thumbnails, layers and the Issues tab.
+  const lintIssues = state.lint?.issues;
+  const badges = useMemo(() => slideBadges(lintIssues ?? []), [lintIssues]);
+  const layerIssues = useMemo(
+    () => layerSeverities(lintIssues ?? [], current?.id ?? ""),
+    [lintIssues, current?.id],
+  );
+  const problems = useMemo(() => {
+    let count = 0;
+    let worst: "error" | "warning" | null = null;
+    for (const badge of badges.values()) {
+      count += badge.count;
+      if (badge.worst === "error") worst = "error";
+      else if (!worst && badge.worst === "warning") worst = "warning";
+    }
+    return { count, worst };
+  }, [badges]);
   // Layers can disappear under us (an agent, an undo): drop them from the selection.
   useEffect(() => {
     if (slideIndex) setSelection((s) => pruneSelection(slideIndex, s));
@@ -256,30 +299,28 @@ export function App() {
           <>
             <div className="left-panel">
               <div className="tabs" role="tablist" aria-label="Left panel">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={panel === "slides"}
-                  onClick={() => setPanel("slides")}
-                >
-                  <PanelsTopLeft size={14} /> Slides
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={panel === "layers"}
-                  onClick={() => setPanel("layers")}
-                >
-                  <Layers size={14} /> Layers
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={panel === "history"}
-                  onClick={() => setPanel("history")}
-                >
-                  <History size={14} /> History
-                </button>
+                {TABS.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={panel === id}
+                    data-tip={panel === id ? undefined : label}
+                    onClick={() => setPanel(id)}
+                  >
+                    <Icon size={14} aria-hidden />
+                    <span className="tab-label">{label}</span>
+                    {id === "issues" && problems.count > 0 && (
+                      <span className={`tab-badge is-${problems.worst}`}>
+                        {problems.count}
+                        <span className="sr-only">
+                          {" "}
+                          {problems.count === 1 ? "problem" : "problems"}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
               <div className="tab-panel" role="tabpanel">
                 {panel === "slides" ? (
@@ -288,14 +329,24 @@ export function App() {
                     deckId={deckId}
                     selectedId={current.id}
                     recent={recent}
+                    issues={badges}
                     onSelect={setSlideId}
                   />
                 ) : panel === "layers" ? (
                   <LayersPanel
                     slide={current}
                     selection={selection}
+                    issues={layerIssues}
                     onSelect={select}
                     onHover={setLayerHover}
+                  />
+                ) : panel === "issues" ? (
+                  <IssuesPanel
+                    deck={deck}
+                    version={state.version}
+                    lint={state.lint}
+                    currentSlideId={current.id}
+                    onReveal={reveal}
                   />
                 ) : (
                   <HistoryPanel

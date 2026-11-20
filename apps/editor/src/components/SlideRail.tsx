@@ -1,4 +1,4 @@
-import type { Deck } from "@veloce/core";
+import type { Deck, LintSeverity } from "@veloce/core";
 import { Copy, Plus, Trash } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import { run } from "../actions.js";
@@ -12,6 +12,8 @@ interface Props {
   selectedId: string | null;
   /** Slides the agent just changed (briefly highlighted). */
   recent: ReadonlySet<string>;
+  /** Lint problems per slide (D73): a badge on the thumbnail. */
+  issues?: ReadonlyMap<string, { count: number; worst: LintSeverity }>;
   onSelect(slideId: string): void;
 }
 
@@ -21,6 +23,7 @@ export const SlideRail = memo(function SlideRail({
   deckId,
   selectedId,
   recent,
+  issues,
   onSelect,
 }: Props) {
   const selectedRef = useRef<HTMLButtonElement>(null);
@@ -47,7 +50,11 @@ export const SlideRail = memo(function SlideRail({
       <ol ref={listRef} className={drag ? "is-dragging" : undefined}>
         {deck.slides.map((slide, i) => {
           const selected = slide.id === selectedId;
-          const name = `Slide ${i + 1}${slide.name ? `: ${slide.name}` : ""}`;
+          const badge = issues?.get(slide.id);
+          const problems = badge
+            ? `, ${badge.count} ${badge.count === 1 ? "problem" : "problems"}`
+            : "";
+          const name = `Slide ${i + 1}${slide.name ? `: ${slide.name}` : ""}${problems}`;
           return (
             <li
               key={slide.id}
@@ -71,6 +78,11 @@ export const SlideRail = memo(function SlideRail({
                   padding={0}
                   lazy
                 />
+                {badge && (
+                  <span className={`thumb-issues is-${badge.worst}`} aria-hidden="true">
+                    {badge.count}
+                  </span>
+                )}
               </button>
               <div className="thumb-actions">
                 <button
