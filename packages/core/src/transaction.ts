@@ -58,6 +58,12 @@ export type TransactionResult =
       transaction: Transaction;
       /** Ops that undo the whole transaction, in the order to apply them. */
       inverse: Op[];
+      /**
+       * Undo and redo only: the ID of the transaction this one takes back (an undo reverses
+       * the change, a redo reverses that undo). Lets a server follow a change through undo
+       * and redo, e.g. to know a revert was undone.
+       */
+      reverses?: string;
     }
   | { ok: false; error: TransactionError };
 

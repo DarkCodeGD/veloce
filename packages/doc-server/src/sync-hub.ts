@@ -48,8 +48,27 @@ export class SyncHub {
       if (event.type === "decks") {
         safeSend({ type: "decks", decks: event.decks, activeDeckId: event.activeDeckId });
       } else if (event.change.deckId === deckId) {
-        const { deckId: id, version, origin: from, label, ops, at } = event.change;
-        safeSend({ type: "change", deckId: id, version, origin: from, label, ops, at });
+        const {
+          deckId: id,
+          version,
+          origin: from,
+          label,
+          ops,
+          at,
+          reverts,
+          restores,
+        } = event.change;
+        safeSend({
+          type: "change",
+          deckId: id,
+          version,
+          origin: from,
+          label,
+          ops,
+          at,
+          ...(reverts && { reverts }),
+          ...(restores && { restores }),
+        });
       }
     });
 
@@ -110,6 +129,11 @@ export class SyncHub {
             return;
           case "transaction": {
             const result = deck.apply({ origin, label: message.label, ops: message.ops });
+            respond(message.requestId, result, deck.version);
+            return;
+          }
+          case "revert": {
+            const result = deck.revert(message.versions, origin);
             respond(message.requestId, result, deck.version);
             return;
           }

@@ -30,6 +30,19 @@ const titleSlide = (title = "Hello") =>
     children: [element("text", { content: title, style: "$text.h1" }, { id: "title" })],
   });
 
+/** A fake editor tab: records what the hub sends it. */
+function client(hub: SyncHub) {
+  const inbox: ServerMessage[] = [];
+  const conn = hub.connect((m) => inbox.push(structuredClone(m)));
+  const send = async (message: unknown) => {
+    conn.receive(JSON.stringify(message));
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  const last = <T extends ServerMessage["type"]>(type: T) =>
+    inbox.filter((m): m is Extract<ServerMessage, { type: T }> => m.type === type).at(-1);
+  return { inbox, conn, send, last };
+}
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "veloce-ws-"));
   logs.length = 0;
@@ -368,18 +381,6 @@ describe("Workspace", () => {
 });
 
 describe("SyncHub", () => {
-  function client(hub: SyncHub) {
-    const inbox: ServerMessage[] = [];
-    const conn = hub.connect((m) => inbox.push(structuredClone(m)));
-    const send = async (message: unknown) => {
-      conn.receive(JSON.stringify(message));
-      await new Promise((r) => setTimeout(r, 0));
-    };
-    const last = <T extends ServerMessage["type"]>(type: T) =>
-      inbox.filter((m): m is Extract<ServerMessage, { type: T }> => m.type === type).at(-1);
-    return { inbox, conn, send, last };
-  }
-
   it("syncs snapshots and changes, stamps the user origin, and keeps undo per origin", async () => {
     const ws = await open();
     const deck = await ws.create({ title: "Live" });
@@ -507,6 +508,158 @@ describe("SyncHub", () => {
     }
     expect(deck.history).toHaveLength(HISTORY_LIMIT);
     expect(deck.history[0]?.label).toBe("n0"); // the 4 earlier entries dropped off
+    late.conn.close();
+    await ws.close();
+  });
+});
+
+describe("Reverting agent changes", () => {
+  const secondSlide = () =>
+    createSlide({
+      id: "s2",
+      rootId: "r2",
+      children: [element("text", { content: "Two", style: "$text.h1" }, { id: "two" })],
+    });
+
+  /** A deck with: v1 agent adds s1, v2 agent retitles it, v3 user adds s2. */
+  async function scenario() {
+    const ws = await open();
+    const deck = await ws.create({ title: "Review" });
+    deck.apply({
+      origin: "agent:claude",
+      label: "Add title",
+      ops: [{ op: "slide.insert", slide: titleSlide() }],
+    });
+    deck.apply({
+      origin: "agent:claude",
+      label: "Retitle",
+      ops: [{ op: "node.update", id: "title", set: { props: { content: "Agent" } } }],
+    });
+    deck.apply({
+      origin: "user",
+      label: "Add slide",
+      ops: [{ op: "slide.insert", slide: secondSlide() }],
+    });
+    return { ws, deck };
+  }
+  const content = (deck: { deck: Deck }) =>
+    (deck.deck.slides[0]?.root.children?.[0] as { props?: { content?: string } } | undefined)?.props
+      ?.content;
+
+  it("takes back an agent's changes as one user change, which the user's undo restores", async () => {
+    const { ws, deck } = await scenario();
+    const result = deck.revert([1, 2], "user");
+    expect(result.ok).toBe(true);
+    expect(deck.deck.slides.map((s) => s.id)).toEqual(["s2"]); // the user's slide survives
+    expect(deck.history.at(-1)).toMatchObject({
+      version: 4,
+      origin: "user",
+      label: "Revert 2 AI changes",
+      reverts: [2, 1],
+      removedSlideIds: ["s1"],
+    });
+    expect(deck.history.filter((e) => e.reverted).map((e) => e.version)).toEqual([1, 2]);
+    expect(deck.removedBy("s1")).toBe("user");
+
+    // Ctrl+Z: the revert was the user's own step, so it comes back, marks cleared.
+    expect(deck.undo("user")?.ok).toBe(true);
+    expect(content(deck)).toBe("Agent");
+    expect(deck.history.at(-1)).toMatchObject({ restores: [2, 1] });
+    expect(deck.history.some((e) => e.reverted)).toBe(false);
+    expect(deck.removedBy("s1")).toBeUndefined();
+
+    // Redo follows the chain: reverted again.
+    expect(deck.redo("user")?.ok).toBe(true);
+    expect(deck.history.at(-1)).toMatchObject({ reverts: [2, 1] });
+    expect(deck.history.filter((e) => e.reverted).map((e) => e.version)).toEqual([1, 2]);
+    await ws.close();
+  });
+
+  it("reverts a single change on top of later edits to other fields", async () => {
+    const { ws, deck } = await scenario();
+    deck.apply({
+      origin: "user",
+      label: "Fade",
+      ops: [{ op: "node.update", id: "title", set: { opacity: 0.5 } }],
+    });
+    expect(deck.revert([2], "user")).toMatchObject({ ok: true });
+    expect(deck.history.at(-1)?.label).toBe('Revert "Retitle"');
+    expect(content(deck)).toBe("Hello"); // the agent's retitle is gone…
+    expect(deck.deck.slides[0]?.root.children?.[0]).toMatchObject({ opacity: 0.5 }); // …the fade stays
+    await ws.close();
+  });
+
+  it("refuses what it can't revert, changing nothing", async () => {
+    const { ws, deck } = await scenario();
+    const version = deck.version;
+    expect(deck.revert([3], "user")).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(deck.revert([99], "user")).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(deck.revert([2], "user").ok).toBe(true);
+    expect(deck.revert([2], "user")).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT", message: '"Retitle" is already reverted' },
+    });
+    // The user deleted the agent's slide: its retitle can't be taken back any more.
+    deck.apply({ origin: "user", label: "Delete", ops: [{ op: "slide.remove", id: "s1" }] });
+    const failed = deck.revert([1], "user");
+    expect(failed).toMatchObject({ ok: false, error: { message: /^Can't revert: / } });
+    expect(deck.version).toBe(version + 2); // just the revert and the delete
+    await ws.close();
+  });
+
+  it("remembers who removed which node, and from where, until it comes back", async () => {
+    const { ws, deck } = await scenario();
+    // The user deletes s2's text: recorded, and listed on the change.
+    deck.apply({ origin: "user", label: "Delete", ops: [{ op: "node.remove", id: "two" }] });
+    expect(deck.removedNode("two")).toEqual({
+      origin: "user",
+      slideId: "s2",
+      withSlide: false,
+      label: "Two",
+    });
+    expect(deck.history.at(-1)?.removedNodeIds).toEqual(["two"]);
+    // Reverting the agent's slide takes its nodes along: listed as the slide, not each node.
+    expect(deck.revert([1, 2], "user").ok).toBe(true);
+    expect(deck.removedNode("title")).toMatchObject({
+      origin: "user",
+      slideId: "s1",
+      withSlide: true,
+    });
+    expect(deck.history.at(-1)?.removedNodeIds).toBeUndefined();
+    // Undo brings them back: no longer removed.
+    deck.undo("user");
+    expect(deck.removedNode("title")).toBeUndefined();
+    // A node moved to another slide in the same change isn't gone.
+    deck.apply({
+      origin: "agent:claude",
+      label: "Move",
+      ops: [{ op: "node.move", id: "title", parentId: "r2" }],
+    });
+    expect(deck.removedNode("title")).toBeUndefined();
+    expect(deck.history.at(-1)?.removedNodeIds).toBeUndefined();
+    await ws.close();
+  });
+
+  it("over sync: a revert message, and change messages that mark what they revert", async () => {
+    const { ws, deck } = await scenario();
+    const hub = new SyncHub(ws);
+    const tab = client(hub);
+    await tab.send({ type: "open", deckId: deck.id });
+    await tab.send({ type: "revert", requestId: "r1", deckId: deck.id, versions: [2] });
+    expect(tab.last("result")).toMatchObject({ ok: true, version: 4 });
+    expect(tab.last("change")).toMatchObject({ origin: "user", reverts: [2] });
+    await tab.send({ type: "undo", requestId: "r2", deckId: deck.id });
+    expect(tab.last("change")).toMatchObject({ restores: [2] });
+    await tab.send({ type: "revert", requestId: "r3", deckId: deck.id, versions: [3] });
+    expect(tab.last("result")).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+
+    // A tab opening later sees the marks in its snapshot.
+    await tab.send({ type: "revert", requestId: "r4", deckId: deck.id, versions: [1, 2] });
+    const late = client(hub);
+    await late.send({ type: "open", deckId: deck.id });
+    const history = late.last("snapshot")?.history ?? [];
+    expect(history.filter((e) => e.reverted).map((e) => e.version)).toEqual([1, 2]);
+    tab.conn.close();
     late.conn.close();
     await ws.close();
   });

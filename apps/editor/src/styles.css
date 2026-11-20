@@ -619,6 +619,11 @@ textarea::placeholder {
   color: var(--live);
 }
 
+.history-author-name {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Each author's run of changes stands apart from the next. */
 .history-group + .history-group {
   margin-top: 10px;
@@ -670,6 +675,72 @@ textarea::placeholder {
   background: var(--panel-raised);
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+
+/* Revert controls (D71): quiet until wanted. */
+.history-revert-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin: -4px -6px -4px 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.history-revert-all:hover,
+.history-revert:hover {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.history-item {
+  position: relative;
+}
+
+.history-revert {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+/* Shown on hover and for keyboard users; touch screens always show it. */
+.history-item:hover .history-revert,
+.history-revert:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .history-revert {
+    opacity: 1;
+  }
+}
+
+/* Room for the revert button, so long labels end before it. */
+.history-item:has(.history-revert) .history-entry {
+  padding-right: 38px;
+}
+
+.history-item.is-reverted .history-label {
+  color: var(--text-muted);
+  text-decoration: line-through;
 }
 
 .history-hint {

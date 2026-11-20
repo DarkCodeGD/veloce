@@ -18,6 +18,8 @@ interface HistoryEntry {
   label: string;
   /** Ops that perform this entry's undo (on the undo stack) or redo (on the redo stack). */
   ops: Op[];
+  /** ID of the transaction these ops take back (reported as `reverses` when they run). */
+  reverses: string;
 }
 
 interface Stacks {
@@ -61,7 +63,11 @@ export class DeckDocument {
     this.#commit(result.deck);
     if (options.recordHistory !== false) {
       const stacks = this.#stacksFor(result.transaction.origin);
-      this.#push(stacks.undo, { label: result.transaction.label, ops: result.inverse });
+      this.#push(stacks.undo, {
+        label: result.transaction.label,
+        ops: result.inverse,
+        reverses: result.transaction.id,
+      });
       stacks.redo.length = 0; // a new change invalidates that origin's redo history
     }
     return result;
@@ -134,8 +140,12 @@ export class DeckDocument {
     }
     this.#commit(result.deck);
     // The inverse of an undo is exactly its redo (and vice versa), computed against the current deck.
-    this.#push(stacks[to], { label: entry.label, ops: result.inverse });
-    return result;
+    this.#push(stacks[to], {
+      label: entry.label,
+      ops: result.inverse,
+      reverses: result.transaction.id,
+    });
+    return { ...result, reverses: entry.reverses };
   }
 
   #commit(deck: Deck): void {

@@ -126,6 +126,21 @@ describe("DeckDocument: per-origin undo/redo", () => {
     expect(doc.canRedo("agent:claude")).toBe(true);
   });
 
+  it("says which transaction an undo or redo takes back, through any number of round trips", () => {
+    const doc = new DeckDocument(fixtureDeck());
+    const applied = doc.apply(update("user", "title", 0.5));
+    if (!applied.ok) throw new Error("apply failed");
+    expect(applied.reverses).toBeUndefined();
+
+    const undone = doc.undo("user");
+    expect(undone?.ok && undone.reverses).toBe(applied.transaction.id);
+    const redone = doc.redo("user");
+    // A redo takes back the undo (not the original change).
+    expect(redone?.ok && redone.reverses).toBe(undone?.ok && undone.transaction.id);
+    const again = doc.undo("user");
+    expect(again?.ok && again.reverses).toBe(redone?.ok && redone.transaction.id);
+  });
+
   it("fails cleanly when someone else's change makes an undo impossible", () => {
     const doc = new DeckDocument(fixtureDeck());
     doc.apply(update("user", "title", 0.5));

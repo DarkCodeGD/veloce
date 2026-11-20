@@ -28,6 +28,7 @@ Rules:
 - One idea per slide, short text, strong hierarchy. Detail goes in speaker notes.
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
+- Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
 Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("element/text").`;
 

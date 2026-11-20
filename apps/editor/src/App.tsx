@@ -1,7 +1,7 @@
 import type { Slide } from "@veloce/core";
 import { History, Layers, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { redo, run, undo } from "./actions.js";
+import { redo, revertAgentChanges, run, undo } from "./actions.js";
 import { alignSelection, distributeSelection } from "./align-actions.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
@@ -303,6 +303,7 @@ export function App() {
                     slides={slides}
                     currentSlideId={current.id}
                     onGoToSlide={setSlideId}
+                    onRevert={revertAgentChanges}
                   />
                 )}
               </div>

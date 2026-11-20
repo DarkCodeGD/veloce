@@ -11,6 +11,7 @@
  * locally and commit one transaction at the end.
  */
 import {
+  appendHistory,
   applyChange,
   type Deck,
   type DeckListing,
@@ -109,6 +110,16 @@ export class SyncClient {
     return this.#history("redo");
   }
 
+  /**
+   * Revert agents' changes (by history version) as one change of your own, so your undo
+   * brings them back. Rejects with the server's reason (too old, already reverted…).
+   */
+  revert(versions: number[]): Promise<void> {
+    const deckId = this.#state.deckId;
+    if (!deckId) return Promise.reject(new SyncError({ message: "No deck is open" }));
+    return this.#request((requestId) => ({ type: "revert", requestId, deckId, versions }));
+  }
+
   async #history(type: "undo" | "redo"): Promise<boolean> {
     const deckId = this.#state.deckId;
     if (!deckId) return false;
@@ -196,18 +207,24 @@ export class SyncClient {
           return;
         }
         const before = new Set(state.deck.slides);
+        const after = new Set(next.deck.slides.map((s) => s.id));
+        const removedSlideIds = state.deck.slides.filter((s) => !after.has(s.id)).map((s) => s.id);
         const entry: HistoryEntry = {
           version: next.version,
           origin: message.origin,
           label: message.label,
           slideIds: next.deck.slides.filter((s) => !before.has(s)).map((s) => s.id),
+          ...(removedSlideIds.length && { removedSlideIds }),
           at: message.at ?? Date.now(),
+          ...(message.reverts && { reverts: message.reverts }),
+          ...(message.restores && { restores: message.restores }),
         };
         this.#set({
           deck: next.deck,
           version: next.version,
           lastChange: entry,
-          history: [...state.history, entry].slice(-HISTORY_LIMIT),
+          // Marks the changes a revert (or its undo) took back or brought back.
+          history: appendHistory(state.history, entry, HISTORY_LIMIT),
         });
         return;
       }

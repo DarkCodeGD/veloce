@@ -1460,3 +1460,74 @@ fixes confirmed, F7 partly).
    "most recently used first", which is what the sort does: opening a deck counts.
 5. Docs: node.insert takes the upsert_slide node shape; the empty-space threshold (40%, unless
    the bands are about equal).
+
+## D71 — Reverting AI changes, and agents hearing about it
+
+**Status:** Accepted (2026-11-20). First item of round 5's parity checklist.
+
+1. **Parity means the document, not the tools.** Whatever an agent can set, the user can see
+   and change in the editor; otherwise the AI hands over a deck only the AI can fix. Tools
+   that exist because the agent can't see (`render_preview`, `get_docs`, `get_deck_summary`,
+   `list_element_types`) get no editor twin.
+2. **Revert is the user's own change.** The History panel's Revert (one change, or "Revert
+   all" on an agent's run) applies the stored inverses of those changes, newest first, as a
+   `user` transaction. It doesn't pop the agent's undo stack. **Why:** the user's Ctrl+Z (or
+   the toast's Undo) brings the work back, undo stays per origin (golden rule #7), and the
+   agent's stack stays consistent. Inverses only touch the fields a change set, so later
+   edits to other fields survive, like any undo; when the deck moved on so a change can't be
+   taken back (its slide was deleted), the revert fails and nothing changes. Only agents'
+   changes, still in effect, within the last 500 (the server's history keeps each change's
+   inverse; asset bytes a revert could add back are kept from the sweep).
+3. **Reverted state follows undo and redo.** Core's undo/redo results now say which
+   transaction they take back (`reverses`), so the server knows when a revert was undone or
+   redone. Change messages and history entries carry `reverts` / `restores`, entries a
+   `reverted` flag (struck through, "Reverted" chip). Shared `appendHistory` keeps client and
+   server marking alike.
+4. **No "are you sure?".** Like other destructive edits, a toast with Undo. If the revert
+   touched slides you edited after the agent (a reverted "Add slide" takes your edits on it
+   too), the toast names them.
+5. **Agents hear about it, in-band.** Every tool result (errors too) starts with what others
+   changed since that session's last call: who, labels, slides changed or removed, and
+   reverts of its own work with "that's the user's decision: don't redo it unless they ask".
+   **Why in-band:** MCP is request/response and clients rarely show server-pushed
+   notifications to the model, so a digest in the next result is what reliably lands. The
+   session tracks the versions it made, so it never hears about its own work (another
+   session with the same client name is "another session of you").
+6. **upsert_slide won't resurrect a removed slide.** A slide another origin removed (deleted
+   or reverted) is refused unless `overwrite: true`. **Why:** without it, an agent rebuilding
+   from its own plan fights the user, the failure mode that made this a package deal.
+7. **Kept out:** reviewing changes before they land (suggestion mode), reverting per slide,
+   and reverting the user's own older changes (Ctrl+Z covers those).
+
+## D72 — The revert retest: errors and digests that don't mislead
+
+**Status:** Accepted (2026-11-20). From REPORT-3 (all 12 agent steps passed; these are its
+findings).
+
+1. **An ID someone removed says so.** When an op fails on a node or slide that another change
+   removed this session, the error says who removed it and where (`Node "sub4"
+   ("Questions?") was deleted by the user (it was on slide s4)`), and gives no nearest-match
+   suggestion. **Why:** core's "did you mean sub1?" pointed the agent at a node on another
+   slide that the user had just edited, so an agent fixing errors on autopilot would have
+   overwritten the user's work. That was the one real temptation in the run. The doc-server
+   keeps who removed each node (walking only the slides a change touched, at most 10,000
+   entries) and lists the removed nodes on each history entry.
+2. **The digest names removed nodes** (`removed node sub4 ("Questions?")`), so the agent
+   knows which IDs are dead without calling get_slide on every slide.
+3. **The digest doesn't lose anything.** Each change is reported once, so whatever the digest
+   cuts is never seen. A revert undone right away becomes one "…, then undid that (no net
+   change)" line (with no "user's decision" rule). The newest lines are kept, and older ones
+   fold into an "Earlier: N more updates" line naming the slides they changed or removed.
+   Before, it kept the oldest 8 and said "…and 7 more", which cut the newest changes.
+4. **Wording:** a restore says "restored slides", labels' inner quotes become single quotes,
+   and the digest shares the first text block with a blank line before the result, since
+   clients join blocks without a break. A text edit's History label names the new text
+   ("Edit text "Edited by me""), or the layer's name if it has one.
+5. **The revert toast counts only real edits.** Your own reverts and undos of them are
+   user-origin but only move AI content around, so they no longer count as "edited since".
+   Slides are numbered as they were before the revert, so a removed slide is "slide 1",
+   not "a slide".
+6. **undo_agent_changes** says which slides it changed or removed, and returns lint like the
+   other editing tools.
+7. **Kept out:** text diffs in the digest (`"Revert Test" → "Edited by me"`). They'd cost tokens
+   on every call, and get_slide is one call away.

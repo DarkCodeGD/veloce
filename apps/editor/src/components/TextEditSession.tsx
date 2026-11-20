@@ -21,6 +21,7 @@ import { reportError, run } from "../actions.js";
 import { updateNode } from "../model/commands.js";
 import type { Point } from "../model/geometry.js";
 import { type DocNode, fromDoc, toContent, toDoc } from "../model/rich-text-doc.js";
+import { editLabel } from "../model/slide-index.js";
 import { samePatch, type TextBox, textPatch } from "../model/text-box.js";
 import { setPreview } from "../preview.js";
 import { TextToolbar } from "./TextToolbar.js";
@@ -54,8 +55,11 @@ interface Props {
   /** The layer's own style/color/alignment when editing started (what plain text shows). */
   box: TextBox;
   theme: Theme;
-  /** For the undo label. */
-  label: string;
+  /**
+   * The layer's own name, for the undo label. Unnamed layers are named by their text, and
+   * that's the new text: "Edit text "Edited by me"", not the words that were replaced.
+   */
+  name: string | undefined;
   caret: Caret;
   /** Overlay pixels: the toolbar sits above this point (the layer's top-left on screen). */
   anchor: Point | null;
@@ -74,7 +78,7 @@ export function TextEditSession(props: Props) {
   const escapeTrap = useRef<(() => boolean) | null>(null);
 
   useLayoutEffect(() => {
-    const { stage, nodeId, content, caret, label, box } = latest.current;
+    const { stage, nodeId, content, caret, name, box } = latest.current;
     const layer = stage.querySelector<HTMLElement>(`[${NODE_ID_ATTR}="${CSS.escape(nodeId)}"]`);
     if (!layer) {
       latest.current.onExit();
@@ -150,7 +154,11 @@ export function TextEditSession(props: Props) {
       const next = textPatch(fromDoc(doc), box);
       const baseline = textPatch(fromDoc(toDoc(content)), box);
       if (!samePatch(next, baseline) && latest.current.exists()) {
-        const command = updateNode(nodeId, { props: next }, `Edit text "${label}"`);
+        const command = updateNode(
+          nodeId,
+          { props: next },
+          `Edit text "${editLabel(name, next.content)}"`,
+        );
         // Keep showing the edit until the server's version arrives (no flash of the old text).
         void run(command).finally(() => setPreview(null));
       } else {

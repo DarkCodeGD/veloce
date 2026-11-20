@@ -26,7 +26,7 @@ import {
   selectParents,
   selectSiblings,
 } from "./selection.js";
-import { chainOf, indexSlide, nodeLabel, topmost } from "./slide-index.js";
+import { chainOf, editLabel, indexSlide, nodeLabel, topmost } from "./slide-index.js";
 
 const text = (id: string, content: string, extra = {}) =>
   element("text", { content }, { id, ...extra });
@@ -64,6 +64,13 @@ describe("selection", () => {
     expect(topmost(index, ["title", "card", "footer"])).toEqual(["card", "footer"]);
     expect(nodeLabel(index.nodes.get("title")?.node as never)).toBe("Hello world");
     expect(nodeLabel(index.nodes.get("card")?.node as never)).toBe("Frame");
+  });
+
+  it("labels a text edit by the layer's name, else by its new text", () => {
+    expect(editLabel("Title", "Edited by me")).toBe("Title");
+    expect(editLabel(undefined, "Edited   by\nme")).toBe("Edited by me");
+    expect(editLabel(undefined, "x".repeat(50))).toBe(`${"x".repeat(39)}…`);
+    expect(editLabel(undefined, "  ")).toBe("Text");
   });
 
   it("picks the top-level layer first, then drills in with double-click", () => {

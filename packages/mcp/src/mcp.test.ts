@@ -177,7 +177,10 @@ describe("building a deck", () => {
       ops: [{ op: "node.update", id: "headline", set: { props: { content: "ACME" } } }],
     });
     const undo = await call("undo_agent_changes");
-    expect(undo.text).toBe('Undid 1 step: "Shorten tagline".');
+    // The user's edit is reported first (D71); the undo itself left it alone.
+    expect(undo.text).toMatch(
+      /^Since your last call[\s\S]*"User edit"[\s\S]*\n\nUndid 1 step: "Shorten tagline"\. Changed: intro\.\n\nLint:/,
+    );
     const summary = (await call("get_deck_summary")).text;
     expect(summary).toMatch(/headline: text "ACME"/);
     expect(summary).not.toMatch(/foot/);
@@ -543,5 +546,107 @@ describe("themes, docs, previews and decks", () => {
     // …which doesn't move the first agent either.
     expect((await call("get_deck_summary")).text).toMatch(/^Deck "Mine"/);
     await other.close();
+  });
+});
+
+describe("working alongside the user (D71)", () => {
+  const text = (content: string) => ({ type: "text", props: { content } });
+
+  it("tells the agent what the user changed and reverted, once, and won't resurrect their removals", async () => {
+    await connect();
+    await call("create_deck", { title: "Shared" });
+    await call("upsert_slide", { slide: { id: "s1", children: [{ id: "t", ...text("One") }] } });
+    const added = await call("upsert_slide", { slide: { id: "s2", children: [text("Two")] } });
+    // The agent's own changes are never reported back to it.
+    expect(added.text).not.toMatch(/Since your last call/);
+    const open = await workspace.get(workspace.activeDeckId ?? "");
+    const addS2 = open.history.find((e) => e.label === "Add slide s2")?.version ?? 0;
+
+    // The user tweaks s1 and reverts the agent's second slide from the History panel.
+    open.apply({
+      origin: "user",
+      label: "Edit text",
+      ops: [{ op: "node.update", id: "t", set: { props: { content: "Uno" } } }],
+    });
+    expect(open.revert([addS2], "user").ok).toBe(true);
+
+    const next = await call("get_deck_summary");
+    expect(next.content[0]?.text).toMatch(/^Since your last call, others changed this deck:/);
+    expect(next.text).toContain('- The user: "Edit text"; changed slide s1.');
+    expect(next.text).toContain(
+      '- The user reverted your change "Add slide s2"; removed slide s2.',
+    );
+    expect(next.text).toMatch(/A revert is the user's decision: don't redo that work/);
+    expect(next.text).toMatch(/get_slide before editing them/);
+    // Said once: the next call has nothing new to report.
+    expect((await call("get_deck_summary")).text).not.toMatch(/Since your last call/);
+
+    // Rebuilding the reverted slide is refused, unless the user asked for it back.
+    const again = await call("upsert_slide", { slide: { id: "s2", children: [text("Two")] } });
+    expect(again.isError).toBe(true);
+    expect(again.text).toMatch(/Slide s2 was removed by the user[\s\S]*How to fix: Leave it out/);
+    const asked = await call("upsert_slide", {
+      overwrite: true,
+      slide: { id: "s2", children: [text("Two")] },
+    });
+    expect(asked.isError).toBe(false);
+  });
+
+  it("reports changes on errors too, and an undone revert", async () => {
+    await connect();
+    await call("create_deck", { title: "Shared" });
+    await call("upsert_slide", { slide: { id: "s1", children: [{ id: "t", ...text("One") }] } });
+    const open = await workspace.get(workspace.activeDeckId ?? "");
+    const version = open.version;
+    expect(open.revert([version], "user").ok).toBe(true);
+    expect(open.undo("user")?.ok).toBe(true);
+    open.apply({ origin: "user", label: "Delete title", ops: [{ op: "node.remove", id: "t" }] });
+
+    // The agent edits a node the user just deleted: the error comes with the why.
+    const failed = await call("apply_ops", {
+      label: "Fix title",
+      ops: [{ op: "node.update", id: "t", set: { props: { content: "1" } } }],
+    });
+    expect(failed.isError).toBe(true);
+    expect(failed.content[0]?.text).toMatch(/^Since your last call/);
+    // A revert undone right away is one line: nothing to act on (and no "decision" rule).
+    expect(failed.text).toContain(
+      '- The user reverted your change "Add slide s1", then undid that (no net change).',
+    );
+    expect(failed.text).not.toMatch(/decision/);
+    expect(failed.text).toContain(
+      '- The user: "Delete title"; changed slide s1; removed node t ("One").',
+    );
+    // The error says the user deleted it, with no "did you mean" pointing at other content;
+    // a blank line separates it from the digest.
+    expect(failed.text).toMatch(
+      /get_slide before editing them\.\n\nError: Node "t" \("One"\) was deleted by the user \(it was on slide s1\)\.\nAt: ops\[0\]\nHow to fix: Don't recreate it/,
+    );
+    expect(failed.text).not.toMatch(/Did you mean/);
+
+    // A slide the user removed, and nodes that went with it, say so too.
+    await call("upsert_slide", { slide: { id: "s2", children: [{ id: "u", ...text("Two") }] } });
+    open.apply({ origin: "user", label: "Delete slide", ops: [{ op: "slide.remove", id: "s2" }] });
+    const onSlide = await call("apply_ops", {
+      label: "Edit",
+      ops: [{ op: "node.update", id: "u", set: { opacity: 0.5 } }],
+    });
+    expect(onSlide.text).toContain(
+      'Error: Node "u" ("Two") was on slide s2, which the user removed.',
+    );
+    const slideOp = await call("apply_ops", {
+      label: "Rename",
+      ops: [{ op: "slide.update", id: "s2", set: { name: "x" } }],
+    });
+    expect(slideOp.text).toContain("Error: Slide s2 was removed by the user.");
+
+    // undo_agent_changes says what it changed, with lint like the other edits.
+    await call("upsert_slide", { slide: { id: "s3", children: [text("Three")] } });
+    await call("apply_ops", {
+      label: "Fade",
+      ops: [{ op: "slide.update", id: "s3", set: { name: "Three" } }],
+    });
+    const undone = await call("undo_agent_changes");
+    expect(undone.text).toMatch(/^Undid 1 step: "Fade"\. Changed: s3\.\n\n.*(lint|issue)/is);
   });
 });

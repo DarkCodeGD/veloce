@@ -2,7 +2,7 @@
  * A lookup table for one slide's node tree: parent, position and depth of every node.
  * Cached per slide object; structural sharing means an unchanged slide is never re-indexed.
  */
-import type { FrameNode, Node, Slide } from "@veloce/core";
+import { type FrameNode, type Node, type Slide, type TextContent, toPlainText } from "@veloce/core";
 
 export interface IndexedNode {
   node: Node;
@@ -80,4 +80,15 @@ export function nodeLabel(node: Node): string {
   const snippet = text.replace(/\s+/g, " ").trim();
   if (snippet) return snippet.length > 40 ? `${snippet.slice(0, 39)}…` : snippet;
   return node.type.charAt(0).toUpperCase() + node.type.slice(1);
+}
+
+/**
+ * What the history calls an edited text layer: its name, else a snippet of its *new* text
+ * ("Edit text "Edited by me"", not the words that were replaced).
+ */
+export function editLabel(name: string | undefined, content: TextContent): string {
+  if (name) return name;
+  const text = toPlainText(content).replace(/\s+/g, " ").trim();
+  if (!text) return "Text";
+  return text.length > 40 ? `${text.slice(0, 39)}…` : text;
 }

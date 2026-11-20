@@ -16,15 +16,18 @@ import {
   BUILTIN_THEMES,
   type Deck,
   findBuiltinTheme,
+  findNode,
   findSlide,
   fontStackFor,
   formatBytes,
   formatIssues,
+  type HistoryEntry,
   lintDeck,
   MAX_ASSET_BYTES,
   type Node,
   notFoundHint,
   type Op,
+  type Origin,
   type SlideMeasurement,
   type Theme,
   ThemeSchema,
@@ -34,6 +37,7 @@ import {
 import type { OpenDeck, Optimization, RenderService, Workspace } from "@veloce/doc-server";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { z } from "zod";
+import { othersChanges } from "./changes.js";
 import { docTopics, getDocs, paletteLine } from "./docs.js";
 import { normalizeOp, normalizeSlide, OpInputSchema, SlideInputSchema } from "./input.js";
 import { boundsTable, deckSummary, formatLint, slideOutline } from "./summary.js";
@@ -65,12 +69,48 @@ export class AgentSession {
    */
   deckId: string | null = null;
 
+  /** The deck version this session last caught up to, per deck. */
+  readonly #seen = new Map<string, number>();
+  /** `deckId@version` of every change this session made (its own never show in the digest). */
+  readonly #mine = new Set<string>();
+
   created(deckId: string, slideId: string): boolean {
     return this.#created.has(`${deckId}/${slideId}`);
   }
 
   markCreated(deckId: string, slideIds: Iterable<string>): void {
     for (const id of slideIds) this.#created.add(`${deckId}/${id}`);
+  }
+
+  /** Record that this session made `version` of `deckId`. */
+  markMine(deckId: string, version: number): void {
+    this.#mine.add(`${deckId}@${version}`);
+  }
+
+  isMine(deckId: string, version: number): boolean {
+    return this.#mine.has(`${deckId}@${version}`);
+  }
+
+  /**
+   * Changes others made to `deckId` since this session last caught up (oldest first), and
+   * whether some of them already fell off the bounded history. Moves the mark to `version`.
+   * The first look at a deck reports nothing: the agent is about to read it anyway.
+   */
+  catchUp(
+    deckId: string,
+    version: number,
+    history: readonly HistoryEntry[],
+  ): { entries: HistoryEntry[]; missedEarlier: boolean } {
+    const seen = this.#seen.get(deckId);
+    this.#seen.set(deckId, version);
+    // Unseen deck, or a version count that restarted (the deck was reloaded): nothing to diff.
+    if (seen === undefined || seen > version) return { entries: [], missedEarlier: false };
+    const entries = history.filter((e) => e.version > seen && !this.isMine(deckId, e.version));
+    const oldest = history[0]?.version;
+    return {
+      entries,
+      missedEarlier: version > seen && (oldest === undefined || oldest > seen + 1),
+    };
   }
 }
 
@@ -227,6 +267,47 @@ function presentError(error: ErrorLike, { generated, asSlide }: CommitErrors): E
   return { ...error, message, path: path || undefined };
 }
 
+const removerName = (remover: Origin, self: Origin) =>
+  remover === "user" ? "the user" : remover === self ? "an earlier change of yours" : remover;
+
+/**
+ * When an op fails on an ID that someone removed this session, say that instead of core's
+ * "not found, did you mean…?" (D72): a nearest-match suggestion there points the agent at
+ * other content, often the user's, and invites it to overwrite that.
+ */
+function removedTarget(open: OpenDeck, op: unknown, self: Origin): ErrorLike | null {
+  const {
+    op: kind,
+    id,
+    parentId,
+  } = (op ?? {}) as { op?: string; id?: unknown; parentId?: unknown };
+  const ids = [id, parentId].filter((v): v is string => typeof v === "string");
+  for (const target of ids) {
+    if (kind?.startsWith("slide.") && target === id) {
+      const remover = open.removedBy(target);
+      if (!remover || findSlide(open.deck, target)) continue;
+      return {
+        message: `Slide ${target} was removed by ${removerName(remover, self)}.`,
+        hint: "Leave it out unless the user asks for it back. get_deck_summary shows the slides there are now.",
+      };
+    }
+    const removal = open.removedNode(target);
+    if (!removal || findNode(open.deck, target)) continue;
+    const what = `Node "${target}"${removal.label ? ` ("${removal.label}")` : ""}`;
+    const by = removerName(removal.origin, self);
+    return removal.withSlide
+      ? {
+          message: `${what} was on slide ${removal.slideId}, which ${by} removed.`,
+          hint: "Leave it out unless the user asks for that slide back. get_deck_summary shows the slides there are now.",
+        }
+      : {
+          message: `${what} was deleted by ${by} (it was on slide ${removal.slideId}).`,
+          hint: `Don't recreate it, or edit something else in its place, unless the user asks. get_slide("${removal.slideId}") shows what's there now.`,
+        };
+  }
+  return null;
+}
+
 async function commit(
   ctx: ToolContext,
   open: OpenDeck,
@@ -239,8 +320,13 @@ async function commit(
   if (!result.ok) {
     const at = result.error.opIndex !== undefined ? `ops[${result.error.opIndex}]` : undefined;
     const raw = { ...result.error, ...(at && !result.error.path && { path: at }) };
-    throw new ToolError(presentError(raw, errors));
+    const failed = result.error.opIndex === undefined ? undefined : ops[result.error.opIndex];
+    const gone = result.error.code === "NOT_FOUND" ? removedTarget(open, failed, ctx.origin) : null;
+    throw new ToolError(
+      gone ? { ...gone, ...(raw.path && { path: raw.path }) } : presentError(raw, errors),
+    );
   }
+  ctx.session.markMine(open.id, open.version);
   const existed = new Set(before.slides.map((s) => s.id));
   ctx.session.markCreated(
     open.id,
@@ -319,7 +405,7 @@ const upsertSlide = defineTool({
       .boolean()
       .optional()
       .describe(
-        "Replace a slide the user (or another agent) edited last. Only when they asked for a redo.",
+        "Replace a slide the user (or another agent) edited last, or bring back one they removed. Only when they asked for it.",
       ),
   }),
   async run({ slide: input, index, overwrite }, ctx) {
@@ -327,6 +413,13 @@ const upsertSlide = defineTool({
     const generated = new Set<string>();
     const normalized = normalizeSlide(input, generated);
     const existing = findSlide(open.deck, normalized.id);
+    const remover = open.removedBy(normalized.id);
+    if (!existing && !overwrite && remover && remover !== ctx.origin) {
+      throw new ToolError({
+        message: `Slide ${normalized.id} was removed by ${remover === "user" ? "the user" : remover} (deleted, or your change reverted); adding it back would undo their decision.`,
+        hint: "Leave it out, or ask the user. Pass overwrite: true only if they asked for it back. A slide with a new ID is fine if the user asked for new content.",
+      });
+    }
     if (existing && !overwrite) {
       const editor = open.lastEditor(normalized.id);
       const who =
@@ -687,19 +780,29 @@ const undoAgentChanges = defineTool({
   }),
   async run({ steps = 1 }, ctx) {
     const open = await currentDeck(ctx);
+    const before = open.deck;
     const undone: string[] = [];
     for (let i = 0; i < steps; i++) {
       const result = open.undo(ctx.origin);
       if (result === null) break;
       if (!result.ok) return errorResult(result.error);
+      ctx.session.markMine(open.id, open.version);
       undone.push(result.transaction.label.replace(/^Undo: /, ""));
     }
     if (!undone.length)
       return text(
         "Nothing to undo: you haven't changed this deck yet (or already undid everything).",
       );
+    const changed = changedSlides(before, open.deck);
+    const kept = new Set(open.deck.slides.map((s) => s.id));
+    const removed = before.slides.filter((s) => !kept.has(s.id)).map((s) => s.id);
+    const where = [
+      changed.length && `Changed: ${changed.join(", ")}.`,
+      removed.length && `Removed: ${removed.join(", ")}.`,
+    ].filter(Boolean);
     return text(
-      `Undid ${undone.length} step${undone.length === 1 ? "" : "s"}: ${undone.map((l) => `"${l}"`).join(", ")}.`,
+      `Undid ${undone.length} step${undone.length === 1 ? "" : "s"}: ${undone.map((l) => `"${l}"`).join(", ")}.${where.length ? ` ${where.join(" ")}` : ""}`,
+      changed.length ? await lintReport(ctx, open, changed) : "",
     );
   },
 });
@@ -838,11 +941,40 @@ export async function callTool(name: string, args: unknown, ctx: ToolContext): P
             : "Check the arguments against this tool's input schema.",
     });
   }
+  let result: ToolResult;
   try {
-    return await tool.run(parsed.data, ctx);
+    result = await tool.run(parsed.data, ctx);
   } catch (error) {
-    if (error instanceof ToolError) return errorResult(error.info);
-    if (error instanceof VeloceError) return errorResult(error.toJSON());
-    return errorResult({ message: error instanceof Error ? error.message : String(error) });
+    if (error instanceof ToolError) result = errorResult(error.info);
+    else if (error instanceof VeloceError) result = errorResult(error.toJSON());
+    else result = errorResult({ message: error instanceof Error ? error.message : String(error) });
   }
+  return withCatchUp(result, ctx);
+}
+
+/**
+ * Put what others changed since this session's last call at the top of `result` (D71), on
+ * errors too: a failed edit is often the first sign the user changed things underneath.
+ */
+async function withCatchUp(result: ToolResult, ctx: ToolContext): Promise<ToolResult> {
+  const deckId = ctx.session.deckId;
+  if (!deckId || !ctx.workspace.has(deckId)) return result;
+  const open = await ctx.workspace.get(deckId);
+  const history = open.history;
+  const { entries, missedEarlier } = ctx.session.catchUp(deckId, open.version, history);
+  const labels = new Map(history.map((e) => [e.version, e.label]));
+  const digest = othersChanges(entries, {
+    origin: ctx.origin,
+    mine: (version) => ctx.session.isMine(deckId, version),
+    labelOf: (version) => labels.get(version),
+    nodeLabel: (nodeId) => open.removedNode(nodeId)?.label,
+    missedEarlier,
+  });
+  if (!digest) return result;
+  // Into the first text block, so clients that join blocks without a break still separate them.
+  const [first, ...rest] = result.content;
+  if (first?.type === "text") {
+    return { ...result, content: [{ type: "text", text: `${digest}\n\n${first.text}` }, ...rest] };
+  }
+  return { ...result, content: [{ type: "text", text: digest }, ...result.content] };
 }

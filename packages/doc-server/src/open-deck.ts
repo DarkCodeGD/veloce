@@ -8,10 +8,17 @@ import {
   type Deck,
   DeckDocument,
   type HistoryEntry,
+  isAgentOrigin,
+  type Node,
   type Op,
   type Origin,
+  type RevertMarks,
+  type Slide,
   sha256Hex,
+  TextContentSchema,
   type TransactionResult,
+  toPlainText,
+  walkNodes,
 } from "@veloce/core";
 import type { DeckBundle } from "@veloce/format";
 import {
@@ -66,7 +73,7 @@ function renamed(name: string | undefined, extension: string): string | undefine
   return `${dot > 0 ? name.slice(0, dot) : name}.${extension}`;
 }
 
-export interface DeckChange {
+export interface DeckChange extends RevertMarks {
   deckId: string;
   version: number;
   origin: Origin;
@@ -75,9 +82,47 @@ export interface DeckChange {
   deck: Deck;
   /** Slides this change added or modified. */
   slideIds: string[];
+  /** Slides this change removed. */
+  removedSlideIds: string[];
   /** When it was applied (ms since the epoch). */
   at: number;
 }
+
+/** A history entry plus the ops that take it back (server-side only: never sent). */
+interface Recorded extends HistoryEntry {
+  inverse: Op[];
+}
+
+/** Who removed a node, and where it was (for errors on IDs that are gone). */
+export interface NodeRemoval {
+  origin: Origin;
+  slideId: string;
+  /** Its whole slide went (not just the node). */
+  withSlide: boolean;
+  /** Its name or a text snippet, so an agent recognises it. */
+  label?: string;
+}
+
+/** Removed nodes remembered (oldest forgotten first): bounds memory in long sessions. */
+const MAX_REMOVED_NODES = 10_000;
+
+/** A node's name, or a snippet of its text. */
+function nodeSnippet(node: Node): string | undefined {
+  if (node.name) return node.name;
+  if (node.kind !== "element") return undefined;
+  const content = TextContentSchema.safeParse(node.props.content);
+  if (!content.success) return undefined;
+  const text = toPlainText(content.data).replace(/\s+/g, " ").trim();
+  return text ? (text.length > 40 ? `${text.slice(0, 39)}…` : text) : undefined;
+}
+
+const nodesOf = (slide: Slide) =>
+  new Map([...walkNodes(slide.root)].map(({ node }) => [node.id, node]));
+
+/** Revert labels stay readable in the history panel (transaction labels max out at 200). */
+const MAX_LABEL = 120;
+const clip = (label: string) =>
+  label.length > MAX_LABEL ? `${label.slice(0, MAX_LABEL - 1)}…` : label;
 
 /** How many changes the history keeps per open deck (older ones drop off). */
 export const HISTORY_LIMIT = 500;
@@ -128,10 +173,20 @@ export class OpenDeck {
   #modifiedAt = new Date();
   /** Who changed each slide last (this session only), so agents don't clobber human work. */
   readonly #slideEditors = new Map<string, Origin>();
+  /** Who removed each slide that's gone (this session only), so agents don't bring it back. */
+  readonly #slideRemovers = new Map<string, Origin>();
+  /** Who removed each node that's gone (this session only), so agents hear why an ID failed. */
+  readonly #nodeRemovers = new Map<string, NodeRemoval>();
+  /**
+   * Revert transactions, and the undos and redos that follow them, by transaction ID: which
+   * changes they touch, and whether they revert them (true) or bring them back (false).
+   * An undo of a revert reports the revert's ID as `reverses`, which is how it's found here.
+   */
+  readonly #reverts = new Map<string, { versions: number[]; reverting: boolean }>();
   /** The deck as of the last emitted change, to find which slides a change touched. */
   #emitted: Deck;
   /** Recent changes for the history panel, oldest first (this session only, not saved). */
-  readonly #history: HistoryEntry[] = [];
+  readonly #history: Recorded[] = [];
 
   constructor(options: OpenDeckOptions) {
     this.id = options.deck.id;
@@ -148,6 +203,16 @@ export class OpenDeck {
   /** The origin that last changed this slide since the deck was opened (undefined: nobody). */
   lastEditor(slideId: string): Origin | undefined {
     return this.#slideEditors.get(slideId);
+  }
+
+  /** Who removed this slide since the deck was opened (undefined: it's there, or never was). */
+  removedBy(slideId: string): Origin | undefined {
+    return this.#slideRemovers.get(slideId);
+  }
+
+  /** Who removed this node since the deck was opened, and from where (undefined: not removed). */
+  removedNode(nodeId: string): NodeRemoval | undefined {
+    return this.#nodeRemovers.get(nodeId);
   }
 
   get deck(): Deck {
@@ -181,7 +246,64 @@ export class OpenDeck {
 
   /** Recent changes, oldest first (at most HISTORY_LIMIT, since the deck was opened). */
   get history(): HistoryEntry[] {
-    return [...this.#history];
+    return this.#history.map(({ inverse: _, ...entry }) => entry);
+  }
+
+  /**
+   * Take back agents' changes (by history version) as one change by `origin`, so its undo
+   * brings them back (golden rule #7: undo stays per origin; the revert is the user's own
+   * step). The changes' stored inverses run newest first against the deck as it is now, so
+   * later edits to other fields survive, like any undo. Fails without changing anything
+   * when a change is too old, isn't an agent's, is already reverted, or can't be taken back
+   * because the deck moved on (its slide was deleted, say).
+   */
+  revert(versions: readonly number[], origin: Origin): TransactionResult {
+    const fail = (
+      code: "NOT_FOUND" | "FORBIDDEN" | "CONFLICT",
+      message: string,
+      hint?: string,
+    ): TransactionResult => ({ ok: false, error: { code, message, ...(hint && { hint }) } });
+    const wanted = [...new Set(versions)].sort((a, b) => b - a); // newest first
+    const byVersion = new Map(this.#history.map((r) => [r.version, r]));
+    const records: Recorded[] = [];
+    for (const version of wanted) {
+      const record = byVersion.get(version);
+      if (!record) {
+        return fail(
+          "NOT_FOUND",
+          `Change ${version} is too old to revert`,
+          `Only the last ${HISTORY_LIMIT} changes since the deck was opened can be reverted.`,
+        );
+      }
+      if (!isAgentOrigin(record.origin)) {
+        return fail(
+          "FORBIDDEN",
+          `"${record.label}" isn't an AI change`,
+          "Undo your own changes with Ctrl+Z.",
+        );
+      }
+      if (record.reverted) return fail("CONFLICT", `"${record.label}" is already reverted`);
+      records.push(record);
+    }
+    const first = records[0];
+    if (!first) return fail("NOT_FOUND", "Nothing to revert");
+    const label =
+      records.length === 1
+        ? clip(`Revert "${first.label}"`)
+        : `Revert ${records.length} AI changes`;
+    const result = this.#doc.apply({ origin, label, ops: records.flatMap((r) => r.inverse) });
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: {
+          ...result.error,
+          message: `Can't revert: ${result.error.message}`,
+          hint: "The deck changed since (its slide or element was deleted, say), so it can't be taken back automatically. Edit it by hand instead.",
+        },
+      };
+    }
+    this.#reverts.set(result.transaction.id, { versions: wanted, reverting: true });
+    return this.#emit(result);
   }
 
   canUndo(origin: Origin): boolean {
@@ -272,6 +394,10 @@ export class OpenDeck {
   sweepAssets(): string[] {
     const keep = this.#doc.restorableAssetIds();
     for (const id of Object.keys(this.deck.assets)) keep.add(id);
+    // A revert may add back what a recent change removed.
+    for (const { inverse } of this.#history) {
+      for (const op of inverse) if (op.op === "asset.add") keep.add(op.id);
+    }
     const cutoff = this.#now() - UPLOAD_GRACE_MS;
     const dropped: string[] = [];
     for (const id of this.#assets.keys()) {
@@ -315,21 +441,38 @@ export class OpenDeck {
   #emit(result: TransactionResult): TransactionResult {
     if (!result.ok) return result;
     this.#modifiedAt = new Date();
-    const { origin, label, ops } = result.transaction;
+    const { id, origin, label, ops } = result.transaction;
     // Structural sharing: a slide object is new exactly when this change touched it.
     const before = new Map(this.#emitted.slides.map((s) => [s.id, s]));
     const slideIds: string[] = [];
     for (const slide of result.deck.slides) {
       if (before.get(slide.id) !== slide) {
         this.#slideEditors.set(slide.id, origin);
+        this.#slideRemovers.delete(slide.id);
         slideIds.push(slide.id);
       }
       before.delete(slide.id);
     }
-    for (const removed of before.keys()) this.#slideEditors.delete(removed);
+    const removedSlideIds = [...before.keys()];
+    for (const removed of removedSlideIds) {
+      this.#slideEditors.delete(removed);
+      this.#slideRemovers.set(removed, origin);
+    }
+    const removedNodeIds = this.#trackNodes(result.deck, slideIds, removedSlideIds, origin);
     this.#emitted = result.deck;
+    const marks = this.#revertMarks(id, result.reverses);
     const at = this.#modifiedAt.getTime();
-    this.#history.push({ version: this.version, origin, label, slideIds, at });
+    this.#history.push({
+      version: this.version,
+      origin,
+      label,
+      slideIds,
+      ...(removedSlideIds.length && { removedSlideIds }),
+      ...(removedNodeIds.length && { removedNodeIds }),
+      at,
+      ...marks,
+      inverse: result.inverse,
+    });
     if (this.#history.length > HISTORY_LIMIT) this.#history.shift();
     const change: DeckChange = {
       deckId: this.id,
@@ -339,10 +482,68 @@ export class OpenDeck {
       ops,
       deck: result.deck,
       slideIds,
+      removedSlideIds,
       at,
+      ...marks,
     };
     for (const listener of this.#listeners) listener(change);
     return result;
+  }
+
+  /**
+   * Note the nodes that left the touched slides (and who removed them), and forget removals
+   * that came back. Only touched slides are walked: untouched ones are the same objects.
+   * Returns the removed nodes on slides that are still there (a removed slide says the rest).
+   */
+  #trackNodes(deck: Deck, touched: string[], removedSlides: string[], origin: Origin): string[] {
+    const old = new Map(this.#emitted.slides.map((s) => [s.id, s]));
+    const now = new Map(deck.slides.map((s) => [s.id, s]));
+    // Everything on the touched slides now, first: a node moved between two of them isn't gone.
+    const present = new Set<string>();
+    for (const slideId of touched) {
+      const slide = now.get(slideId);
+      if (slide) for (const id of nodesOf(slide).keys()) present.add(id);
+    }
+    for (const id of present) this.#nodeRemovers.delete(id);
+    const removed: string[] = [];
+    for (const slideId of [...touched, ...removedSlides]) {
+      const before = old.get(slideId);
+      if (!before) continue;
+      const withSlide = !now.has(slideId);
+      for (const [id, node] of nodesOf(before)) {
+        if (present.has(id)) continue;
+        const label = nodeSnippet(node);
+        this.#nodeRemovers.delete(id); // re-insert: newest last, so the oldest go first
+        this.#nodeRemovers.set(id, { origin, slideId, withSlide, ...(label && { label }) });
+        if (!withSlide) removed.push(id);
+      }
+    }
+    while (this.#nodeRemovers.size > MAX_REMOVED_NODES) {
+      const oldest = this.#nodeRemovers.keys().next().value as string;
+      this.#nodeRemovers.delete(oldest);
+    }
+    return removed;
+  }
+
+  /**
+   * Which earlier changes transaction `id` reverts or brings back, marking them in the
+   * history. A revert is registered (by `revert`) before it's emitted; an undo or redo of
+   * one says so through `reverses` and flips it.
+   */
+  #revertMarks(id: string, reverses: string | undefined): RevertMarks {
+    let entry = this.#reverts.get(id);
+    const flipped = reverses === undefined ? undefined : this.#reverts.get(reverses);
+    if (!entry && flipped && reverses !== undefined) {
+      this.#reverts.delete(reverses); // its stack entry was used up; this one takes over
+      entry = { versions: flipped.versions, reverting: !flipped.reverting };
+      this.#reverts.set(id, entry);
+    }
+    if (!entry) return {};
+    const versions = new Set(entry.versions);
+    for (const record of this.#history) {
+      if (versions.has(record.version)) record.reverted = entry.reverting;
+    }
+    return entry.reverting ? { reverts: entry.versions } : { restores: entry.versions };
   }
 
   /**

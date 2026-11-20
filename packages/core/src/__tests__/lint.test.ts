@@ -10,7 +10,7 @@ import {
   toRgbString,
 } from "../measure.js";
 import { ThemeSchema } from "../schema/theme.js";
-import { applyChange, ClientMessageSchema } from "../sync.js";
+import { appendHistory, applyChange, ClientMessageSchema, type HistoryEntry } from "../sync.js";
 import { BUILTIN_THEMES, findBuiltinTheme } from "../themes.js";
 import { resolveToken } from "../tokens.js";
 import { applyTransaction } from "../transaction.js";
@@ -458,6 +458,31 @@ describe("sync", () => {
         origin: "agent:x",
       }).success,
     ).toBe(false); // empty ops, and clients can't send an origin
+    const revert = { type: "revert", requestId: "r", deckId: "d", versions: [3, 1] };
+    expect(ClientMessageSchema.safeParse(revert).success).toBe(true);
+    expect(ClientMessageSchema.safeParse({ ...revert, versions: [] }).success).toBe(false);
+    expect(ClientMessageSchema.safeParse({ ...revert, versions: [0.5] }).success).toBe(false);
+  });
+
+  it("appends history, marking what a revert takes back and its undo brings back", () => {
+    const at = (version: number, extra: Partial<HistoryEntry> = {}): HistoryEntry => ({
+      version,
+      origin: "agent:test",
+      label: `v${version}`,
+      slideIds: [],
+      at: 0,
+      ...extra,
+    });
+    const reverted = appendHistory([at(1), at(2)], at(3, { origin: "user", reverts: [1] }), 10);
+    expect(reverted.map((e) => [e.version, e.reverted])).toEqual([
+      [1, true],
+      [2, undefined],
+      [3, undefined],
+    ]);
+    const restored = appendHistory(reverted, at(4, { origin: "user", restores: [1] }), 10);
+    expect(restored[0]?.reverted).toBe(false);
+    expect(reverted[0]?.reverted).toBe(true); // pure: the input isn't touched
+    expect(appendHistory(restored, at(5), 3).map((e) => e.version)).toEqual([3, 4, 5]);
   });
 
   it("replays server changes on a replica, and asks for a snapshot on gaps", () => {

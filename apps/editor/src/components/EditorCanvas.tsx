@@ -439,7 +439,7 @@ export function EditorCanvas({
           content={textContentOf(index, editing.id)}
           box={textBoxOf(propsOf(index, editing.id))}
           theme={deck.theme}
-          label={labelFor(editing.id)}
+          name={shownIndex?.nodes.get(editing.id)?.node.name}
           caret={editing.caret}
           // Above the layer, like its name tag (hidden while typing).
           anchor={primary?.id === editing.id ? labelAnchor(primary) : null}

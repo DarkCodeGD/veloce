@@ -187,7 +187,7 @@ describe.skipIf(problem !== null)("Phase 3: deck structure", { timeout: 60_000 }
     const undoBox = await bar.getByRole("button", { name: "Undo", exact: true }).boundingBox();
     const redoBox = await bar.getByRole("button", { name: "Redo", exact: true }).boundingBox();
     expect(redoBox?.y).toBe(undoBox?.y);
-    const authors = () => page.locator(".history-author").allTextContents();
+    const authors = () => page.locator(".history-author-name").allTextContents();
     // The agent built the deck before this tab connected: it's in the history anyway.
     expect(await authors()).toContain("Claude Code");
     const labels = () => page.locator(".history-label").allTextContents();
@@ -214,6 +214,42 @@ describe.skipIf(problem !== null)("Phase 3: deck structure", { timeout: 60_000 }
     await third.click();
     await page.getByRole("tab", { name: "Slides" }).click();
     await expect.poll(current).toBe("3");
+  });
+
+  it("reverts an AI change from the History tab as your own step, which Undo brings back (D71)", async () => {
+    await page.getByRole("tab", { name: "History" }).click();
+    const row = page
+      .locator(".history-item")
+      .filter({ has: page.locator(".history-label", { hasText: /^Add slide s4$/ }) });
+    const reverted = () => row.evaluate((el) => el.classList.contains("is-reverted"));
+    const revert = row.getByRole("button", { name: 'Revert "Add slide s4"' });
+    // The AI's run of changes can go all at once too (not clicked: it would empty the deck).
+    await expect
+      .poll(() =>
+        page
+          .getByRole("button", { name: /^Revert all \d+ of Claude Code's changes here$/ })
+          .count(),
+      )
+      .toBe(1);
+
+    await row.hover();
+    const before = h.userTransactions();
+    await revert.click();
+    await expect.poll(() => h.userTransactions()).toBe(before + 1);
+    await h.synced();
+    expect(h.changes.at(-1)).toMatchObject({ origin: "user", label: 'Revert "Add slide s4"' });
+    expect(order()).not.toContain("s4");
+    expect(await reverted()).toBe(true);
+    expect(await row.locator(".history-chip", { hasText: "Reverted" }).count()).toBe(1);
+    expect(await revert.count()).toBe(0); // nothing left to revert there
+
+    // The toast says what went; its Undo (like Ctrl+Z) restores it.
+    const toast = page.locator(".toast").filter({ hasText: 'Reverted "Add slide s4".' });
+    await toast.getByRole("button", { name: "Undo" }).click();
+    await expect.poll(() => h.userTransactions()).toBe(before + 2);
+    await h.synced();
+    expect(order()).toContain("s4");
+    expect(await reverted()).toBe(false);
   });
 
   it("logged no errors in the page", () => {

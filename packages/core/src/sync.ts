@@ -48,6 +48,16 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({ type: z.literal("undo"), requestId: RequestIdSchema, deckId: IdSchema }),
   z.strictObject({ type: z.literal("redo"), requestId: RequestIdSchema, deckId: IdSchema }),
+  /**
+   * Take back agents' changes (by history version) as one change of the client's own, so
+   * the client's undo brings them back. Only agents' changes: your own go through undo.
+   */
+  z.strictObject({
+    type: z.literal("revert"),
+    requestId: RequestIdSchema,
+    deckId: IdSchema,
+    versions: z.array(z.number().int().min(1)).min(1).max(500),
+  }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
@@ -71,7 +81,7 @@ export type ServerMessage =
       /** Recent changes, oldest first (this server session only), for the history panel. */
       history: HistoryEntry[];
     }
-  | {
+  | ({
       type: "change";
       deckId: string;
       version: number;
@@ -80,7 +90,7 @@ export type ServerMessage =
       ops: Op[];
       /** When the server applied it (ms since the epoch). */
       at: number;
-    }
+    } & RevertMarks)
   | { type: "result"; requestId: string; ok: true; version: number }
   | { type: "result"; requestId: string; ok: false; error: ErrorInfo }
   /** A protocol-level problem (malformed message, unknown deck). */
@@ -88,15 +98,54 @@ export type ServerMessage =
 
 export type ChangeMessage = Extract<ServerMessage, { type: "change" }>;
 
+/** What a change did to earlier changes, through a revert (or undoing / redoing one). */
+export interface RevertMarks {
+  /** Versions of the changes this one reverted (they no longer show in the deck). */
+  reverts?: number[];
+  /** Versions of reverted changes this one brought back (the revert was undone). */
+  restores?: number[];
+}
+
 /** One committed change, as the history panel lists it. */
-export interface HistoryEntry {
+export interface HistoryEntry extends RevertMarks {
   version: number;
   origin: Origin;
   label: string;
   /** Slides this change added or modified (removed slides aren't listed). */
   slideIds: string[];
+  /** Slides this change removed. */
+  removedSlideIds?: string[];
+  /** Nodes this change removed from slides that are still there (server-side only). */
+  removedNodeIds?: string[];
   /** When the server applied it (ms since the epoch). */
   at: number;
+  /** A later change reverted this one (and that revert hasn't been undone). */
+  reverted?: boolean;
+}
+
+/**
+ * History after `entry` arrived: `entry` added at the end, and the changes it reverts or
+ * restores marked. Keeps at most `limit` entries (the oldest drop off). Pure.
+ */
+export function appendHistory(
+  history: readonly HistoryEntry[],
+  entry: HistoryEntry,
+  limit: number,
+): HistoryEntry[] {
+  const reverts = new Set(entry.reverts);
+  const restores = new Set(entry.restores);
+  const marked =
+    reverts.size || restores.size
+      ? history.map((e) =>
+          reverts.has(e.version)
+            ? { ...e, reverted: true }
+            : restores.has(e.version)
+              ? { ...e, reverted: false }
+              : e,
+        )
+      : [...history];
+  marked.push(entry);
+  return marked.slice(-limit);
 }
 
 export interface LocalReplica {

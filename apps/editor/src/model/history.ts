@@ -1,8 +1,9 @@
 /**
- * The history panel's logic, pure: who made a change, how long ago, and how a list of changes
- * reads (newest first, consecutive changes by the same author grouped under one header).
+ * The history panel's logic, pure: who made a change, how long ago, how a list of changes
+ * reads (newest first, consecutive changes by the same author grouped under one header), and
+ * what reverting an AI change takes back (D71).
  */
-import type { HistoryEntry, Origin } from "@veloce/core";
+import { type HistoryEntry, isAgentOrigin, type Origin } from "@veloce/core";
 
 export type HistoryFilter = "all" | "you" | "ai";
 
@@ -55,4 +56,67 @@ export function historyGroups(
     else groups.push({ origin: entry.origin, entries: [entry] });
   }
   return groups;
+}
+
+/** The user can revert an agent's change that's still in effect (their own: Ctrl+Z). */
+export const canRevert = (entry: HistoryEntry): boolean =>
+  isAgentOrigin(entry.origin) && !entry.reverted;
+
+/** Versions to send for reverting `entries` (those still revertable). */
+export const revertVersions = (entries: readonly HistoryEntry[]): number[] =>
+  entries.filter(canRevert).map((e) => e.version);
+
+/**
+ * The toast after reverting `versions`: what went, plus the slides it touched that you'd
+ * edited since (a revert of "Add slide" takes your edits on that slide with it; Undo brings
+ * both back). Only real edits count: your reverts, and undoing or redoing them, only moved
+ * AI content around (D72). Slides are numbered as they were before the revert, so a slide
+ * the revert removed still has a number; `stillThere` says which ones it removed.
+ */
+export function revertMessage(
+  history: readonly HistoryEntry[],
+  versions: readonly number[],
+  numberBefore: (slideId: string) => number | undefined,
+  stillThere: (slideId: string) => boolean,
+): string {
+  const wanted = new Set(versions);
+  const targets = history.filter((e) => wanted.has(e.version));
+  const first = targets[0];
+  const head =
+    targets.length === 1 && first
+      ? `Reverted "${first.label}".`
+      : `Reverted ${versions.length} AI changes.`;
+  const oldest = Math.min(...versions);
+  const touched = new Set(targets.flatMap((e) => e.slideIds));
+  const yours = new Set(
+    history
+      .filter(
+        (e) =>
+          e.origin === "user" &&
+          e.version > oldest &&
+          !wanted.has(e.version) &&
+          !e.reverts &&
+          !e.restores,
+      )
+      .flatMap((e) => e.slideIds)
+      .filter((id) => touched.has(id)),
+  );
+  if (!yours.size) return head;
+  const numbered = (ids: string[]) => {
+    const numbers = ids
+      .map(numberBefore)
+      .filter((n): n is number => n !== undefined)
+      .sort((a, b) => a - b);
+    if (!numbers.length) return ids.length === 1 ? "a slide" : `${ids.length} slides`;
+    const unknown = ids.length - numbers.length;
+    const list = `${numbers.length === 1 ? "slide" : "slides"} ${numbers.join(", ")}`;
+    return unknown ? `${list} and ${unknown} more` : list;
+  };
+  const kept = [...yours].filter(stillThere);
+  const removed = [...yours].filter((id) => !stillThere(id));
+  const parts = [
+    kept.length && `touched ${numbered(kept)}`,
+    removed.length && `removed ${numbered(removed)}`,
+  ].filter(Boolean);
+  return `${head} It also ${parts.join(" and ")} you'd edited since.`;
 }
