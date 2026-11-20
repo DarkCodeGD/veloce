@@ -1763,6 +1763,67 @@ textarea::placeholder {
   gap: 6px;
 }
 
+/* The menu, and a toggle beside it (SidesField's "individual sides", D75). */
+.length-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.length-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A compact length in pixels: the token menu shrinks to its chevron beside the number (its
+   value stays readable to screen readers). */
+.select-trigger.length-menu {
+  position: relative;
+  flex: none;
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.length-menu .select-value,
+.length-menu .select-hint,
+.length-menu .select-icon {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sides-toggle {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+/* Individual sides: a header row, then one field per side, labels set in a step. */
+.sides-field {
+  display: grid;
+  gap: 10px;
+}
+
+.sides-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.sides-summary {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sides-field > .field + .field .field-label {
+  padding-left: 10px;
+}
+
 /* Toggle switch: a real checkbox (role="switch") drawn without the OS look. The thumb is a
    background gradient, so it works in every engine (inputs can't have ::before in Firefox). */
 .switch {

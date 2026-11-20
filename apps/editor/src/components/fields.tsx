@@ -4,7 +4,7 @@
  * Token-aware: colors and lengths offer the theme's tokens first, raw values second.
  */
 import { type Deck, primaryFamily, resolveColor, type Theme } from "@veloce/core";
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { Minus, Plus, RotateCcw, SquareDashed } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { assetUrl } from "../editor-context.js";
 import type { Imported } from "../model/asset-insert.js";
@@ -335,15 +335,24 @@ export function LengthField({
   onCommit,
   onPreview,
   current,
+  trailing,
+  compact,
 }: {
   label: string;
   value: unknown;
   theme: Theme;
   group: string;
+  /**
+   * One row: with pixels, the number and a narrow token menu (▾) beside it; with a token,
+   * the menu alone. For stacks of fields (SidesField's sides).
+   */
+  compact?: boolean;
   onCommit: Commit;
   onPreview?: (value: number | null) => void;
   /** The rendered size in pixels, where "Custom…" starts. */
   current?: () => number | undefined;
+  /** Beside the menu (SidesField's "individual sides" toggle). */
+  trailing?: ReactNode;
 }) {
   const id = useId();
   const isToken = typeof value === "string";
@@ -356,6 +365,29 @@ export function LengthField({
     onCommit,
     onPreview,
   });
+  const menu = (
+    <Select
+      id={id}
+      className={compact && custom ? "length-menu" : undefined}
+      value={isToken ? String(value) : custom ? "custom" : ""}
+      options={[
+        { value: "", label: "Default" },
+        ...tokenOptions(theme, group),
+        { value: "custom", label: "Custom…" },
+      ]}
+      onChange={(v) => {
+        if (v === "custom") return setCustom(true);
+        setCustom(false);
+        onCommit(v === "" ? null : v);
+      }}
+    />
+  );
+  const pixels = (
+    <div className="input-with-suffix">
+      <input aria-label={`${label} in pixels`} placeholder="0" {...control.inputProps} />
+      <span className="suffix">px</span>
+    </div>
+  );
   return (
     <Field
       label={label}
@@ -366,28 +398,128 @@ export function LengthField({
       scrubbing={control.scrubbing}
     >
       <div className="length">
-        <Select
-          id={id}
-          value={isToken ? String(value) : custom ? "custom" : ""}
-          options={[
-            { value: "", label: "Default" },
-            ...tokenOptions(theme, group),
-            { value: "custom", label: "Custom…" },
-          ]}
-          onChange={(v) => {
-            if (v === "custom") return setCustom(true);
-            setCustom(false);
-            onCommit(v === "" ? null : v);
-          }}
-        />
-        {custom && (
-          <div className="input-with-suffix">
-            <input aria-label={`${label} in pixels`} placeholder="0" {...control.inputProps} />
-            <span className="suffix">px</span>
+        {compact && custom ? (
+          <div className="length-row">
+            {pixels}
+            {menu}
+            {trailing}
           </div>
+        ) : (
+          <>
+            <div className="length-row">
+              {menu}
+              {trailing}
+            </div>
+            {custom && pixels}
+          </>
         )}
       </div>
     </Field>
+  );
+}
+
+/** Live edit handlers for one value (`live()` in the inspector). */
+export interface LiveCommit {
+  onCommit: Commit;
+  onPreview?: (value: number | null) => void;
+}
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * One length for every side, or each side on its own (D75): padding's sides now, a radius's
+ * corners later. With "individual sides" off it's one LengthField; on, a header row and one
+ * field per side. Turning it off is the caller's `onCollapse` (it decides the one value).
+ * It opens by itself when the sides differ, so mixed values are never hidden behind one field.
+ * The inspector keys its sections by layer, so the toggle doesn't carry over to the next one.
+ */
+export function SidesField<K extends string>({
+  label,
+  toggleLabel,
+  sides,
+  values,
+  theme,
+  group,
+  all,
+  side,
+  current,
+  onCollapse,
+}: {
+  label: string;
+  /** The toggle's name: "Individual sides" / "Individual corners". */
+  toggleLabel: string;
+  /** Keys and labels, in field order. */
+  sides: ReadonlyArray<readonly [K, string]>;
+  values: Readonly<Record<K, unknown>>;
+  theme: Theme;
+  group: string;
+  /** Set every side to one value (`null`: unset). */
+  all: LiveCommit;
+  side: (key: K) => LiveCommit;
+  /** The rendered pixels, where "Custom…" starts. */
+  current?: (key: K) => () => number | undefined;
+  onCollapse(): void;
+}) {
+  const list = sides.map(([key]) => values[key]);
+  const mixed = !list.every((v) => sameValue(v, list[0]));
+  const [individual, setIndividual] = useState(mixed);
+  useEffect(() => {
+    if (mixed) setIndividual(true);
+  }, [mixed]);
+  const toggle = (
+    <button
+      type="button"
+      className={`icon-button sides-toggle${individual ? " is-on" : ""}`}
+      aria-label={toggleLabel}
+      aria-pressed={individual}
+      data-tip={toggleLabel}
+      onClick={() => {
+        if (individual) onCollapse();
+        setIndividual(!individual);
+      }}
+    >
+      <SquareDashed size={14} />
+    </button>
+  );
+  const first = sides[0]?.[0];
+  if (!individual) {
+    return (
+      <LengthField
+        label={label}
+        value={list[0]}
+        theme={theme}
+        group={group}
+        {...(first !== undefined && current && { current: current(first) })}
+        {...all}
+        trailing={toggle}
+      />
+    );
+  }
+  return (
+    <div className="sides-field">
+      <Field
+        label={label}
+        isSet={list.some((v) => v !== undefined)}
+        onReset={() => all.onCommit(null)}
+      >
+        <div className="sides-head">
+          <span className="sides-summary">{toggleLabel}</span>
+          {toggle}
+        </div>
+      </Field>
+      {sides.map(([key, sideLabel]) => (
+        <LengthField
+          key={key}
+          label={sideLabel}
+          value={values[key]}
+          theme={theme}
+          group={group}
+          {...(current && { current: current(key) })}
+          {...side(key)}
+          compact
+        />
+      ))}
+    </div>
   );
 }
 

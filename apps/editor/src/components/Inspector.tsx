@@ -15,6 +15,7 @@ import {
   type Shadow,
   type ShadowValue,
   type Slide,
+  type Space,
   type Stroke,
   type Theme,
 } from "@veloce/core";
@@ -66,6 +67,7 @@ import { withPaintAssets } from "../model/paint.js";
 import { propFields } from "../model/schema-fields.js";
 import { parseNumber } from "../model/scrub.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
+import { collapsePadding, paddingSides, SIDES, type Side, setPaddingSide } from "../model/sides.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { shortcutAttrs } from "../platform.js";
 import { setPreview } from "../preview.js";
@@ -80,6 +82,7 @@ import {
   NumberField,
   Section,
   SelectField,
+  SidesField,
   SizingField,
   TextField,
   ToggleField,
@@ -472,6 +475,13 @@ function LayerSection({
 }
 
 const ALIGN = ["start", "center", "end", "stretch"];
+/** Where each side's "Custom…" starts: its rendered padding. */
+const PADDING_CSS: Record<Side, string> = {
+  top: "paddingTop",
+  right: "paddingRight",
+  bottom: "paddingBottom",
+  left: "paddingLeft",
+};
 const JUSTIFY = ["start", "center", "end", "space-between", "space-around", "space-evenly"];
 
 /** Measure a layer on the main canvas, for edits that must keep it where it is. */
@@ -507,7 +517,6 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
   /** Where "Custom…" starts: the frame's rendered CSS value. */
   const rendered = (property: string) => () =>
     renderedNumber(node.id, property, "self", { min: 0 });
-  const padding = typeof layout.padding === "object" ? undefined : layout.padding;
 
   return (
     <>
@@ -594,16 +603,20 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
           <p className="inspector-hint">
             Free layers are placed from the frame's edges; pin them with Pin X / Pin Y.
           </p>
-        ) : typeof layout.padding === "object" ? (
-          <p className="inspector-hint">Padding: per-side values (set by AI).</p>
         ) : (
-          <LengthField
+          <SidesField
             label="Padding"
-            value={padding}
+            toggleLabel="Individual sides"
+            sides={SIDES}
+            values={paddingSides(layout.padding)}
             theme={deck.theme}
             group="space"
-            current={rendered("paddingTop")}
-            {...liveLayout("padding", "Change padding")}
+            all={liveLayout("padding", "Change padding")}
+            side={(key) =>
+              live((value) => setPaddingSide(node.id, layout.padding, key, value as Space | null))
+            }
+            current={(key) => rendered(PADDING_CSS[key])}
+            onCollapse={() => void run(collapsePadding(node.id, layout.padding))}
           />
         )}
       </Section>

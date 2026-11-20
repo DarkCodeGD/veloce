@@ -1581,3 +1581,27 @@ findings).
    text on screen that was never applied. That also fixes the existing quirk for typos.
 5. Edits are ordinary `node.update` merge patches (`{style: {stroke: {width: 6}}}`), the same
    ops agents send (golden rule 1). Pure logic lives in `model/frame-style.ts`.
+
+## D75 — Per-side padding: one field or four, a control shared with radius
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist.
+
+1. **One field, plus "Individual sides".** The Padding row keeps its usual length field
+   (Default, theme tokens, Custom px), with a toggle beside it that opens Top, Right, Bottom
+   and Left. **Why:** most frames have even padding, so the common case stays one row; per-side
+   values (which agents write as `{ x, y }` or four sides) are no longer read-only "set by AI".
+2. **It opens by itself when the sides differ,** so a mixed padding is never shown as one
+   misleading value. Turning it on changes nothing; edits do.
+3. **Editing one side spells out all four,** so `{ x: 40, y: 20 }` with Left set to 80 becomes
+   `{ top: 20, right: 40, bottom: 20, left: 80 }` and no side moves. Core already replaces
+   rather than merges across padding forms, and `diffPatch` keeps each patch minimal.
+4. **Turning it off keeps the value most sides have** (ties: the top's), as one value, in one
+   undoable step. **Why:** a card with one odd side keeps the look of the other three; picking
+   "top" alone would follow an accident of order. Per-corner radius should do the same.
+5. **Compact side rows.** A side in pixels is the number plus a narrow token menu (▾) on one
+   row; a side on a token is the menu alone. **Why:** the first cut stacked "Custom…" over the
+   number, eight rows for four sides; one row each keeps the panel airy (D47) while each side
+   can still take a theme token, as agents can (golden rule 1).
+6. **`SidesField` is generic** (keys, labels, live handlers, a collapse callback) and knows
+   nothing about padding, so per-corner radius reuses it after its schema change. The padding
+   logic is pure in `model/sides.ts` (`uniformValue` and `mostCommon` are generic too).
