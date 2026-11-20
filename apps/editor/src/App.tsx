@@ -12,12 +12,14 @@ import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
+import { ThemeStylesDialog } from "./components/ThemeStylesDialog.js";
 import { Toasts } from "./components/Toasts.js";
 import { Tooltips } from "./components/Tooltips.js";
 import { TopBar } from "./components/TopBar.js";
 import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
 import { syncDeckFonts } from "./deck-fonts.js";
+import { closeDialog, openDialog, useOpenDialog } from "./dialogs.js";
 import { assetUrl, client } from "./editor-context.js";
 import { groupSelection, ungroupSelection } from "./group-actions.js";
 import { deckKeysPassThrough, typing } from "./keyboard.js";
@@ -79,8 +81,8 @@ export function App() {
   const [hoverHit, setHoverHit] = useState<string | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("slides");
-  /** The open File dialog, if any (D76, D77). */
-  const [dialog, setDialog] = useState<"new-deck" | "deck-info" | null>(null);
+  /** The open app dialog, if any (D76–D78). */
+  const dialog = useOpenDialog();
   const [follow, setFollow] = useState(true);
   const [activityVisible, setActivityVisible] = useState(false);
 
@@ -298,8 +300,9 @@ export function App() {
         follow={follow}
         onFollowChange={setFollow}
         onOpenDeck={(id) => client.open(id)}
-        onNewDeck={() => setDialog("new-deck")}
-        onDeckInfo={() => setDialog("deck-info")}
+        onNewDeck={() => openDialog("new-deck")}
+        onDeckInfo={() => openDialog("deck-info")}
+        onThemeStyles={() => openDialog("theme-styles")}
         position={current ? `${index + 1} / ${slides.length}` : null}
       />
       <div className="workspace">
@@ -388,14 +391,13 @@ export function App() {
           <EmptyState
             hasDeck={deck !== null}
             online={state.status === "online"}
-            onNewDeck={() => setDialog("new-deck")}
+            onNewDeck={() => openDialog("new-deck")}
           />
         )}
       </div>
-      {dialog === "new-deck" && <NewDeckDialog onClose={() => setDialog(null)} />}
-      {dialog === "deck-info" && deck && (
-        <DeckInfoDialog deck={deck} onClose={() => setDialog(null)} />
-      )}
+      {dialog === "new-deck" && <NewDeckDialog onClose={closeDialog} />}
+      {dialog === "deck-info" && deck && <DeckInfoDialog deck={deck} onClose={closeDialog} />}
+      {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
       <Toasts />
       <Tooltips />
     </div>

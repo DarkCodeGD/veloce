@@ -30,7 +30,7 @@ export function builtinIdOf(theme: Theme): string | null {
 }
 
 /** The name an edited theme gets: "Midnight" → "Midnight (custom)" (once). */
-const customName = (name: string) => (name.endsWith(CUSTOM) ? name : `${name}${CUSTOM}`);
+export const customName = (name: string) => (name.endsWith(CUSTOM) ? name : `${name}${CUSTOM}`);
 
 export function withColor(theme: Theme, token: string, hex: string): Theme {
   return { ...theme, name: customName(theme.name), colors: { ...theme.colors, [token]: hex } };

@@ -17,10 +17,11 @@ import {
   primaryFamily,
   type Theme,
 } from "@veloce/core";
-import { Plus, TriangleAlert } from "lucide-react";
+import { Plus, TriangleAlert, Type } from "lucide-react";
 import { useRef, useState } from "react";
 import { run } from "../actions.js";
 import { uploadAll } from "../assets.js";
+import { openDialog } from "../dialogs.js";
 import { addFonts, splitImports } from "../model/asset-insert.js";
 import { fromPicked, type PickedColor, pickerColor } from "../model/color.js";
 import {
@@ -138,6 +139,20 @@ export function ThemeSection({ deck }: { deck: Deck }) {
           );
         })}
         <AddFontButton deck={deck} />
+      </Group>
+
+      <Group title="Text styles and scales">
+        <p className="inspector-hint">
+          {Object.keys(theme.text).length} text styles, and the spacing, radius and shadow steps
+          layers pick from.
+        </p>
+        <button
+          type="button"
+          className="button theme-styles-open"
+          onClick={() => openDialog("theme-styles")}
+        >
+          <Type size={14} aria-hidden="true" /> Edit theme styles…
+        </button>
       </Group>
     </Section>
   );

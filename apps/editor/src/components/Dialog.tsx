@@ -21,6 +21,7 @@ export function Dialog({
   children,
   actions,
   className,
+  fieldKeys = "dialog",
 }: {
   title: string;
   /** Esc, the close button, the backdrop, or the caller after a successful submit. */
@@ -30,6 +31,13 @@ export function Dialog({
   /** The footer's buttons (a submit button saves). */
   actions: ReactNode;
   className?: string;
+  /**
+   * What Enter and Esc in a field do. `"dialog"` (default): Enter submits, Esc closes.
+   * `"field"`: they commit or revert that field, as in the inspector, and only the buttons
+   * save or close. For dialogs of many fields, where Esc to undo a typo must not throw away
+   * the whole draft.
+   */
+  fieldKeys?: "dialog" | "field";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -65,7 +73,23 @@ export function Dialog({
         if (e.target === e.currentTarget) e.currentTarget.close();
       }}
     >
-      <form className="dialog-form" onSubmit={submit} noValidate>
+      <form
+        className="dialog-form"
+        onSubmit={submit}
+        noValidate
+        // Capture: runs before the field's own handler (which stops propagation) and leaves
+        // it working. Cancelling the default stops implicit submission (Enter) and the
+        // dialog's close request (Esc).
+        onKeyDownCapture={(e) => {
+          if (
+            fieldKeys === "field" &&
+            (e.key === "Enter" || e.key === "Escape") &&
+            e.target instanceof HTMLInputElement
+          ) {
+            e.preventDefault();
+          }
+        }}
+      >
         <header className="dialog-header">
           <h2 id={titleId}>{title}</h2>
           <button

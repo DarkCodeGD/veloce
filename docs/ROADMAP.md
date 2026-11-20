@@ -26,9 +26,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: theme editor beyond colors and fonts),
-  then the tool bar (D62).
-- **State:** `pnpm check` is green (622 tests, including real-Chromium lint, preview and editor
+- **Next:** round 5's "Parity with agents" checklist (next: nested object props in the
+  inspector), then the tool bar (D62).
+- **State:** `pnpm check` is green (636 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -177,10 +177,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
   - [x] Per-side padding: one field, or four with "Individual sides" (`SidesField`, D75)
   - [x] Deck info: File → Deck info dialog; agents see it, slides carry the language (D76)
   - [x] New deck from the editor: File → New with a theme, New slide in an empty deck (D77)
-  - [ ] Theme editor beyond colors and fonts: text styles (size, weight, line height,
-        letter spacing, case), and the spacing, radius and shadow scales. Too big for an
-        inspector section: a dialog or its own workspace; the inspector keeps colors and
-        fonts
+  - [x] Theme styles: File → Theme styles (or the inspector's Theme section) edits text
+        styles and the spacing, radius and shadow scales; one undo step per Save (D78)
   - [ ] Nested object props in the generated inspector (any plugin prop that's an
         object), not read-only. An image's focus point `{x, y}` is a dot to drag on the
         image preview, not number fields

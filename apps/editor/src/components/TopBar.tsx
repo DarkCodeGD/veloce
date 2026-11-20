@@ -1,5 +1,5 @@
 import type { DeckListing } from "@veloce/core";
-import { FilePlus2, Info, Redo2, Undo2 } from "lucide-react";
+import { FilePlus2, Info, Redo2, Type, Undo2 } from "lucide-react";
 import { useEffect } from "react";
 import { redo, undo } from "../actions.js";
 import { originName } from "../model/history.js";
@@ -21,6 +21,8 @@ interface Props {
   /** File → New deck… / Deck info… (D76, D77). */
   onNewDeck(): void;
   onDeckInfo(): void;
+  /** File → Theme styles… (D78). */
+  onThemeStyles(): void;
   position: string | null;
 }
 
@@ -41,6 +43,7 @@ export function TopBar({
   onOpenDeck,
   onNewDeck,
   onDeckInfo,
+  onThemeStyles,
   position,
 }: Props) {
   // The document leads; the app's name lives in the window/tab title, as in Figma or Keynote.
@@ -59,6 +62,12 @@ export function TopBar({
             icon: <Info size={14} />,
             disabled: deckId === null,
             onSelect: onDeckInfo,
+          },
+          {
+            label: "Theme styles…",
+            icon: <Type size={14} />,
+            disabled: deckId === null,
+            onSelect: onThemeStyles,
           },
         ]}
       />

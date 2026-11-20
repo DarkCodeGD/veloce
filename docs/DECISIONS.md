@@ -1651,3 +1651,35 @@ findings).
 3. **An empty deck can be started by hand.** The empty state's "Slides appear here as your
    agent builds them" now also offers **New slide** (or **New deck** when there's no deck).
    **Why:** without it, a deck made by hand was a dead end for anyone not using an agent.
+
+## D78 — Theme styles: a dialog for text styles and the scales
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist.
+
+1. **A dialog, not an inspector section or a workspace.** Four tabs (Text styles, Spacing,
+   Radius, Shadows) open from File → Theme styles… and from the inspector's Theme section,
+   which keeps colors and fonts. **Why:** eight text styles of six fields each don't fit an
+   inspector column, and a whole workspace for an occasional task is too heavy. Workspaces
+   don't exist yet either.
+2. **A draft, saved as one `deck.setTheme`.** That's the op `set_theme` uses (golden rule 1),
+   so a whole session in the dialog is one undo step. Cancel or Esc drops it. The dialog shows
+   each value as itself: the sample text in the style, bars for spacing, a corner for radius,
+   a card wearing the shadow. The canvas preview runs too, but the modal covers most of it.
+3. **Save merges by group onto the deck's current theme.** Only the groups changed in the
+   dialog are written. **Why:** an agent can recolor the deck while the dialog is open, and
+   a whole-theme save from the dialog's stale copy would silently undo that. When both sides
+   changed the same group, the user's version wins, because they pressed Save last.
+4. **Tokens can be added and removed, as agents can.** New names follow the token rule
+   (letters, digits, `-`), and a new token starts as a copy of the selected one. A token the
+   deck uses (an exact `$group.name` reference anywhere in the slides) can't be removed, and
+   the dialog says how many layers use it. **Why:** removing it would leave broken references
+   that lint would then flag.
+5. **The units people expect.** Letter spacing shows in % like Figma (stored in em, the unit
+   agents write, to 0.0001em so nothing is rounded away), weights by name ("Semibold · 600")
+   with an agent's in-between weight kept, and case options shown in their own case.
+6. **Enter and Esc act on the field** (`Dialog`'s `fieldKeys="field"`). Enter commits it and
+   Esc reverts it, as in the inspector; only the buttons save or close. **Why:** in a dialog
+   with dozens of fields, Esc to fix a typo must not throw away the whole draft.
+7. **App dialogs open from anywhere** through a small store (`dialogs.ts`), and App renders
+   them at the top level. **Why:** a dialog inside the inspector would unmount, losing its
+   draft, whenever the inspector re-keys (for example, when Follow AI switches slides).
