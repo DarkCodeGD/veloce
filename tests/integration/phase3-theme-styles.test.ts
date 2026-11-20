@@ -66,10 +66,18 @@ async function open() {
 }
 
 /** Select h1 (the title's style) in the Text styles list. */
-const pickH1 = () =>
-  dialog()
-    .locator(".token-item", { has: page.getByText("h1", { exact: true }) })
-    .click();
+/**
+ * Select h1 and wait until its fields show: typing before the pane re-renders lands in the
+ * previous style's field (CI once got "8040", clamped to 2000).
+ */
+async function pickH1() {
+  const item = dialog().locator(".token-item", { has: page.getByText("h1", { exact: true }) });
+  await item.click();
+  await expect.poll(() => item.getAttribute("aria-pressed")).toBe("true");
+  await expect.poll(() => field("Size").inputValue()).toBe(String(h1Size()));
+}
+/** h1's size in the dialog's draft is the deck's until it's edited (each test starts saved). */
+const h1Size = () => h.latestDeck().theme.text.h1?.size ?? 0;
 
 beforeAll(async () => {
   if (problem) return;
