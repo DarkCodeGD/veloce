@@ -1804,3 +1804,24 @@ to open it where the cursor is. Both, plus Figma's drawing tools.
    plumbing. The older shortcuts (undo, align, group…) move in with the menu bar.
 6. **The tools stay centred.** The top bar is a three-column grid; the sides shrink and
    truncate, so the AI's activity pill appearing never shifts the tools under the pointer.
+
+## D82 — An image's focus point is a dot on the picture
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist (its last item); extends D80.
+
+1. **Found by its shape, like a stroke (D80).** A prop that is exactly `{ x, y }` numbers, on
+   an element whose schema also has an asset prop, is a focus on that picture. **Why:** golden
+   rule 5. Any plugin with a picture and a point gets the control (a video's poster frame, a
+   map pin), and a point with no picture to aim at stays read-only rather than guessing.
+2. **The picture shows the result, not just the point.** The inspector shows the whole
+   picture with the part the layer keeps lit and the cropped-away rest dimmed (for `cover`,
+   the default fit; from the layer's size on the slide), plus a percentage readout. Drag
+   the dot or click anywhere on the picture; the slide previews it live, and releasing is
+   ONE transaction. **Why:** "focus 0.3, 0.2" means nothing until you see what's cut off;
+   two number fields would have been parity on paper only.
+3. **Keyboard too (WCAG 2.5.7).** The dot is a slider: arrows move it 1%, Shift 10%,
+   committed when the key is released (one undo step per press); Esc puts it back. Reset
+   clears it to the centre (the prop removed, as for any field).
+4. **Stored to 0.1%, kept on the picture.** Values are clamped to 0–1 and rounded to three
+   decimals. Out-of-range values an agent wrote still render (the renderer is unchanged)
+   and show clamped. **Why:** no schema change, so no file-format change.

@@ -6,22 +6,18 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { brotliCompressSync, brotliDecompressSync, crc32, deflateSync } from "node:zlib";
+import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Page } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { browserProblem, type EditorHarness, startEditor } from "./editor-harness.js";
+import { png, pngOf } from "./png.js";
 
 const problem = await browserProblem();
 let h: EditorHarness;
 let page: Page;
 
-// ── Real files, made here ───────────────────────────────────────────────────────────────
-
-/** A valid RGB PNG of one color. */
-function png(width: number, height: number, rgb: [number, number, number]): Buffer {
-  return pngOf(width, height, () => rgb);
-}
+// ── Real files, made here (PNGs: ./png.ts) ──────────────────────────────────────────────
 
 /** A photo-like PNG: gradients and film grain (seeded), big enough to be optimized. */
 function photo(width: number, height: number): Buffer {
@@ -37,36 +33,6 @@ function photo(width: number, height: number): Buffer {
     const n = grain();
     return [clamp(60 + (150 * x) / width + n), clamp(90 + (100 * y) / height + n), clamp(170 + n)];
   });
-}
-
-/** A valid RGB PNG, pixel by pixel. */
-function pngOf(
-  width: number,
-  height: number,
-  pixel: (x: number, y: number) => [number, number, number],
-): Buffer {
-  const chunk = (type: string, data: Buffer) => {
-    const length = Buffer.alloc(4);
-    length.writeUInt32BE(data.length);
-    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-    const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(crc32(body));
-    return Buffer.concat([length, body, crc]);
-  };
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
-  header.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
-  const pixels = Buffer.alloc((width * 3 + 1) * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) pixels.set(pixel(x, y), y * (width * 3 + 1) + 1 + x * 3);
-  }
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", header),
-    chunk("IDAT", deflateSync(pixels)),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
 }
 
 /**

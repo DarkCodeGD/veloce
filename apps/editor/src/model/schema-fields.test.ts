@@ -1,5 +1,5 @@
 import { createBuiltinRegistry } from "@veloce/builtins";
-import { StrokeSchema } from "@veloce/core";
+import { AssetRefSchema, PointSchema, StrokeSchema } from "@veloce/core";
 import { z } from "@veloce/plugin-api";
 import { describe, expect, it } from "vitest";
 import { labelFor, propFields } from "./schema-fields.js";
@@ -31,6 +31,7 @@ describe("inspector fields from plugin schemas", () => {
     expect(fields("shape").stroke).toMatchObject({ kind: "stroke" });
     expect(fields("image").alt).toMatchObject({ kind: "text" });
     expect(fields("image").asset).toMatchObject({ kind: "asset" });
+    expect(fields("image").focus).toMatchObject({ kind: "focus", asset: "asset" });
     expect(labelFor("lineHeight")).toBe("Line height");
   });
 
@@ -46,5 +47,26 @@ describe("inspector fields from plugin schemas", () => {
         z.strictObject({ color: StrokeSchema.shape.color, width: z.number(), glow: z.number() }),
       ),
     ).toBe("readonly");
+  });
+
+  it("knows a focus point by its shape: a point on an element that has a picture (D82)", () => {
+    const kinds = (shape: Record<string, z.ZodType>) =>
+      propFields({ propsSchema: z.strictObject(shape) }).map((f) => f.kind);
+    expect(kinds({ photo: AssetRefSchema, aim: PointSchema.optional() })).toEqual([
+      "asset",
+      "focus",
+    ]);
+    const [, aim] = propFields({
+      propsSchema: z.strictObject({ src: AssetRefSchema, aim: PointSchema }),
+    });
+    expect(aim).toMatchObject({ kind: "focus", asset: "src" });
+    // No picture to aim at, or not exactly x and y: not a focus.
+    expect(kinds({ aim: PointSchema })).toEqual(["readonly"]);
+    expect(
+      kinds({
+        photo: AssetRefSchema,
+        aim: z.strictObject({ x: z.number(), y: z.number(), z: z.number() }),
+      }),
+    ).toEqual(["asset", "readonly"]);
   });
 });

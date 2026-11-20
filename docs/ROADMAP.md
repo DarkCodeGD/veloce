@@ -28,10 +28,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: the image focus point), then the
-  size badge. The command registry (D81) is the future plugin API (D79): the menu bar and
+- **Next:** grid cell alignment (a horizontal option for grids), then the size badge. The command registry (D81) is the future plugin API (D79): the menu bar and
   palette read it.
-- **State:** `pnpm check` is green (669 tests, including real-Chromium lint, preview and editor
+- **State:** `pnpm check` is green (679 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -46,7 +45,8 @@
   - Round 5: reverting AI changes from History, and agents told what the user changed, retested
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
-    and Add menu on a command registry (D81).
+    and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
+    done.
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -168,7 +168,7 @@ The editor becomes an app: Blender's workspaces for different kinds of work, Fig
 panels with the important options in reach. Done before Motion, so Phase 4 lands as the
 Animate and Present workspaces instead of being squeezed into today's screen.
 
-- [ ] **Parity with agents** (golden rule #1: whatever an agent can do, the user can do in the
+- [x] **Parity with agents** (golden rule #1: whatever an agent can do, the user can do in the
       editor). Audit from 2026-11-20, most important first. Keep the inspector airy (D47):
       only 4 of these live in it, and each stays hidden until it's used. The rest go to
       the History panel, a lint panel, the File menu or a dialog.
@@ -186,10 +186,12 @@ Animate and Present workspaces instead of being squeezed into today's screen.
         styles and the spacing, radius and shadow scales; one undo step per Save (D78)
   - [x] Shape outline: a shape's `stroke` uses the frame's Border section, found by its
         schema (D80)
-  - [ ] Image focus point: `{x, y}` as a dot to drag on the image preview, not number
-        fields (the last read-only built-in prop, D80)
+  - [x] Image focus point: a dot dragged on the picture, the cropped part dimmed (D82)
 - [x] Tool bar and Add menu: draw with tools, Shift+A / right-click / ➕ to add at a spot,
       one `node.insert` each (D62, D81)
+- [ ] Grid cell alignment: grids get a horizontal `justify` (start/center/end/stretch,
+      like CSS `justify-items`) next to today's vertical `align`; the inspector shows both as
+      Horizontal / Vertical (a 200px logo can't be centred in its cell today)
 - [ ] Size badge under the selection (`176 × 36`, in slide pixels), live while resizing
 - [ ] On-canvas gradient handles: with the paint picker open on a gradient, drag its ends
       (linear), center (radial, angular) and stops on the slide itself, like Figma (D66 §8)

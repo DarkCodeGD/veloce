@@ -4,39 +4,15 @@
  * fills uploaded or reused, on shapes, frames and the slide background. Every gesture is one
  * undo step. Real Chromium against the real server; the image goes through the upload route.
  */
-import { crc32, deflateSync } from "node:zlib";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Locator, Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { browserProblem, type EditorHarness, startEditor } from "./editor-harness.js";
+import { png } from "./png.js";
 
 const problem = await browserProblem();
 let h: EditorHarness;
 let page: Page;
-
-/** A valid RGB PNG of one color. */
-function png(width: number, height: number, [r, g, b]: [number, number, number]): Buffer {
-  const chunk = (type: string, data: Buffer) => {
-    const length = Buffer.alloc(4);
-    length.writeUInt32BE(data.length);
-    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-    const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(crc32(body));
-    return Buffer.concat([length, body, crc]);
-  };
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(width, 0);
-  header.writeUInt32BE(height, 4);
-  header.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
-  const row = [0, ...Array.from({ length: width }, () => [r, g, b]).flat()];
-  const pixels = Buffer.from(Array.from({ length: height }, () => row).flat());
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", header),
-    chunk("IDAT", deflateSync(pixels)),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
 
 async function build(agent: Client) {
   await agent.callTool({ name: "create_deck", arguments: { title: "Paint", theme: "midnight" } });

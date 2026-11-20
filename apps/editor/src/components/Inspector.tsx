@@ -77,6 +77,7 @@ import { setPreview } from "../preview.js";
 import { AlignBar } from "./AlignBar.js";
 import { AssetField } from "./AssetField.js";
 import { mainCanvasSpace } from "./canvas-space.js";
+import { FocusField } from "./FocusField.js";
 import {
   AddableSection,
   ColorField,
@@ -961,6 +962,20 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
                   onReplace={(next) =>
                     void run(replaceAsset(deck, node.id, field.key, value, next))
                   }
+                />
+              );
+            case "focus":
+              return (
+                <FocusField
+                  key={field.key}
+                  label={field.label}
+                  value={value}
+                  deck={deck}
+                  nodeId={node.id}
+                  asset={props[field.asset]}
+                  fit={typeof props.fit === "string" ? props.fit : undefined}
+                  {...live(toCommand)}
+                  onReset={() => common.onCommit(null)}
                 />
               );
             case "readonly":

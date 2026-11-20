@@ -22,6 +22,11 @@ export type FieldKind =
   | { kind: "asset" }
   /** A line (`StrokeSchema`: color, width, style), edited like a frame's border. */
   | { kind: "stroke" }
+  /**
+   * A point (`{ x, y }`, fractions) on the picture of the schema's `asset` prop: an image's
+   * focus. Dragged on a preview of that picture (D82).
+   */
+  | { kind: "focus"; asset: string }
   /** Not editable in the inspector yet (nested objects): shown read-only. */
   | { kind: "readonly" };
 
@@ -68,6 +73,13 @@ function isStroke(s: JsonSchema): boolean {
     fieldKind(p.color).kind === "color" &&
     fieldKind(p.width).kind === "number"
   );
+}
+
+/** `PointSchema`'s shape: exactly a number `x` and a number `y`. */
+function isPoint(s: JsonSchema): boolean {
+  const p = s.properties;
+  if (s.type !== "object" || !p?.x || !p.y || Object.keys(p).length !== 2) return false;
+  return fieldKind(p.x).kind === "number" && fieldKind(p.y).kind === "number";
 }
 
 export function fieldKind(s: JsonSchema): FieldKind {
@@ -121,9 +133,14 @@ export function propFields(definition: Pick<ElementDefinition, "propsSchema">): 
     io: "input",
     unrepresentable: "any",
   }) as JsonSchema;
-  const fields = Object.entries(json.properties ?? {}).map(
-    ([key, schema]): FieldSpec => ({ key, label: labelFor(key), ...fieldKind(schema) }),
-  );
+  const entries = Object.entries(json.properties ?? {});
+  // A point is a focus on the element's picture when it has one (the first asset prop).
+  const asset = entries.find(([, schema]) => fieldKind(schema).kind === "asset")?.[0];
+  const fields = entries.map(([key, schema]): FieldSpec => {
+    const kind: FieldKind =
+      asset && flatten(schema).some(isPoint) ? { kind: "focus", asset } : fieldKind(schema);
+    return { key, label: labelFor(key), ...kind };
+  });
   cache.set(definition.propsSchema, fields);
   return fields;
 }
