@@ -11,16 +11,20 @@ export function reportError(error: unknown): void {
   showToast({ message, tone: "error" });
 }
 
-/** Send a command as one undoable transaction. Resolves true when the server applied it. */
+/**
+ * Send a command as one undoable transaction. Resolves true when the server applied it.
+ * `undoToast` shows a toast with Undo afterwards: the command's label, or the given words.
+ */
 export async function run(
   command: Command | null,
-  { undoToast = false }: { undoToast?: boolean } = {},
+  { undoToast = false }: { undoToast?: boolean | string } = {},
 ): Promise<boolean> {
   if (!command) return false;
   try {
     await client.transact(command.label, command.ops);
     if (undoToast) {
-      showToast({ message: command.label, tone: "info", action: { label: "Undo", run: undo } });
+      const message = typeof undoToast === "string" ? undoToast : command.label;
+      showToast({ message, tone: "info", action: { label: "Undo", run: undo } });
     }
     return true;
   } catch (error) {

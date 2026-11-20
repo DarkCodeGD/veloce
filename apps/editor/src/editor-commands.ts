@@ -10,6 +10,7 @@
 import {
   Circle,
   Frame,
+  GalleryVerticalEnd,
   Hand,
   ImagePlus,
   type LucideIcon,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { canvasCentre, openAddMenu, pointerOverCanvas } from "./add-menu.js";
+import { autoLayoutSelection } from "./group-actions.js";
 import { addLayer, elementInfos, type InsertContext } from "./insert-actions.js";
 import { CommandRegistry, type RunOptions } from "./model/command-registry.js";
 import { insertables } from "./model/insert.js";
@@ -104,6 +106,19 @@ export function registerBuiltinCommands(): void {
       },
     });
   }
+  commands.register({
+    id: "layer.autoLayout",
+    label: "Add auto layout",
+    icon: GalleryVerticalEnd,
+    shortcut: SHORTCUTS.autoLayout,
+    group: "layer",
+    keywords: "stack flow arrange",
+    enabled: (c) => onSlide(c) && c.selection.length > 0,
+    run: (c) => {
+      if (!onSlide(c)) return;
+      void autoLayoutSelection(c.slideIndex, c.selection).then((ids) => ids && c.select(ids));
+    },
+  });
   commands.register({
     id: "add.menu",
     label: "Add…",

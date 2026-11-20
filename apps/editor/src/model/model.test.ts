@@ -142,6 +142,8 @@ describe("commands produce valid, undoable ops", () => {
     const added = addSlide(0);
     deck = apply(deck, added.ops);
     expect(deck.slides.map((s) => s.id)).toEqual(["s1", added.select?.[0]]);
+    // Made by hand: a Free canvas, not the stack agents start from (D83).
+    expect(deck.slides[1]?.root.layout).toEqual({ mode: "absolute" });
     const copy = duplicateSlide(deck.slides[0] as never, 0);
     deck = apply(deck, copy.ops);
     expect(deck.slides[1]?.root.children).toHaveLength(3);

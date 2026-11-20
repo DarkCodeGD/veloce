@@ -195,6 +195,34 @@ describe("building a deck", () => {
     expect(replaced.text).toMatch(/Replace slide intro: done[\s\S]*1\. slide intro/);
   });
 
+  it("shows where everything sits on a Free slide (one made by hand, D83)", async () => {
+    await connect();
+    await call("create_deck", { title: "Canvas" });
+    const upsert = await call("upsert_slide", {
+      slide: {
+        id: "hand",
+        layout: { mode: "absolute" },
+        children: [
+          { id: "title", type: "text", props: { content: "Hi" }, position: { x: 120, y: 80 } },
+          {
+            id: "list",
+            layout: { mode: "stack" },
+            position: { x: 120, y: 300 },
+            children: [{ id: "item", type: "text", props: { content: "One" } }],
+          },
+        ],
+      },
+    });
+    expect(upsert.isError).toBe(false);
+    expect(upsert.text).toMatch(/slide hand · root frame \S+ \(absolute\)/);
+    expect(upsert.text).toMatch(/- title: text "Hi" \[at 120,80\]/);
+    expect(upsert.text).toMatch(/- list: frame \(stack column\) \[at 120,300\]/);
+    // In the list's flow: no position to show.
+    expect(upsert.text).toMatch(/- item: text "One"$/m);
+    const layoutDocs = (await call("get_docs", { topic: "layout" })).text;
+    expect(layoutDocs).toMatch(/## Slides people made[\s\S]*Don't switch the root/);
+  });
+
   it("places free layers on top of a stack, and flags positions a stack ignores", async () => {
     await connect();
     await call("create_deck", { title: "Badges" });

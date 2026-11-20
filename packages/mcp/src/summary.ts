@@ -4,6 +4,8 @@
  */
 import {
   type Deck,
+  isFreeLayer,
+  type Layout,
   type LintIssue,
   type Node,
   type Slide,
@@ -44,7 +46,7 @@ function metaLines(meta: Deck["meta"]): string[] {
 /** One slide: its header line, then its node tree. */
 export function slideOutline(slide: Slide, index: number): string {
   const lines = [slideHeader(slide, index)];
-  for (const child of slide.root.children) outline(child, 1, lines);
+  for (const child of slide.root.children) outline(child, slide.root.layout, 1, lines);
   return lines.join("\n");
 }
 
@@ -65,17 +67,20 @@ function anchorLabel(node: Node): string {
   return ` from ${v}-${h}`;
 }
 
-function outline(node: Node, depth: number, lines: string[]): void {
+function outline(node: Node, parent: Layout, depth: number, lines: string[]): void {
   const indent = "  ".repeat(depth);
-  // Free layers say so: they're out of the flow, so reordering them won't move them.
-  // Anchored ones also say which corner their position is measured from.
+  // Layers placed by their position say where: free layers of a stack or grid say "free"
+  // (they're out of the flow, so reordering won't move them); an absolute frame's children,
+  // such as everything on a slide made by hand (D83), say "at". Anchored ones also say
+  // which corner their position is measured from.
   const at = `${node.position?.x ?? 0},${node.position?.y ?? 0}${anchorLabel(node)}`;
-  const free = node.positioning === "free" ? ` [free at ${at}]` : node.anchor ? ` [at ${at}]` : "";
+  const placed = isFreeLayer(node, parent) || node.anchor !== undefined;
+  const free = node.positioning === "free" ? ` [free at ${at}]` : placed ? ` [at ${at}]` : "";
   const turned = node.rotation ? ` [rotated ${node.rotation}°]` : "";
   const hidden = `${free}${turned}${node.hidden ? " [hidden]" : ""}`;
   if (node.kind === "frame") {
     lines.push(`${indent}- ${node.id}: frame (${layoutLabel(node)})${hidden}`);
-    for (const child of node.children) outline(child, depth + 1, lines);
+    for (const child of node.children) outline(child, node.layout, depth + 1, lines);
     return;
   }
   const text = TextContentSchema.safeParse(node.props.content);

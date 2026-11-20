@@ -11,6 +11,8 @@ export const SHORTCUTS = {
   duplicate: "Mod+D",
   group: "Mod+G",
   ungroup: "Mod+Shift+G",
+  // Figma's is Shift+A, which opens the Add menu here (D81); Ctrl+Alt+A is free (D83).
+  autoLayout: "Mod+Alt+A",
   // Alignment (Figma's keys). Matched by physical key, since Alt+letter types symbols on macOS.
   alignLeft: "Alt+A",
   alignCenter: "Alt+H",

@@ -47,7 +47,7 @@ const quoted = (index: SlideIndex, id: string) => {
 };
 
 /** The layers a group would wrap: the topmost selected ones (not the root), in document order. */
-function members(index: SlideIndex, ids: readonly string[]): string[] {
+export function groupMembers(index: SlideIndex, ids: readonly string[]): string[] {
   const picked = topmost(
     index,
     ids.filter((id) => id !== index.rootId && index.nodes.has(id)),
@@ -61,7 +61,7 @@ function members(index: SlideIndex, ids: readonly string[]): string[] {
  * just returns null.
  */
 export function groupBlocker(index: SlideIndex, ids: readonly string[]): string | null {
-  const layers = members(index, ids);
+  const layers = groupMembers(index, ids);
   if (layers.length === 0) return null;
   const parents = new Set(layers.map((id) => index.nodes.get(id)?.parentId));
   if (parents.size > 1) {
@@ -85,7 +85,7 @@ export function groupLayers(
   ids: readonly string[],
   measure: GroupMeasure,
 ): Command | null {
-  const layers = members(index, ids);
+  const layers = groupMembers(index, ids);
   const first = layers[0];
   const parent = first ? parentFrame(index, first) : null;
   if (!first || !parent || groupBlocker(index, ids) !== null) return null;
@@ -148,7 +148,7 @@ function flowGroupOps(index: SlideIndex, layers: string[], parent: FrameNode): O
 }
 
 /** A layer's box on its parent, rotation included: the corners of its rotated layout box. */
-function rotatedBounds(position: Point, size: { w: number; h: number }, degrees: number) {
+export function rotatedBounds(position: Point, size: { w: number; h: number }, degrees: number) {
   const rad = (degrees * Math.PI) / 180;
   const cos = Math.abs(Math.cos(rad));
   const sin = Math.abs(Math.sin(rad));
@@ -165,24 +165,44 @@ function rotatedBounds(position: Point, size: { w: number; h: number }, degrees:
  * It goes where the frontmost member was, so it stays in front of the layers it was in front
  * of. Sizes that filled the old parent are baked to their pixels (the group is smaller).
  */
-function freeGroupOps(
+/** A free layer as measured on its frame: where it sits, its size, and its rotated box. */
+export interface FreeBox {
+  id: string;
+  position: Point;
+  size: { w: number; h: number };
+  /** False when the layer couldn't be measured (hidden), so `size` comes from the document. */
+  measured: boolean;
+  bounds: { x0: number; y0: number; x1: number; y1: number };
+}
+
+/** Measure free layers of the frame `parentId` (shared by free groups and auto layout). */
+export function freeBoxes(
   index: SlideIndex,
-  layers: string[],
-  parent: FrameNode,
+  layers: readonly string[],
+  parentId: string,
   measure: GroupMeasure,
-): Op[] {
-  const boxes = layers.map((id) => {
+): FreeBox[] {
+  return layers.map((id) => {
     const node = index.nodes.get(id)?.node;
     // Anchored layers are measured from the left/top like the rest (the group is new: its
     // members start out anchored to its top-left).
     const stored = { x: node?.position?.x ?? 0, y: node?.position?.y ?? 0 };
-    const position = node?.anchor ? (measure.positionIn(id, parent.id) ?? stored) : stored;
+    const position = node?.anchor ? (measure.positionIn(id, parentId) ?? stored) : stored;
     const fixed = (v: Sizing | undefined) => (typeof v === "number" ? v : 0);
     const measured = measure.size(id);
     const size = measured ?? { w: fixed(node?.width), h: fixed(node?.height) };
     const bounds = rotatedBounds(position, size, node?.rotation ?? 0);
     return { id, position, size, measured: measured !== null, bounds };
   });
+}
+
+function freeGroupOps(
+  index: SlideIndex,
+  layers: string[],
+  parent: FrameNode,
+  measure: GroupMeasure,
+): Op[] {
+  const boxes = freeBoxes(index, layers, parent.id, measure);
   const x0 = Math.floor(Math.min(...boxes.map((b) => b.bounds.x0)));
   const y0 = Math.floor(Math.min(...boxes.map((b) => b.bounds.y0)));
   const x1 = Math.ceil(Math.max(...boxes.map((b) => b.bounds.x1)));
@@ -211,21 +231,31 @@ function freeGroupOps(
     };
     if (node?.positioning !== undefined) set.positioning = null; // always free in an absolute frame
     if (node?.anchor !== undefined) set.anchor = null;
-    const sizing = measure.sizing(box.id);
-    for (const axis of ["width", "height"] as const) {
-      const px = Math.max(1, Math.round(axis === "width" ? box.size.w : box.size.h));
-      if (sizing[axis] === "fill" && box.measured) set[axis] = px;
-    }
+    Object.assign(set, bakedFill(box, measure));
     ops.push({ op: "node.update", id: box.id, set });
   }
   return ops;
+}
+
+/**
+ * The pixel sizes for a layer's axes that filled the frame it's leaving: a new, smaller
+ * frame would otherwise squeeze it (unmeasured layers keep what they have).
+ */
+export function bakedFill(box: FreeBox, measure: GroupMeasure): Record<string, number> {
+  const set: Record<string, number> = {};
+  const sizing = measure.sizing(box.id);
+  for (const axis of ["width", "height"] as const) {
+    const px = Math.max(1, Math.round(axis === "width" ? box.size.w : box.size.h));
+    if (sizing[axis] === "fill" && box.measured) set[axis] = px;
+  }
+  return set;
 }
 
 // ── Ungroup ──────────────────────────────────────────────────────────────────────────
 
 /** The selected frames that can be ungrouped: frames with a parent (not the slide's root). */
 export function ungroupable(index: SlideIndex, ids: readonly string[]): string[] {
-  return members(index, ids).filter((id) => index.nodes.get(id)?.node.kind === "frame");
+  return groupMembers(index, ids).filter((id) => index.nodes.get(id)?.node.kind === "frame");
 }
 
 /** Degrees kept in (-180, 180], so adding two rotations stays inside the schema's range. */

@@ -166,7 +166,7 @@ describe.skipIf(problem !== null)("Phase 3: layers drag and drop", { timeout: 60
     const sent = h.userTransactions();
     const name = (id: string, label: string) =>
       row(id).getByRole("button", { name: label, exact: true });
-    const count = () => page.locator(".inspector-section-title").first().textContent();
+    const count = () => page.locator(".inspector-head strong").textContent();
     // Title … Footer, with Card expanded: Title, Card, Left, Right, Board, Footer.
     await name("title", "Title").click();
     await name("foot", "Footer").click({ modifiers: ["Shift"] });

@@ -28,9 +28,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** grid cell alignment (a horizontal option for grids), then the size badge. The command registry (D81) is the future plugin API (D79): the menu bar and
-  palette read it.
-- **State:** `pnpm check` is green (679 tests, including real-Chromium lint, preview and editor
+- **Next:** crop mode, then grid cell alignment, then the size badge. The command registry
+  (D81) is the future plugin API (D79): the menu bar and palette read it.
+- **State:** `pnpm check` is green (692 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -46,7 +46,7 @@
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
-    done.
+    done. A free canvas: hand-made slides start Free, Add auto layout (D83).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -189,6 +189,11 @@ Animate and Present workspaces instead of being squeezed into today's screen.
   - [x] Image focus point: a dot dragged on the picture, the cropped part dimmed (D82)
 - [x] Tool bar and Add menu: draw with tools, Shift+A / right-click / ➕ to add at a spot,
       one `node.insert` each (D62, D81)
+- [x] Free canvas: slides made by hand start Free, the slide's Layout in the Slide section,
+      Add auto layout (Ctrl+Alt+A) from what's on screen (D83)
+- [ ] Crop mode, like Figma's: double-click an image (or ✂️ in the inspector, or Ctrl-drag an
+      edge) to trim it and pan or scale the picture inside the layer; a `crop` prop agents
+      can set too. Outside crop mode, resizing scales the picture instead of re-fitting it
 - [ ] Grid cell alignment: grids get a horizontal `justify` (start/center/end/stretch,
       like CSS `justify-items`) next to today's vertical `align`; the inspector shows both as
       Horizontal / Vertical (a 200px logo can't be centred in its cell today)
@@ -250,6 +255,8 @@ never undoes the agent's work.
 - [ ] Visual regression tests first: reference decks rendered in CI and compared with
       stored screenshots, so the renderer work below can't silently move a pixel in
       existing decks
+- [ ] Motion is a transform on top of a layer's rest position, never width/height per frame;
+      stacks get layout animations (FLIP); 2.5D is perspective and z on frames (D83 §5)
 - [ ] Timeline schema: per-slide steps (click triggers); animations `{ target, effect | keyframes, trigger: onClick | withPrevious | afterPrevious, delay, duration, easing }`
 - [ ] Core clock: `seek(slideId, step, t)`; plugins driven via `seek(t)`
 - [ ] `AnimationDriver` interface; GSAP as default driver (swap-able)

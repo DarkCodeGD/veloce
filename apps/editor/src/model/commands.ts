@@ -84,8 +84,15 @@ export function updateNode(id: string, set: Record<string, unknown>, label: stri
 
 // ── Slides ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * A slide made by hand starts Free (D83): layers go wherever they're put, like Keynote or
+ * Figma, and structure is opted into per block (Add auto layout). Agents' slides still start
+ * as the stack `createSlide` gives them, since they describe structure, not pixels (D3).
+ */
+export const HAND_SLIDE_LAYOUT = { mode: "absolute" } as const;
+
 export function addSlide(afterIndex: number): Command {
-  const slide = createSlide({ id: createId("sl") });
+  const slide = createSlide({ id: createId("sl"), layout: HAND_SLIDE_LAYOUT });
   return {
     label: "Add slide",
     ops: [{ op: "slide.insert", slide, index: afterIndex + 1 }],

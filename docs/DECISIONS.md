@@ -1825,3 +1825,46 @@ to open it where the cursor is. Both, plus Figma's drawing tools.
 4. **Stored to 0.1%, kept on the picture.** Values are clamped to 0–1 and rounded to three
    decimals. Out-of-range values an agent wrote still render (the renderer is unchanged)
    and show clamped. **Why:** no schema change, so no file-format change.
+
+## D83 — A free canvas with structured blocks; layout says where things rest, not how they move
+
+**Status:** Accepted (2026-11-20). Builds on D3, D49 and D50; doesn't change D3's engine or
+the file format.
+
+A slide made by hand started as the same centred column agents build, so dragging reordered
+instead of placing, and the slide's own layout couldn't be changed at all (its root frame
+can't be selected). Every hand-made deck tool (Keynote, PowerPoint, Canva, Figma) is a free
+canvas at the slide level, with structure opted into per block.
+
+1. **Slides made in the editor start Free** (`HAND_SLIDE_LAYOUT`, `{ mode: "absolute" }`).
+   Agents' slides still start as a stack (`createSlide`). **Why:** people place things;
+   agents describe structure and do pixel maths badly (D3). Both kinds of slide are the
+   same document, so either can be edited by the other.
+2. **The slide's layout lives in the Slide section** ("Layout": Free / Stack / Grid and that
+   mode's settings), the same `LayoutSection` a frame shows as "Auto layout". Stack/Grid →
+   Free moves nothing (D50). Free → Stack/Grid re-arranges the layers, so it shows a toast
+   with Undo instead of asking first (the app's rule for edits that change a lot).
+3. **Add auto layout (Ctrl+Alt+A, a layer button, a registry command).** It reads the
+   arrangement already on screen: layers spread out sideways become a row, else a column;
+   reading order along it; their average spacing as the gap; cross-axis start. Several free
+   layers are wrapped in a stack that hugs them, at their corner (in front of what they were
+   in front of). One Free frame becomes a stack in place, padded by where its children sat.
+   Layers already in a flow are grouped like Ctrl+G, whose frame copies their flow. One
+   transaction. **Why Ctrl+Alt+A:** Figma's Shift+A opens the Add menu here (D81).
+4. **Agents see and keep a Free slide.** The outline shows `[at x,y]` for every layer placed
+   by its position (an absolute frame's children too, not only `positioning: "free"`), and
+   `get_docs("layout")` says to keep a person's arrangement and not switch their root.
+5. **Layout is where a layer rests; motion is a transform on top; depth is a transform too.**
+   The rule for Phase 4: animations move layers with transforms and opacity (x, y, z,
+   rotations, scale, blur) relative to their rest position, whatever placed them. Free
+   layers suit motion paths and hand-made Magic Move; stacks add layout animations (FLIP:
+   measure before and after, animate the difference) and staggering in reading order.
+   Nothing animates width or height frame by frame (it reflows the slide every frame and
+   breaks `seek(t)`). 2.5D (perspective, z depth) is transform state on frames and layers;
+   real 3D scenes are plugin elements with their own camera on the one clock. **Why:** this
+   is how motion tools keep layout and animation from fighting, and it means the free/flow
+   choice never limits what can be animated.
+
+`model/auto-layout.test.ts` covers the flow guess and each case; `phase3-free-canvas.test.ts`
+covers it in real Chromium (Free without a pixel moving, Ctrl+Alt+A, the toast's Undo, new
+slides Free).

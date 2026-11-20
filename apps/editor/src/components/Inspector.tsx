@@ -30,6 +30,7 @@ import {
   ArrowDown,
   ArrowRight,
   Copy,
+  GalleryVerticalEnd,
   Group,
   LayoutGrid,
   Move,
@@ -40,7 +41,7 @@ import {
 import { Fragment } from "react";
 import { run } from "../actions.js";
 import { registry, resolvedSizing } from "../editor-context.js";
-import { groupSelection, ungroupSelection } from "../group-actions.js";
+import { autoLayoutSelection, groupSelection, ungroupSelection } from "../group-actions.js";
 import { type Imported, replaceAsset } from "../model/asset-insert.js";
 import { type Command, deleteNodes, duplicateNodes, updateNode } from "../model/commands.js";
 import {
@@ -111,16 +112,21 @@ export function Inspector({ deck, slide, selection, onSelect }: Props) {
     // picker closes instead of carrying over to it (Figma does the same).
     body = (
       <Fragment key={slide.id}>
-        <SlideSection deck={deck} slide={slide} />
+        <SlideSection deck={deck} slide={slide} index={index} />
         <ThemeSection deck={deck} />
       </Fragment>
     );
   } else if (nodes.length > 1) {
+    // Headed like one layer, so the actions get the same full width (no section padding).
     body = (
-      <Section title={`${nodes.length} layers`}>
+      <>
+        <header className="inspector-head">
+          <strong>{nodes.length} layers</strong>
+          <span>Selection</span>
+        </header>
         <LayerActions index={index} ids={selection} onSelect={onSelect} />
         <AlignBar index={index} ids={selection} />
-      </Section>
+      </>
     );
   } else {
     const node = nodes[0] as Node;
@@ -193,6 +199,18 @@ function LayerActions({
       >
         <Group size={14} /> Group
       </button>
+      <button
+        type="button"
+        className="button"
+        data-tip="Add auto layout: a stack in their on-screen order"
+        {...shortcutAttrs(SHORTCUTS.autoLayout)}
+        onClick={async () => {
+          const select = await autoLayoutSelection(index, ids);
+          if (select) onSelect(select);
+        }}
+      >
+        <GalleryVerticalEnd size={14} /> Auto layout
+      </button>
       {ungroupable(index, ids).length > 0 && (
         <button
           type="button"
@@ -222,35 +240,42 @@ function LayerActions({
   );
 }
 
-function SlideSection({ deck, slide }: { deck: Deck; slide: Slide }) {
+/**
+ * The slide itself: its name, background and show settings, then its layout (D83). The
+ * slide's root frame can't be selected on the canvas, so its layout is edited here.
+ */
+function SlideSection({ deck, slide, index }: { deck: Deck; slide: Slide; index: SlideIndex }) {
   const set =
     (key: string, label: string): Commit =>
     (value) =>
       void run({ label, ops: [{ op: "slide.update", id: slide.id, set: { [key]: value } }] });
   return (
-    <Section title="Slide">
-      <TextField
-        label="Name"
-        value={slide.name}
-        placeholder="Untitled"
-        onCommit={set("name", "Rename slide")}
-      />
-      <ColorField
-        label="Background"
-        value={slide.background}
-        theme={deck.theme}
-        {...livePaint(deck, slide.id, slide.background, (value) => ({
-          label: "Change slide background",
-          ops: [{ op: "slide.update", id: slide.id, set: { background: value } }],
-        }))}
-      />
-      <ToggleField
-        label="Skip in show"
-        value={slide.hidden}
-        onCommit={set("hidden", "Toggle slide hidden")}
-      />
-      <p className="inspector-hint">Select a layer on the slide or in Layers to edit it.</p>
-    </Section>
+    <>
+      <Section title="Slide">
+        <TextField
+          label="Name"
+          value={slide.name}
+          placeholder="Untitled"
+          onCommit={set("name", "Rename slide")}
+        />
+        <ColorField
+          label="Background"
+          value={slide.background}
+          theme={deck.theme}
+          {...livePaint(deck, slide.id, slide.background, (value) => ({
+            label: "Change slide background",
+            ops: [{ op: "slide.update", id: slide.id, set: { background: value } }],
+          }))}
+        />
+        <ToggleField
+          label="Skip in show"
+          value={slide.hidden}
+          onCommit={set("hidden", "Toggle slide hidden")}
+        />
+        <p className="inspector-hint">Select a layer on the slide or in Layers to edit it.</p>
+      </Section>
+      <LayoutSection deck={deck} index={index} node={slide.root} title="Layout" />
+    </>
   );
 }
 
@@ -500,7 +525,21 @@ function measureOnCanvas(index: SlideIndex): (id: string) => Measured | null {
   };
 }
 
-function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; node: FrameNode }) {
+/**
+ * A frame's layout: Stack, Grid or Free, and that mode's settings. Frames show it as "Auto
+ * layout"; the slide shows its root frame's as "Layout" (D83).
+ */
+function LayoutSection({
+  deck,
+  index,
+  node,
+  title = "Auto layout",
+}: {
+  deck: Deck;
+  index: SlideIndex;
+  node: FrameNode;
+  title?: string;
+}) {
   const layout = node.layout;
   const setLayout =
     (key: string, label: string): Commit =>
@@ -508,14 +547,129 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
       void run(updateNode(node.id, { layout: { [key]: value } }, label));
   const switchMode = (mode: string | null) => {
     if (mode !== "stack" && mode !== "grid" && mode !== "absolute") return;
-    void run(switchLayout(index, node.id, mode, measureOnCanvas(index)));
+    // Free → Stack/Grid re-arranges the layers into the flow; say so, with Undo (D83).
+    // The other way pins everything where it is (D50), so there's nothing to say.
+    const rearranges = layout.mode === "absolute" && node.children.length > 0;
+    const message = `Layers now flow in a ${mode === "grid" ? "grid" : "stack"}`;
+    void run(switchLayout(index, node.id, mode, measureOnCanvas(index)), {
+      undoToast: rearranges ? message : false,
+    });
   };
+  const liveLayout = (key: string, label: string) =>
+    live((value) => updateNode(node.id, { layout: { [key]: value } }, label));
+  /** Where "Custom…" starts: the frame's rendered CSS value. */
+  const rendered = (property: string) => () =>
+    renderedNumber(node.id, property, "self", { min: 0 });
+
+  return (
+    <Section title={title}>
+      <SelectField
+        label="Mode"
+        value={layout.mode}
+        options={[
+          { value: "stack", label: "Stack", icon: <Rows3 size={14} /> },
+          { value: "grid", label: "Grid", icon: <LayoutGrid size={14} /> },
+          { value: "absolute", label: "Free (absolute)", icon: <Move size={14} /> },
+        ]}
+        onCommit={(v) => switchMode(v as string | null)}
+      />
+      {layout.mode === "stack" && (
+        <>
+          <SelectField
+            label="Direction"
+            value={layout.direction}
+            options={[
+              { value: "column", label: "Vertical", icon: <ArrowDown size={14} /> },
+              { value: "row", label: "Horizontal", icon: <ArrowRight size={14} /> },
+            ]}
+            defaultValue="column"
+            onCommit={setLayout("direction", "Change direction")}
+          />
+          <SelectField
+            label="Align"
+            value={layout.align}
+            options={ALIGN}
+            defaultValue="stretch"
+            onCommit={setLayout("align", "Change alignment")}
+          />
+          <SelectField
+            label="Justify"
+            value={layout.justify}
+            options={JUSTIFY}
+            defaultValue="start"
+            onCommit={setLayout("justify", "Change distribution")}
+          />
+          <ToggleField
+            label="Wrap"
+            value={layout.wrap}
+            onCommit={setLayout("wrap", "Toggle wrap")}
+          />
+        </>
+      )}
+      {layout.mode === "grid" && (
+        <>
+          <NumberField
+            label="Columns"
+            value={layout.columns}
+            min={1}
+            max={24}
+            integer
+            {...live((v) =>
+              updateNode(
+                node.id,
+                { layout: { columns: Math.round((v as number | null) ?? 2) } },
+                "Change columns",
+              ),
+            )}
+          />
+          <SelectField
+            label="Align"
+            value={layout.align}
+            options={ALIGN}
+            defaultValue="stretch"
+            onCommit={setLayout("align", "Change alignment")}
+          />
+        </>
+      )}
+      {layout.mode !== "absolute" && (
+        <LengthField
+          label="Gap"
+          value={layout.gap}
+          theme={deck.theme}
+          group="space"
+          current={rendered("rowGap")}
+          {...liveLayout("gap", "Change gap")}
+        />
+      )}
+      {layout.mode === "absolute" ? (
+        <p className="inspector-hint">
+          Free layers are placed from the frame's edges; pin them with Pin X / Pin Y.
+        </p>
+      ) : (
+        <SidesField
+          label="Padding"
+          toggleLabel="Individual sides"
+          sides={SIDES}
+          values={paddingSides(layout.padding)}
+          theme={deck.theme}
+          group="space"
+          all={liveLayout("padding", "Change padding")}
+          side={(key) =>
+            live((value) => setPaddingSide(node.id, layout.padding, key, value as Space | null))
+          }
+          current={(key) => rendered(PADDING_CSS[key])}
+          onCollapse={() => void run(collapsePadding(node.id, layout.padding))}
+        />
+      )}
+    </Section>
+  );
+}
+
+function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; node: FrameNode }) {
   const setStyle =
     (key: string, label: string): Commit =>
     (value) =>
       void run(updateNode(node.id, { style: { [key]: value } }, label));
-  const liveLayout = (key: string, label: string) =>
-    live((value) => updateNode(node.id, { layout: { [key]: value } }, label));
   const liveStyle = (key: string, label: string) =>
     live((value) => updateNode(node.id, { style: { [key]: value } }, label));
   /** Where "Custom…" starts: the frame's rendered CSS value. */
@@ -524,106 +678,7 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
 
   return (
     <>
-      <Section title="Auto layout">
-        <SelectField
-          label="Mode"
-          value={layout.mode}
-          options={[
-            { value: "stack", label: "Stack", icon: <Rows3 size={14} /> },
-            { value: "grid", label: "Grid", icon: <LayoutGrid size={14} /> },
-            { value: "absolute", label: "Free (absolute)", icon: <Move size={14} /> },
-          ]}
-          onCommit={(v) => switchMode(v as string | null)}
-        />
-        {layout.mode === "stack" && (
-          <>
-            <SelectField
-              label="Direction"
-              value={layout.direction}
-              options={[
-                { value: "column", label: "Vertical", icon: <ArrowDown size={14} /> },
-                { value: "row", label: "Horizontal", icon: <ArrowRight size={14} /> },
-              ]}
-              defaultValue="column"
-              onCommit={setLayout("direction", "Change direction")}
-            />
-            <SelectField
-              label="Align"
-              value={layout.align}
-              options={ALIGN}
-              defaultValue="stretch"
-              onCommit={setLayout("align", "Change alignment")}
-            />
-            <SelectField
-              label="Justify"
-              value={layout.justify}
-              options={JUSTIFY}
-              defaultValue="start"
-              onCommit={setLayout("justify", "Change distribution")}
-            />
-            <ToggleField
-              label="Wrap"
-              value={layout.wrap}
-              onCommit={setLayout("wrap", "Toggle wrap")}
-            />
-          </>
-        )}
-        {layout.mode === "grid" && (
-          <>
-            <NumberField
-              label="Columns"
-              value={layout.columns}
-              min={1}
-              max={24}
-              integer
-              {...live((v) =>
-                updateNode(
-                  node.id,
-                  { layout: { columns: Math.round((v as number | null) ?? 2) } },
-                  "Change columns",
-                ),
-              )}
-            />
-            <SelectField
-              label="Align"
-              value={layout.align}
-              options={ALIGN}
-              defaultValue="stretch"
-              onCommit={setLayout("align", "Change alignment")}
-            />
-          </>
-        )}
-        {layout.mode !== "absolute" && (
-          <LengthField
-            label="Gap"
-            value={layout.gap}
-            theme={deck.theme}
-            group="space"
-            current={rendered("rowGap")}
-            {...liveLayout("gap", "Change gap")}
-          />
-        )}
-        {layout.mode === "absolute" ? (
-          <p className="inspector-hint">
-            Free layers are placed from the frame's edges; pin them with Pin X / Pin Y.
-          </p>
-        ) : (
-          <SidesField
-            label="Padding"
-            toggleLabel="Individual sides"
-            sides={SIDES}
-            values={paddingSides(layout.padding)}
-            theme={deck.theme}
-            group="space"
-            all={liveLayout("padding", "Change padding")}
-            side={(key) =>
-              live((value) => setPaddingSide(node.id, layout.padding, key, value as Space | null))
-            }
-            current={(key) => rendered(PADDING_CSS[key])}
-            onCollapse={() => void run(collapsePadding(node.id, layout.padding))}
-          />
-        )}
-      </Section>
+      <LayoutSection deck={deck} index={index} node={node} />
       <Section title="Fill & shape">
         <ColorField
           label="Fill"

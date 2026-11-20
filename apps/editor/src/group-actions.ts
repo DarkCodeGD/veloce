@@ -6,6 +6,7 @@
 import { run } from "./actions.js";
 import { mainCanvasSpace } from "./components/canvas-space.js";
 import { resolvedSizing } from "./editor-context.js";
+import { addAutoLayout } from "./model/auto-layout.js";
 import { type GroupMeasure, groupBlocker, groupLayers, ungroupLayers } from "./model/group.js";
 import type { SlideIndex } from "./model/slide-index.js";
 import { showToast } from "./toasts.js";
@@ -34,6 +35,23 @@ export async function groupSelection(
     return null;
   }
   const command = groupLayers(index, ids, canvasMeasure(index));
+  return (await run(command)) ? (command?.select ?? null) : null;
+}
+
+/**
+ * Add auto layout to the selection (D83): free layers become a stack in their on-screen
+ * order. Resolves to the IDs to select, or null.
+ */
+export async function autoLayoutSelection(
+  index: SlideIndex,
+  ids: readonly string[],
+): Promise<string[] | null> {
+  const blocker = groupBlocker(index, ids);
+  if (blocker) {
+    showToast({ message: blocker.replace(/^Group/, "Add auto layout to"), tone: "info" });
+    return null;
+  }
+  const command = addAutoLayout(index, ids, canvasMeasure(index));
   return (await run(command)) ? (command?.select ?? null) : null;
 }
 
