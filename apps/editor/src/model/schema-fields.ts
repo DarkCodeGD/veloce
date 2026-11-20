@@ -20,6 +20,8 @@ export type FieldKind =
   | { kind: "richText" }
   /** A deck asset (`"asset:<sha256>"`): shown with a preview, replaced by picking a file. */
   | { kind: "asset" }
+  /** A line (`StrokeSchema`: color, width, style), edited like a frame's border. */
+  | { kind: "stroke" }
   /** Not editable in the inspector yet (nested objects): shown read-only. */
   | { kind: "readonly" };
 
@@ -56,7 +58,20 @@ function flatten(s: JsonSchema): JsonSchema[] {
 const tokenGroup = (s: JsonSchema) =>
   s.type === "string" && s.pattern ? (TOKEN_PATTERN.exec(s.pattern)?.[1] ?? null) : null;
 
+/** `StrokeSchema`'s shape: an object of a color, a number width and an optional line style. */
+function isStroke(s: JsonSchema): boolean {
+  const p = s.properties;
+  if (s.type !== "object" || !p?.color || !p.width) return false;
+  const keys = Object.keys(p);
+  return (
+    keys.every((k) => k === "color" || k === "width" || k === "style") &&
+    fieldKind(p.color).kind === "color" &&
+    fieldKind(p.width).kind === "number"
+  );
+}
+
 export function fieldKind(s: JsonSchema): FieldKind {
+  if (isStroke(s)) return { kind: "stroke" };
   const options = flatten(s);
   const isHex = (o: JsonSchema) => o.type === "string" && o.pattern?.startsWith("^#");
   if (options.some(isHex)) {

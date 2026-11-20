@@ -48,11 +48,14 @@ import {
   addShadow,
   CUSTOM,
   DEFAULT_STROKE,
+  FRAME_BORDER,
   removeBorder,
   removeShadow,
+  type StrokePath,
   setShadowPreset,
   shadowColor,
   shadowPreset,
+  strokePatch,
 } from "../model/frame-style.js";
 import { ungroupable } from "../model/group.js";
 import {
@@ -643,7 +646,7 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
           onCommit={setStyle("clip", "Toggle clipping")}
         />
       </Section>
-      <BorderSection deck={deck} node={node} stroke={node.style?.stroke} />
+      <BorderSection deck={deck} nodeId={node.id} stroke={node.style?.stroke} />
       <ShadowSection theme={deck.theme} node={node} shadow={node.style?.shadow} />
     </>
   );
@@ -651,20 +654,33 @@ function FrameSections({ deck, index, node }: { deck: Deck; index: SlideIndex; n
 
 const BORDER_STYLES = ["solid", "dashed", "dotted"];
 
-/** A frame's border (`style.stroke`, D74): **+** adds one; color, width and line style. */
-function BorderSection({ deck, node, stroke }: { deck: Deck; node: FrameNode; stroke?: Stroke }) {
+/**
+ * A border: a frame's `style.stroke` (D74), or an element's stroke prop such as a shape's
+ * outline (`path`). **+** adds one; then color, width and line style.
+ */
+function BorderSection({
+  deck,
+  nodeId,
+  stroke,
+  path = FRAME_BORDER,
+}: {
+  deck: Deck;
+  nodeId: string;
+  stroke?: Stroke;
+  path?: StrokePath;
+}) {
+  const set = (value: Partial<Stroke>, label: string) =>
+    updateNode(nodeId, strokePatch(path, value), label);
   /** Live-previewed edit of one border key; `null` (cleared) is ignored: they're required. */
   const liveStroke = (key: "color" | "width", label: string) =>
-    live((value) =>
-      value === null ? null : updateNode(node.id, { style: { stroke: { [key]: value } } }, label),
-    );
+    live((value) => (value === null ? null : set({ [key]: value }, label)));
   return (
     <AddableSection
       title="Border"
       noun="border"
       present={stroke !== undefined}
-      onAdd={() => void run(addBorder(node.id))}
-      onRemove={() => void run(removeBorder(node.id))}
+      onAdd={() => void run(addBorder(nodeId, path))}
+      onRemove={() => void run(removeBorder(nodeId, path))}
     >
       {stroke && (
         <>
@@ -692,9 +708,7 @@ function BorderSection({ deck, node, stroke }: { deck: Deck; node: FrameNode; st
             options={BORDER_STYLES}
             defaultValue="solid"
             onCommit={(value) =>
-              void run(
-                updateNode(node.id, { style: { stroke: { style: value } } }, "Change border style"),
-              )
+              void run(set({ style: value as Stroke["style"] }, "Change border style"))
             }
           />
         </>
@@ -827,128 +841,152 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
     );
   }
   const props = node.props as Record<string, unknown>;
+  const fields = propFields(definition);
   return (
-    <Section title={definition.title}>
-      {propFields(definition).map((field) => {
-        const value = props[field.key];
-        const toCommand = (v: unknown) =>
-          updateNode(node.id, { props: { [field.key]: v } }, `Change ${field.label.toLowerCase()}`);
-        const common = { label: field.label, onCommit: (v: unknown) => void run(toCommand(v)) };
-        switch (field.kind) {
-          case "enum":
-            return (
-              <SelectField
-                key={field.key}
-                {...common}
-                value={value as string | undefined}
-                options={field.options}
-                defaultLabel="Default"
-              />
+    <>
+      <Section title={definition.title}>
+        {fields.map((field) => {
+          const value = props[field.key];
+          const toCommand = (v: unknown) =>
+            updateNode(
+              node.id,
+              { props: { [field.key]: v } },
+              `Change ${field.label.toLowerCase()}`,
             );
-          case "boolean":
-            return <ToggleField key={field.key} {...common} value={value as boolean | undefined} />;
-          case "number":
-            return (
-              <NumberField
-                key={field.key}
-                {...common}
-                value={value as number | undefined}
-                placeholder="Default"
-                min={field.min}
-                max={field.max}
-                integer={field.integer}
-                fallback={() =>
-                  field.default ??
-                  renderedNumber(node.id, field.key, "plugin", { min: field.min, max: field.max })
-                }
-                {...live(toCommand)}
-              />
-            );
-          case "token":
-            return (
-              <TokenField
-                key={field.key}
-                {...common}
-                value={value as string | undefined}
-                theme={deck.theme}
-                group={field.group}
-              />
-            );
-          case "color":
-            return (
-              <ColorField
-                key={field.key}
-                {...common}
-                value={value}
-                theme={deck.theme}
-                {...live(toCommand)}
-              />
-            );
-          case "paint":
-            return (
-              <ColorField
-                key={field.key}
-                {...common}
-                value={value}
-                theme={deck.theme}
-                {...livePaint(deck, node.id, value, toCommand)}
-              />
-            );
-          case "length":
-            return (
-              <LengthField
-                key={field.key}
-                {...common}
-                value={value}
-                theme={deck.theme}
-                group={field.group}
-                current={() => renderedNumber(node.id, field.key, "plugin", { min: 0 })}
-                {...live(toCommand)}
-              />
-            );
-          case "text":
-            return (
-              <TextField
-                key={field.key}
-                {...common}
-                value={value as string | undefined}
-                multiline={field.multiline}
-              />
-            );
-          case "richText":
-            return typeof value === "string" || value === undefined ? (
-              <TextField
-                key={field.key}
-                {...common}
-                value={value as string | undefined}
-                multiline
-              />
-            ) : (
-              <p key={field.key} className="inspector-hint">
-                {field.label}: formatted text. Double-click it on the slide (or press Enter) to edit
-                it there.
-              </p>
-            );
-          case "asset":
-            return (
-              <AssetField
-                key={field.key}
-                label={field.label}
-                value={value}
-                deck={deck}
-                onReplace={(next) => void run(replaceAsset(deck, node.id, field.key, value, next))}
-              />
-            );
-          case "readonly":
-            return (
-              <p key={field.key} className="inspector-hint">
-                {field.label}: {value === undefined ? "default" : "set"} (not editable here yet).
-              </p>
-            );
-          default:
-            return null;
-        }
-      })}
-    </Section>
+          const common = { label: field.label, onCommit: (v: unknown) => void run(toCommand(v)) };
+          switch (field.kind) {
+            case "enum":
+              return (
+                <SelectField
+                  key={field.key}
+                  {...common}
+                  value={value as string | undefined}
+                  options={field.options}
+                  defaultLabel="Default"
+                />
+              );
+            case "boolean":
+              return (
+                <ToggleField key={field.key} {...common} value={value as boolean | undefined} />
+              );
+            case "number":
+              return (
+                <NumberField
+                  key={field.key}
+                  {...common}
+                  value={value as number | undefined}
+                  placeholder="Default"
+                  min={field.min}
+                  max={field.max}
+                  integer={field.integer}
+                  fallback={() =>
+                    field.default ??
+                    renderedNumber(node.id, field.key, "plugin", { min: field.min, max: field.max })
+                  }
+                  {...live(toCommand)}
+                />
+              );
+            case "token":
+              return (
+                <TokenField
+                  key={field.key}
+                  {...common}
+                  value={value as string | undefined}
+                  theme={deck.theme}
+                  group={field.group}
+                />
+              );
+            case "color":
+              return (
+                <ColorField
+                  key={field.key}
+                  {...common}
+                  value={value}
+                  theme={deck.theme}
+                  {...live(toCommand)}
+                />
+              );
+            case "paint":
+              return (
+                <ColorField
+                  key={field.key}
+                  {...common}
+                  value={value}
+                  theme={deck.theme}
+                  {...livePaint(deck, node.id, value, toCommand)}
+                />
+              );
+            case "length":
+              return (
+                <LengthField
+                  key={field.key}
+                  {...common}
+                  value={value}
+                  theme={deck.theme}
+                  group={field.group}
+                  current={() => renderedNumber(node.id, field.key, "plugin", { min: 0 })}
+                  {...live(toCommand)}
+                />
+              );
+            case "text":
+              return (
+                <TextField
+                  key={field.key}
+                  {...common}
+                  value={value as string | undefined}
+                  multiline={field.multiline}
+                />
+              );
+            case "richText":
+              return typeof value === "string" || value === undefined ? (
+                <TextField
+                  key={field.key}
+                  {...common}
+                  value={value as string | undefined}
+                  multiline
+                />
+              ) : (
+                <p key={field.key} className="inspector-hint">
+                  {field.label}: formatted text. Double-click it on the slide (or press Enter) to
+                  edit it there.
+                </p>
+              );
+            case "asset":
+              return (
+                <AssetField
+                  key={field.key}
+                  label={field.label}
+                  value={value}
+                  deck={deck}
+                  onReplace={(next) =>
+                    void run(replaceAsset(deck, node.id, field.key, value, next))
+                  }
+                />
+              );
+            case "readonly":
+              return (
+                <p key={field.key} className="inspector-hint">
+                  {field.label}: {value === undefined ? "default" : "set"} (not editable here yet).
+                </p>
+              );
+            default:
+              return null;
+          }
+        })}
+      </Section>
+      {/* Strokes get their own Border section below, as on frames (a shape's outline). */}
+      {fields.map(
+        (field) =>
+          field.kind === "stroke" && (
+            <BorderSection
+              key={field.key}
+              deck={deck}
+              nodeId={node.id}
+              stroke={props[field.key] as Stroke | undefined}
+              path={{ at: "props", key: field.key }}
+            />
+          ),
+      )}
+    </>
   );
 }

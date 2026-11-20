@@ -1683,3 +1683,84 @@ findings).
 7. **App dialogs open from anywhere** through a small store (`dialogs.ts`), and App renders
    them at the top level. **Why:** a dialog inside the inspector would unmount, losing its
    draft, whenever the inspector re-keys (for example, when Follow AI switches slides).
+
+## D79 — Plugins extend the app, sandboxed like Figma
+
+**Status:** Accepted (2026-11-20). Extends D22, which stays the contract for element types.
+
+The user wants plugins like Blender's, Obsidian's and Figma's: plugins that add **tools**
+(commands, panels, automations), not only new kinds of content. D22 only covers element
+types (text, chart, lottie…). Of the three trust models, the user chose **Figma's: plugin
+code runs sandboxed** and reaches the app only through an API. **Why:** Veloce is a FOSS app
+people will install community plugins into, and it runs in Electron, where a trusted plugin
+(Obsidian, Blender) gets the whole computer. Decks are also shared, and opening a deck
+someone sent you must never run their code unsandboxed.
+
+1. **One plugin package, several contributions.** A plugin's manifest declares what it
+   contributes: commands (with menu places and default shortcuts), panels, and element types
+   (D22). It declares them statically, so the app can list, search and show them without
+   running plugin code. It also declares an `apiVersion`: the plugin API is semver'd, and
+   frozen as v1 at 1.0.
+2. **The sandbox.** Each third-party plugin runs in its own sandboxed iframe with an opaque
+   origin (no `allow-same-origin`) and a strict CSP: no network unless its manifest allows a
+   domain, and no Node, filesystem or Electron APIs ever. Plugin panels are sandboxed
+   iframes too. Everything crosses a `MessageChannel` as an async RPC. **Why:** the browser's
+   own isolation is the most battle-tested sandbox we can ship without native code; this is
+   Figma's model (logic plus an iframe UI over `postMessage`).
+3. **The document API is ops (golden rule 1).** Plugins read the deck, the selection and
+   changes, and write only through transactions with a new origin, `plugin:<id>`. **Why:** a
+   plugin then gets everything agents get, with no special cases: validation, per-origin
+   undo, History ("Chart Maker changed slide 3"), Revert (D71) and lint. A plugin can't make
+   a change the user can't see or take back.
+4. **Commands are the extension point.** The menu bar, the command palette, the tool bar and
+   keyboard shortcuts all read one command registry, and built-in commands register through
+   it exactly as plugins do (golden rule 6, extended from elements to commands). **Why:**
+   round 5 builds the menu bar and palette next. Designing their registry as the public
+   API now is cheap; retrofitting it later isn't.
+5. **Permissions, asked once.** Plugins can read the open deck and edit it through
+   transactions by default (an edit is always visible and undoable). Anything else is
+   declared and shown at install: network domains, asset upload, clipboard. A plugin that
+   asks for more in an update is disabled until the user agrees. Plugins keep their own
+   settings in plugin storage, outside decks.
+6. **Clean lifecycle, like Obsidian.** Enabling loads a plugin, and disabling removes
+   everything it registered (commands, panels, element types, frames, listeners) with no
+   restart. The conformance kit checks this, as it checks elements' `dispose()`.
+7. **Content plugins in decks.** A deck already records the element plugins it uses
+   (`plugins.lock.json`). Opening a deck never installs or runs a plugin by itself. A missing
+   plugin's elements show a placeholder that names the plugin. Third-party element types
+   mount inside the sandbox; the renderer drives `seek(t)` over RPC and waits for the frame
+   before capturing, so export stays deterministic (golden rule 3).
+8. **First-party plugins** (`veloce.*`, shipped in the app and reviewed with it) use the same
+   API but can be hosted in-process. **Why:** a sandbox per text box would cost too much
+   for elements on every slide. The API is the same; only the transport differs, and the
+   conformance kit runs plugins both ways.
+9. **Agents can use plugins.** A command can opt in to being an MCP tool, with an input
+   schema (golden rule 5). The agent calls it, and its transaction carries the plugin's
+   origin. Agents work with no editor tab open (golden rule 2), so these commands run in the
+   server's headless render page, the one that already measures slides for lint. This is a
+   capability Blender, Obsidian and Figma don't have.
+10. **Installing.** For 1.0: from a file or a folder, plus a developer mode that loads an
+    unpacked folder and reloads it on save. A plugin directory and marketplace come after 1.0.
+
+**Not decided yet (settle when the phase starts):** whether plugin logic gets a Worker
+inside its iframe; the exact RPC shape (a typed proxy generated from the API's types is
+likely); the package format and signing.
+
+## D80 — A shape's outline uses the frame's Border section
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist; extends D74.
+
+1. **Strokes are found by their schema, not by their name.** A prop whose JSON Schema is
+   `StrokeSchema`'s shape (a color, a number width, an optional line style, nothing else)
+   is a `stroke` field. **Why:** golden rule 5. Any plugin that uses `StrokeSchema` gets the
+   editor, not only shapes, and an unrelated object that happens to have `color` and `width`
+   isn't mistaken for one.
+2. **Same UI, same defaults as a frame's border.** A stroke field renders as its own Border
+   section below the element's properties: **+** adds a 2px line in the theme's border color,
+   with color, width and style, and **−** removes it. The helpers take a path (`style.stroke`
+   for frames, `props.<key>` for elements), so the two can't drift apart. **Why:** a shape's
+   outline was read-only, so only agents could add one. People shouldn't need to learn two
+   UIs for the same line.
+3. **The roadmap item for nested props shrinks to the image focus point.** It was the only
+   other read-only built-in prop. A generic editor for any nested object waits for
+   third-party plugins (D79) that actually need one.

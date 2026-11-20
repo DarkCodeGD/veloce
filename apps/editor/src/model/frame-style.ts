@@ -1,6 +1,7 @@
 /**
  * A frame's border (`style.stroke`) and shadow (`style.shadow`) as the inspector edits them,
- * pure (D74). Each is absent until added with **+** (Figma's Stroke / Effects), so a plain card
+ * pure (D74). Borders also serve any element prop that is a stroke, such as a shape's
+ * outline (`props.stroke`), through a `StrokePath`. Each is absent until added with **+** (Figma's Stroke / Effects), so a plain card
  * shows two short headers, not a column of empty fields.
  *
  * - A border starts as a 2px line in the theme's border color (1px is a hairline on a
@@ -20,11 +21,23 @@ export const FALLBACK_SHADOW: Shadow = { x: 0, y: 8, blur: 24, color: "#00000026
 /** What the Shadow menu shows for an explicit (non-token) shadow. */
 export const CUSTOM = "custom";
 
-export const addBorder = (id: string): Command =>
-  updateNode(id, { style: { stroke: DEFAULT_STROKE } }, "Add border");
+/** Where a node keeps a stroke: a frame's `style.stroke`, or an element prop (`props.stroke`). */
+export interface StrokePath {
+  at: "style" | "props";
+  key: string;
+}
+export const FRAME_BORDER: StrokePath = { at: "style", key: "stroke" };
 
-export const removeBorder = (id: string): Command =>
-  updateNode(id, { style: { stroke: null } }, "Remove border");
+/** A `node.update` patch setting the stroke at `path` (a partial stroke merges; null removes). */
+export const strokePatch = (path: StrokePath, value: Partial<Stroke> | null) => ({
+  [path.at]: { [path.key]: value },
+});
+
+export const addBorder = (id: string, path: StrokePath = FRAME_BORDER): Command =>
+  updateNode(id, strokePatch(path, DEFAULT_STROKE), "Add border");
+
+export const removeBorder = (id: string, path: StrokePath = FRAME_BORDER): Command =>
+  updateNode(id, strokePatch(path, null), "Remove border");
 
 /** The theme's `md` shadow, else its first one, else an explicit soft shadow. */
 export function defaultShadow(theme: Theme): ShadowValue {

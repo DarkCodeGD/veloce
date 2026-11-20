@@ -1,4 +1,6 @@
 import { createBuiltinRegistry } from "@veloce/builtins";
+import { StrokeSchema } from "@veloce/core";
+import { z } from "@veloce/plugin-api";
 import { describe, expect, it } from "vitest";
 import { labelFor, propFields } from "./schema-fields.js";
 
@@ -26,8 +28,23 @@ describe("inspector fields from plugin schemas", () => {
     expect(text.italic).toMatchObject({ kind: "boolean" });
     expect(fields("shape").fill).toMatchObject({ kind: "paint" });
     expect(fields("shape").radius).toMatchObject({ kind: "length", group: "radius" });
+    expect(fields("shape").stroke).toMatchObject({ kind: "stroke" });
     expect(fields("image").alt).toMatchObject({ kind: "text" });
     expect(fields("image").asset).toMatchObject({ kind: "asset" });
     expect(labelFor("lineHeight")).toBe("Line height");
+  });
+
+  it("knows a stroke by its shape, not by its name", () => {
+    const kind = (schema: z.ZodType) =>
+      propFields({ propsSchema: z.strictObject({ line: schema }) })[0]?.kind;
+    expect(kind(StrokeSchema)).toBe("stroke");
+    expect(kind(StrokeSchema.optional())).toBe("stroke");
+    // Other objects with a color and a width aren't strokes.
+    expect(kind(z.strictObject({ color: z.string(), width: z.number() }))).toBe("readonly");
+    expect(
+      kind(
+        z.strictObject({ color: StrokeSchema.shape.color, width: z.number(), glow: z.number() }),
+      ),
+    ).toBe("readonly");
   });
 });

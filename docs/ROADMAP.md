@@ -19,6 +19,8 @@
   second screen, laser pointer).
 - Reuse: components and slide layouts; slide numbers, footers and sections.
 - The core plugins (chart, icon, code, math, video, Lottie) pass conformance.
+- Third-party plugins, sandboxed like Figma, add commands, panels and element types, and
+  agents can call their commands (D79).
 - Export to PDF, PNG, standalone HTML and MP4.
 - It installs and updates on Linux, Windows and macOS, signed, and opens `.veloce` files.
 
@@ -26,9 +28,10 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: nested object props in the
-  inspector), then the tool bar (D62).
-- **State:** `pnpm check` is green (636 tests, including real-Chromium lint, preview and editor
+- **Next:** round 5's "Parity with agents" checklist (next: the image focus point), then
+  the tool bar (D62). The menu bar's command registry is the future plugin API (D79): build
+  it that way.
+- **State:** `pnpm check` is green (639 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -57,7 +60,8 @@
 Veloce is a desktop app (Linux, Windows, macOS) for making professional, animated presentations.
 **AI agents build decks through an MCP server**, and humans edit the same deck by hand in the editor,
 even at the same time. Decks are saved as **`.veloce`** files. Capabilities (3D, Lottie, Rive, charts…)
-come from **plugins** that all follow one contract and one shared timeline clock. It is a
+and tools (commands, panels) come from **plugins**, sandboxed like Figma's, that all follow one
+contract and one shared timeline clock. It is a
 **free and open-source (FOSS)** product for other people, so security, stable file formats,
 signing, updates and dependency licenses matter.
 
@@ -73,8 +77,8 @@ signing, updates and dependency licenses matter.
 5. **One schema → everything.** Each element type's Zod `propsSchema` generates the inspector UI,
    the MCP tool input, validation and the AI docs. Docs are generated, not hand-written (except the skill).
 6. **Built-ins are plugins.** Text, shape and image use the exact same plugin API as third parties.
-7. **Every op is invertible** and every transaction records its origin (`user` | `agent:<id>`), so
-   undo is tracked per origin and "undo what the AI did" is one step.
+7. **Every op is invertible** and every transaction records its origin (`user` | `agent:<id>` |
+   `plugin:<id>`, D79), so undo is tracked per origin and "undo what the AI did" is one step.
 
 ## Target architecture
 
@@ -179,9 +183,10 @@ Animate and Present workspaces instead of being squeezed into today's screen.
   - [x] New deck from the editor: File → New with a theme, New slide in an empty deck (D77)
   - [x] Theme styles: File → Theme styles (or the inspector's Theme section) edits text
         styles and the spacing, radius and shadow scales; one undo step per Save (D78)
-  - [ ] Nested object props in the generated inspector (any plugin prop that's an
-        object), not read-only. An image's focus point `{x, y}` is a dot to drag on the
-        image preview, not number fields
+  - [x] Shape outline: a shape's `stroke` uses the frame's Border section, found by its
+        schema (D80)
+  - [ ] Image focus point: `{x, y}` as a dot to drag on the image preview, not number
+        fields (the last read-only built-in prop, D80)
 - [ ] Tool bar in the top bar's centre (D62): Select (V), Frame (F), Shape (R / O, with a
       menu for other shapes), Text (T), Image and Hand (H). Click to place at the default
       size, or drag to draw; the new layer is selected, and a new text layer starts typing.
@@ -192,6 +197,9 @@ Animate and Present workspaces instead of being squeezed into today's screen.
 - [ ] Size badge under the selection (`176 × 36`, in slide pixels), live while resizing
 - [ ] On-canvas gradient handles: with the paint picker open on a gradient, drag its ends
       (linear), center (radial, angular) and stops on the slide itself, like Figma (D66 §8)
+- [ ] Command registry (D79 §4): every command (ID, label, icon, shortcut, menu place,
+      enabled/checked state, run) registered in one place, which the menu bar, command
+      palette, tool bar and shortcuts all read. Built-ins register through it as plugins will
 - [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
       and its shortcut, a row of `MenuButton`s (the File menu is the first, D76); the deck switcher, Follow AI / Live and Present stay in the bar on
       every workspace (AI activity is never hidden in one workspace)
@@ -277,7 +285,28 @@ assets (icons, logos) load only through `<img>`, never inlined, so scripts in an
       corners" toggle that opens the four (toggling back sets one value again). Reuse
       `SidesField` from round 5's per-side padding (D75)
 
-**Done when:** all plugins pass conformance; the agent can discover and use them via `list_element_types` + `get_docs`.
+**App plugins (D79):** sandboxed like Figma; plugins add commands, panels and element types.
+
+- [ ] `plugin:<id>` origin in core: per-origin undo, History, Revert and lint treat plugins
+      like agents
+- [ ] Plugin manifest schema: `apiVersion`, contributions (commands, panels, element types),
+      permissions (network domains, asset upload, clipboard)
+- [ ] Sandbox host: one opaque-origin iframe per plugin with a strict CSP; typed async RPC
+      over `MessageChannel`; escape tests (no parent DOM, storage, Node or undeclared network)
+- [ ] Plugin API v1: read the deck, selection and changes; transactions; register commands
+      and panels; notifications; plugin storage
+- [ ] Third-party element types in the sandbox: `seek(t)` over RPC, frame-ready before
+      capture so export stays deterministic; a placeholder for a missing plugin
+- [ ] Plugins panel: install from a file or folder, the permissions prompt, enable, disable
+      and uninstall with no restart; developer mode loads an unpacked folder and reloads on save
+- [ ] Plugin commands as MCP tools (opt in, input schema), run in the server's headless page
+- [ ] Conformance kit for app plugins (disable removes everything), an example plugin, a
+      starter template and generated API docs
+
+**Done when:** all plugins pass conformance; the agent can discover and use them via
+`list_element_types` + `get_docs`; a third-party plugin installed from a file adds a command
+and a panel, edits the deck as one undoable step under its own name, can't reach the
+network or disk without permission, and disabling it removes every trace.
 
 ## Phase 6 — Desktop app (Electron)
 
@@ -389,8 +418,9 @@ user moves one into a phase.
 
 - `rive`, `diagram` (Mermaid), `three` (scene, camera, lights; WebGL context manager with a
   budget under 16 live contexts), optional `physics` (fixed timestep, seeded RNG)
-- `custom-component` (AI/user code in a sandboxed iframe with a param schema) and the
-  community plugin sandbox (iframe + postMessage RPC, permission prompts, install UX)
+- `custom-component` (AI/user code in a sandboxed iframe with a param schema), built on the
+  D79 sandbox
+- A plugin directory in the app (browse, install, update), and plugin signing
 
 **Import and export**
 

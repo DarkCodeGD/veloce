@@ -24,8 +24,8 @@ dependency licenses matter (check a library's license before adding it).
 3. One timeline clock; plugins implement `seek(t)` and never run their own loop. Stay deterministic.
 4. Layout is structural (auto-layout frames); the AI describes structure, the engine computes pixels.
 5. One Zod schema per element type generates inspector UI, MCP input, validation and docs.
-6. Built-in elements are plugins using the public plugin API.
-7. Every op is invertible; transactions carry an origin (`user` | `agent:<id>`); undo is per origin.
+6. Built-in elements and commands use the public plugin API; third-party plugins run sandboxed (D79).
+7. Every op is invertible; transactions carry an origin (`user` | `agent:<id>` | `plugin:<id>`, D79); undo is per origin.
 
 ## Conventions
 

@@ -4,12 +4,13 @@ import {
   createSlide,
   DEFAULT_THEME,
   type Deck,
+  element,
   type FrameNode,
   frame,
   type Theme,
 } from "@veloce/core";
 import { describe, expect, it } from "vitest";
-import type { Command } from "./commands.js";
+import { type Command, updateNode } from "./commands.js";
 import {
   addBorder,
   addShadow,
@@ -22,6 +23,7 @@ import {
   shadowColor,
   shadowPreset,
   shadowValues,
+  strokePatch,
 } from "./frame-style.js";
 
 const theme: Theme = DEFAULT_THEME;
@@ -53,6 +55,31 @@ describe("frame border and shadow (D74)", () => {
     expect(style(deck)?.stroke).toEqual({ color: "$color.border", width: 6 });
     deck = apply(deck, removeBorder("card"));
     expect(style(deck)?.stroke).toBeUndefined();
+  });
+
+  it("adds, edits and removes a shape's outline (props.stroke) the same way", () => {
+    const outline = { at: "props", key: "stroke" } as const;
+    let deck = createDeck({
+      title: "T",
+      theme,
+      slides: [
+        createSlide({
+          id: "s1",
+          children: [element("shape", { shape: "ellipse" }, { id: "dot" })],
+        }),
+      ],
+    });
+    const props = (d: Deck) => {
+      const node = d.slides[0]?.root.children[0];
+      return node?.kind === "element" ? node.props : {};
+    };
+    deck = apply(deck, addBorder("dot", outline));
+    expect(props(deck).stroke).toEqual({ color: "$color.border", width: 2 });
+    expect(props(deck)).toMatchObject({ shape: "ellipse" }); // the other props stay
+    deck = apply(deck, updateNode("dot", strokePatch(outline, { style: "dashed" }), "s"));
+    expect(props(deck).stroke).toEqual({ color: "$color.border", width: 2, style: "dashed" });
+    deck = apply(deck, removeBorder("dot", outline));
+    expect(props(deck)).not.toHaveProperty("stroke");
   });
 
   it("adds the theme's md shadow; falls back to the first token, then explicit values", () => {
