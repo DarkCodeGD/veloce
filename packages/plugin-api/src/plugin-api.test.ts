@@ -148,6 +148,39 @@ describe("css helpers", () => {
         url,
       ),
     ).toBe("radial-gradient(ellipse farthest-side at 50% 50%, #fff 0%, transparent 100%)");
+    // Placed freely (D88): a linear ramp from 30% to 70% of its line, past the edges too, and
+    // a sized ellipse whose center sits outside the box.
+    const ramp = (start: number, end: number) =>
+      cssPaint(
+        {
+          type: "linear-gradient",
+          angle: 90,
+          start,
+          end,
+          stops: [
+            { offset: 0, color: "#000" },
+            { offset: 0.5, color: "#888" },
+            { offset: 1, color: "#fff" },
+          ],
+        },
+        url,
+      );
+    expect(ramp(0.3, 0.7)).toBe("linear-gradient(90deg, #000 30%, #888 50%, #fff 70%)");
+    expect(ramp(-0.5, 1.5)).toBe("linear-gradient(90deg, #000 -50%, #888 50%, #fff 150%)");
+    expect(
+      cssPaint(
+        {
+          type: "radial-gradient",
+          center: { x: -0.1, y: 0.3 },
+          radius: { x: 0.6, y: 0.25 },
+          stops: [
+            { offset: 0, color: "#fff" },
+            { offset: 1, color: "transparent" },
+          ],
+        },
+        url,
+      ),
+    ).toBe("radial-gradient(60% 25% at -10% 30%, #fff 0%, transparent 100%)");
     // Conic (Figma's angular): starts at the angle, around the center, clockwise.
     expect(
       cssPaint(

@@ -1950,3 +1950,62 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
 3. **Clear of the rotate knob:** when the knob shows below the layer it pushes the badge
    further down (where the knob is, from the layer's rotation); otherwise the badge sits
    8px under the selection. Hidden while typing and while drawing a marquee.
+
+## D87 — On-canvas gradient handles
+
+**Status:** Accepted (2026-11-20). Fulfils D66 §8. §3's linear and radial handles amended by D88.
+
+1. **They show while the paint picker edits a gradient,** on what it paints: the layer, or
+   the slide for its background. The layer's resize and rotate handles step aside meanwhile,
+   like Figma's. Closing the picker (or leaving the gradient tab) removes them.
+2. **The picker stays the owner.** It publishes the gradient it shows, its selected stop and
+   its own preview/commit in a small store (`gradient-edit.ts`); the canvas draws from that
+   and changes the gradient through the same calls. **Why:** one path for both, so a drag on
+   the canvas is one undo step with the same label as a drag on the stop bar, the selected
+   stop is shared, and a drag on the bar shows on the canvas live.
+3. **What each kind gets**, all in the layer's own axes (the handle layer is sized and
+   rotated like the outline), matching what CSS draws (`model/gradient-handles.ts`):
+   - linear: its gradient line through the box, as long as CSS makes it; the end knobs
+     turn it (Shift: 15° steps). The schema stores an angle, not two points, so the ends
+     turn the gradient about the centre rather than moving freely;
+   - radial: the centre knob moves the centre; the stops show on a ray to the farthest side;
+   - angular: the centre knob, and a knob on a ring that turns where it starts.
+4. **Stops are chips beside the guide, on a stem,** not on it. **Why:** a linear
+   gradient's 0% and 100% stops sit exactly on its end knobs, and a radial gradient's 0% on
+   its centre; beside the line every handle stays grabbable. Drag a chip along to move it,
+   away to remove it (at least two stay); click the guide to add a stop colored like the
+   gradient is there.
+5. **Esc cancels a drag and leaves the picker open:** the popover listens first, so it
+   skips Esc while a handle is dragged. Middle-button and Space still pan.
+
+## D88 — Gradients placed freely, and Delete removes a stop
+
+**Status:** Accepted (2026-11-21). Amends D87 §3.
+
+1. **Gradients aren't locked to their box (Figma lets you place them anywhere).** Additive,
+   optional fields (format v1 hasn't shipped, so no migration):
+   - linear `start`/`end` (default 0 and 1, bounds ±10): where offsets 0 and 1 sit along
+     CSS's gradient line, as fractions of it. CSS: each stop at `start + offset·(end − start)`
+     percent, which can run past 0–100%;
+   - radial `radius {x, y}` (fractions of the box's width and height, > 0): the ellipse
+     offset 1 reaches, CSS `rx% ry% at …`. Unset is still `farthest-side`;
+   - radial and conic `center` may sit outside the box (the schema never limited it; the
+     handles kept it inside).
+2. **A linear gradient still runs through the box's centre.** Its knobs go anywhere along
+   and around it: the dragged knob lands under the pointer, the gradient turns about the
+   centre, and the other knob keeps its place along the line. **Why not two free points
+   like Figma:** sliding a linear gradient sideways changes nothing it draws, and two
+   points only become a CSS angle with the box's pixel size, which CSS can't know for a
+   hug or fill layer. Rendering it any other way (an SVG image) would bake theme colors in,
+   losing live theme switches (tokens are CSS variables). So the only visible freedom
+   Figma's points add is the ramp's start and end, which `start`/`end` give.
+3. **Radial gradients get size knobs** on their ellipse (dashed outline), horizontal and
+   vertical; Shift keeps the proportions. Moving the centre pins the size it showed, so the
+   glow keeps its shape instead of growing with the distance to the far side.
+4. **Delete and Backspace remove the selected stop while the handles show,** wherever the
+   stop was selected (canvas chip or the picker's bar), and never delete the layer whose
+   paint is open. With two stops left, a toast says a gradient needs two. Typing in a field
+   still edits the text. **Why:** deleting the whole layer while editing its fill was a
+   trap (before, only a focused stop on the bar caught the key).
+5. **Contrast lint follows:** the gradient sampler reads a sized ellipse (`40% 50% at …`,
+   verified against what Chromium reports); stops past 0–100% already parse.

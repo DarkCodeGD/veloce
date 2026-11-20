@@ -22,6 +22,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { openAddMenu } from "../add-menu.js";
 import { enterCrop, exitCrop, pictureOf, useCropping } from "../crop-mode.js";
 import { assetUrl, registry } from "../editor-context.js";
+import { useGradientSession } from "../gradient-edit.js";
 import { addLayer, afterInsert, elementInfos, type InsertContext } from "../insert-actions.js";
 import { typing } from "../keyboard.js";
 import { type Crop, pictureRect, startingCrop } from "../model/crop.js";
@@ -53,6 +54,7 @@ import {
   rotateDrag,
 } from "./canvas-drags.js";
 import { CanvasSpace } from "./canvas-space.js";
+import { GradientHandles } from "./GradientHandles.js";
 import {
   type Caret,
   inTextEditor,
@@ -299,6 +301,7 @@ export function EditorCanvas({
 
   // ── Crop mode (D84) ─────────────────────────────────────────────────────────────
   const cropping = useCropping();
+  const gradientSession = useGradientSession();
   /** A layer's picture and its pixel size (the asset's info, else the rendered image). */
   const cropPicture = (id: string): CropPicture | undefined => {
     const picture = pictureOf(deck, index.nodes.get(id)?.node);
@@ -467,6 +470,19 @@ export function EditorCanvas({
     return { box, crop, size, src: assetUrl(deckId, asset) };
   })();
   /**
+   * The gradient the paint picker is editing gets handles on what it paints (D87): the
+   * selected layer, or the slide for its background. Not while another gesture runs.
+   */
+  const gradientBox: Box | null = (() => {
+    if (!gradientSession || active || editing || cropView) return null;
+    if (gradientSession.owner === slideId) {
+      const w = deck.stage.width * stage.scale;
+      const h = deck.stage.height * stage.scale;
+      return { cx: stage.x + w / 2, cy: stage.y + h / 2, w, h, rotation: 0 };
+    }
+    return boxes.selected.find((b) => b.id === gradientSession.owner) ?? null;
+  })();
+  /**
    * The size badge under the selection (`176 × 36`, slide pixels), live while resizing:
    * one layer's own size (rotation aside), or the bounds of several. Below the rotate knob
    * when that's showing underneath.
@@ -478,7 +494,14 @@ export function EditorCanvas({
     const single = selected.length === 1 ? selected[0] : undefined;
     const size = single ? single : bounds;
     let top = bounds.y + bounds.h + BADGE_GAP;
-    if (single && single === primary && editable && active !== "move" && !cropView) {
+    if (
+      single &&
+      single === primary &&
+      editable &&
+      active !== "move" &&
+      !cropView &&
+      !gradientBox
+    ) {
       // The knob's centre sits KNOB_REACH past the box's bottom edge, turned with the box.
       const knobY =
         single.cy + Math.cos((single.rotation * Math.PI) / 180) * (single.h / 2 + KNOB_REACH);
@@ -548,11 +571,18 @@ export function EditorCanvas({
           .filter((box) => box.id !== cropView?.box.id)
           .map((box) => (
             <div key={box.id} className="outline outline-selected" style={boxStyle(box)}>
-              {box === primary && editable && active !== "move" && (
+              {box === primary && editable && active !== "move" && box !== gradientBox && (
                 <Handles box={box} onHandleDown={(e, handle) => onHandleDown(e, box.id, handle)} />
               )}
             </div>
           ))}
+        {gradientSession && gradientBox && (
+          <GradientHandles
+            box={gradientBox}
+            session={gradientSession}
+            onPan={(e) => camera.startPan(e)}
+          />
+        )}
         {cropView && (
           <CropOverlay
             box={cropView.box}

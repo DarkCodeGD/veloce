@@ -305,7 +305,7 @@ function livePaint(
   toCommand: (value: unknown) => Command | null,
 ) {
   return {
-    paint: { deck },
+    paint: { deck, owner: ownerId },
     onPreview: live(toCommand).onPreview,
     onCommit: (value: unknown, imported?: Imported) => {
       const command = toCommand(value);

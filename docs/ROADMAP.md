@@ -28,9 +28,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** on-canvas gradient handles, then moving the remaining commands into the registry. The command registry
+- **Next:** move the remaining commands into the registry, with the menu bar. The command registry
   (D81) is the future plugin API (D79): the menu bar and palette read it.
-- **State:** `pnpm check` is green (715 tests, including real-Chromium lint, preview and editor
+- **State:** `pnpm check` is green (735 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -46,7 +46,7 @@
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
-    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86).
+    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -195,8 +195,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
       trims; image corners keep their ratio; a `crop` prop agents can set too (D84)
 - [x] Grid cell alignment: Horizontal (`justify`) next to Vertical (`align`) (D85)
 - [x] Size badge under the selection (`176 × 36`, slide pixels), live while resizing (D86)
-- [ ] On-canvas gradient handles: with the paint picker open on a gradient, drag its ends
-      (linear), center (radial, angular) and stops on the slide itself, like Figma (D66 §8)
+- [x] On-canvas gradient handles: ends, center and stops on the slide itself (D87); placed
+      freely, sized, Delete removes a stop (D88)
 - [x] Command registry (D79 §4): tools and the Add menu's entries register in one place the
       tool bar, Add menu and keyboard read (D81)
 - [ ] Move the remaining commands (undo, duplicate, align, group, zoom…) into the registry,

@@ -558,6 +558,8 @@ export function ColorField({
     deck: Pick<Deck, "id" | "assets">;
     /** Where a gradient starts when there's no color yet. Default: the primary color. */
     fallback?: string;
+    /** The layer or slide it paints: its gradient gets handles on the canvas (D87). */
+    owner?: string;
   };
 }) {
   const id = useId();
@@ -622,6 +624,7 @@ export function ColorField({
           theme={theme}
           deck={paint.deck}
           fallback={paint.fallback ?? defaultPaintColor(theme)}
+          owner={paint.owner}
           onPreview={(next) => onPreview?.(next)}
           onCommit={(next, imported) => onCommit(next, imported)}
         >

@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { gradientDragging } from "../gradient-edit.js";
 import { type Hsva, hsvToHex, type PickedColor, toHsva } from "../model/color.js";
 import { placePopover } from "../model/popover.js";
 import { popupHost } from "./popup-host.js";
@@ -366,8 +367,9 @@ export function ColorPopover({
       close.current();
     };
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Esc closes the picker, not the selection behind it.
+      // Esc closes the picker, not the selection behind it; during a gradient handle drag
+      // it cancels the drag instead (D87).
+      if (e.key !== "Escape" || gradientDragging()) return;
       e.preventDefault();
       e.stopPropagation();
       close.current();

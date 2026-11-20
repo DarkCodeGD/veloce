@@ -75,6 +75,20 @@ describe("document schema", () => {
     if (!result.success) expect(formatIssues(result.error.issues)).toMatch(/^stops:/);
   });
 
+  it("places gradients freely: a linear ramp's ends, a radial size and an outside center (D88)", () => {
+    const stops = [
+      { offset: 0, color: "$color.primary" },
+      { offset: 1, color: "$color.accent" },
+    ];
+    const ok = (paint: unknown) => PaintSchema.safeParse(paint).success;
+    expect(ok({ type: "linear-gradient", angle: 90, start: -0.5, end: 1.5, stops })).toBe(true);
+    expect(ok({ type: "linear-gradient", start: 20, stops })).toBe(false);
+    const radial = { type: "radial-gradient", center: { x: -0.2, y: 1.3 }, stops };
+    expect(ok({ ...radial, radius: { x: 0.3, y: 0.6 } })).toBe(true);
+    expect(ok({ ...radial, radius: { x: 0, y: 0.6 } })).toBe(false);
+    expect(ok({ ...radial, radius: { x: 0.3 } })).toBe(false);
+  });
+
   it("says what's wrong with a bad color, an opacity or an anchor (agent report B8)", () => {
     const message = (
       schema: { safeParse(v: unknown): { success: boolean; error?: unknown } },

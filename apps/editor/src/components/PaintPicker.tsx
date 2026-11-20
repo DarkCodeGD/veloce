@@ -20,11 +20,13 @@ import {
   type PointerEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { UploadError, uploadAsset } from "../assets.js";
 import { assetUrl } from "../editor-context.js";
+import { type GradientSession, gradientStore } from "../gradient-edit.js";
 import type { Imported } from "../model/asset-insert.js";
 import { fromPicked, keepOpacity, pickerColor } from "../model/color.js";
 import {
@@ -65,6 +67,8 @@ export interface PaintPickerProps {
   deck: Pick<Deck, "id" | "assets">;
   /** The color a gradient starts from when there's no color (nothing set, an image). */
   fallback: string;
+  /** The layer or slide being painted: a gradient gets handles there on the canvas (D87). */
+  owner?: string | undefined;
   /** The Solid tab's body: the field's own color picker. */
   children: ReactNode;
   onPreview(paint: unknown | null): void;
@@ -118,6 +122,7 @@ function GradientEditor({
   label,
   gradient,
   theme,
+  owner,
   onPreview,
   onCommit,
 }: PaintPickerProps & { gradient: Gradient }) {
@@ -127,6 +132,31 @@ function GradientEditor({
   const shown = draft ?? gradient;
   const index = Math.min(selected, shown.stops.length - 1);
   const stop = shown.stops[index] ?? shown.stops[0];
+  // Share what's shown with the canvas, which draws handles for it (D87); withdraw it when
+  // the picker closes or leaves the gradient.
+  const session = useRef<GradientSession | null>(null);
+  useLayoutEffect(() => {
+    if (!owner) return;
+    session.current = {
+      owner,
+      gradient: shown,
+      theme,
+      selected: index,
+      select: setSelected,
+      preview: (next) => onPreview(next),
+      commit: (next, nextIndex) => {
+        setSelected(nextIndex);
+        onCommit(next);
+      },
+    };
+    gradientStore.set(session.current);
+  });
+  useEffect(
+    () => () => {
+      if (gradientStore.get() === session.current) gradientStore.set(null);
+    },
+    [],
+  );
   if (!stop) return null;
 
   const commit = (next: Gradient, nextIndex = index) => {

@@ -20,6 +20,8 @@ export interface ParsedGradient {
   angle: number;
   /** Radial and conic centre, as fractions of the box. */
   center: { x: number; y: number };
+  /** Radial: the ellipse's radii as fractions of the box, when sized (else farthest-side). */
+  radius?: { x: number; y: number };
   /** Sorted by position (0–1). */
   stops: Array<{ color: Rgba; at: number }>;
 }
@@ -56,6 +58,9 @@ export function parseGradient(css: string): ParsedGradient | null {
   }
   const at = /at\s+(-?[\d.]+)%\s+(-?[\d.]+)%/.exec(prelude);
   const center = at ? { x: Number(at[1]) / 100, y: Number(at[2]) / 100 } : { x: 0.5, y: 0.5 };
+  // A sized ellipse: "60% 40% at …" (D88).
+  const sized = kind === "radial" ? /^\s*(?:ellipse\s+)?([\d.]+)%\s+([\d.]+)%/.exec(prelude) : null;
+  const radius = sized ? { x: Number(sized[1]) / 100, y: Number(sized[2]) / 100 } : undefined;
 
   // Each color, and its position if one follows it ("rgb(…) 40%").
   const raw: Array<{ color: Rgba; at: number | null }> = [];
@@ -77,7 +82,7 @@ export function parseGradient(css: string): ParsedGradient | null {
     const stop = stops[i];
     if (stop && stop.at < prev) stop.at = prev; // CSS clamps out-of-order stops forward
   }
-  return { kind, angle, center, stops };
+  return radius ? { kind, angle, center, radius, stops } : { kind, angle, center, stops };
 }
 
 /**
@@ -120,9 +125,10 @@ export function rangesUnder(
   }
 
   if (g.kind === "radial") {
-    // ellipse farthest-side: offset 1 is the ellipse touching the farthest side on each axis.
-    const rx = Math.max(cx, width - cx) || 1;
-    const ry = Math.max(cy, height - cy) || 1;
+    // ellipse farthest-side: offset 1 is the ellipse touching the farthest side on each axis
+    // (or the ellipse it was sized to).
+    const rx = (g.radius ? g.radius.x * width : Math.max(cx, width - cx)) || 1;
+    const ry = (g.radius ? g.radius.y * height : Math.max(cy, height - cy)) || 1;
     const t = (x: number, y: number) => Math.hypot((x - cx) / rx, (y - cy) / ry);
     const nearX = Math.min(Math.max(cx, a.left), a.right);
     const nearY = Math.min(Math.max(cy, a.top), a.bottom);

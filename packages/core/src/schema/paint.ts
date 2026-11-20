@@ -24,6 +24,14 @@ export const LinearGradientSchema = z.strictObject({
   type: z.literal("linear-gradient"),
   /** CSS convention: 0 = towards top, 90 = towards right, 180 (default) = towards bottom. */
   angle: z.number().optional(),
+  /**
+   * Where offset 0 and offset 1 sit along CSS's gradient line (the line through the box's
+   * centre at `angle` that spans the box), as fractions of it. Defaults 0 and 1: the
+   * gradient spans the box. Closer together makes a sharper ramp; past 0–1 runs beyond the
+   * edges (D88).
+   */
+  start: z.number().min(-10).max(10).optional(),
+  end: z.number().min(-10).max(10).optional(),
   stops: z.array(GradientStopSchema).min(2).max(16),
 });
 
@@ -33,8 +41,13 @@ export const LinearGradientSchema = z.strictObject({
  */
 export const RadialGradientSchema = z.strictObject({
   type: z.literal("radial-gradient"),
-  /** Center as fractions of the box (0–1). Default: the middle. */
+  /** Center as fractions of the box (0–1 inside it; it may sit outside). Default: the middle. */
   center: PointSchema.optional(),
+  /**
+   * The ellipse that offset 1 reaches, as its radii in fractions of the box's width and
+   * height. Default: out to the farthest side on each axis (D88).
+   */
+  radius: z.strictObject({ x: z.number().gt(0).max(10), y: z.number().gt(0).max(10) }).optional(),
   stops: z.array(GradientStopSchema).min(2).max(16),
 });
 
@@ -47,7 +60,7 @@ export const ConicGradientSchema = z.strictObject({
   type: z.literal("conic-gradient"),
   /** Where offset 0 starts, in degrees clockwise from the top. Default: 0. */
   angle: z.number().optional(),
-  /** Center as fractions of the box (0–1). Default: the middle. */
+  /** Center as fractions of the box (0–1 inside it; it may sit outside). Default: the middle. */
   center: PointSchema.optional(),
   stops: z.array(GradientStopSchema).min(2).max(16),
 });

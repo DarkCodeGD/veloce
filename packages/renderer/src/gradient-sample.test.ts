@@ -25,6 +25,23 @@ describe("gradient sampling for contrast (agent report B4)", () => {
     expect(conic).toMatchObject({ kind: "conic", angle: 45, center: { x: 0.3, y: 0.7 } });
     expect(conic?.stops[0]?.color[3]).toBeCloseTo(0.3);
     expect(parseGradient(`url("x.png")`)).toBeNull();
+    // A sized ellipse (D88), as Chromium reports it.
+    expect(
+      parseGradient(`radial-gradient(60% 25% at -10% 30%, ${red} 0%, ${clear} 100%)`),
+    ).toMatchObject({ center: { x: -0.1, y: 0.3 }, radius: { x: 0.6, y: 0.25 } });
+  });
+
+  it("radial: a sized ellipse ends where it was sized, not at the farthest side", () => {
+    const g = parseGradient(`radial-gradient(25% 25% at 50% 50%, ${red} 0%, ${clear} 100%)`);
+    if (!g) throw new Error("no gradient");
+    // 400×400 box, radius 100: a text box 50–100 px right of the centre spans t 0.5–1.
+    near(
+      rangesUnder(g, 400, 400, { left: 250, top: 195, right: 300, bottom: 205 })[0] as [
+        number,
+        number,
+      ],
+      [0.5, 1],
+    );
   });
 
   it("linear: only the stretch the text box covers", () => {

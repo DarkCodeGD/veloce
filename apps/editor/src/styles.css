@@ -1918,6 +1918,103 @@ textarea::placeholder {
   transform: translate(14px, 14px);
 }
 
+/* On-canvas gradient handles (D87): a guide, knobs on it, stop chips beside it. */
+.gradient-handles {
+  position: absolute;
+  pointer-events: none;
+}
+
+.gradient-guide {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.gradient-guide .guide-shadow {
+  fill: none;
+  stroke: rgb(0 0 0 / 0.45);
+  stroke-width: 3;
+}
+
+.gradient-guide .guide-ellipse {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.6));
+}
+
+.gradient-guide .guide-line,
+.gradient-guide .guide-stem {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.gradient-guide .guide-stem {
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.6));
+}
+
+/* A wide invisible stroke over the guide: click it to add a stop. */
+.gradient-guide .guide-track {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: copy;
+}
+
+.gradient-knob {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  transition: transform var(--fast) var(--ease);
+}
+
+.gradient-knob:hover {
+  transform: scale(1.25);
+}
+
+.gradient-stop {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  padding: 2px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.gradient-stop > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  /* The color over a checkerboard, so a transparent stop still reads as one. */
+  background:
+    linear-gradient(var(--chip), var(--chip)),
+    repeating-conic-gradient(#8a8f98 0 25%, #d6d9de 0 50%) 0 0 / 6px 6px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+.gradient-stop[data-selected] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* The selection's size, in slide pixels, centred under it. */
 .size-badge {
   position: absolute;
