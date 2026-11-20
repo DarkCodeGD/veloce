@@ -36,6 +36,14 @@ export const SHORTCUTS = {
   textAlignCenter: "Mod+Shift+E",
   textAlignRight: "Mod+Shift+R",
   textAlignJustify: "Mod+Shift+J",
+  // Tools (D81, Figma's letters) and the Add menu (Blender's Shift+A).
+  toolSelect: "V",
+  toolFrame: "F",
+  toolRect: "R",
+  toolEllipse: "O",
+  toolText: "T",
+  toolHand: "H",
+  addMenu: "Shift+A",
 } as const;
 
 export type ShortcutSpec = string;
@@ -82,4 +90,35 @@ export function proseMirrorKey(spec: ShortcutSpec): string {
     .split("+")
     .map((key) => (key.length === 1 ? key.toLowerCase() : key))
     .join("-");
+}
+
+/** The parts of a key press a shortcut is matched on. */
+export interface KeyPress {
+  key: string;
+  code: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
+/**
+ * Whether a key press is exactly `spec`: the same modifiers, no more ("T" isn't Shift+T or
+ * Ctrl+T). Letters match the character typed, so they follow the keyboard layout, except
+ * with Alt, which types symbols on macOS: then (like Shift + a digit) the physical key.
+ */
+export function matchesShortcut(e: KeyPress, spec: ShortcutSpec, platform: Platform): boolean {
+  const parts = spec.split("+");
+  const key = parts.at(-1) ?? "";
+  const mods = new Set(parts.slice(0, -1));
+  const [mod, other] = platform === "mac" ? [e.metaKey, e.ctrlKey] : [e.ctrlKey, e.metaKey];
+  if (mod !== mods.has("Mod") || other) return false;
+  if (e.shiftKey !== mods.has("Shift") || e.altKey !== mods.has("Alt")) return false;
+  if (/^[A-Za-z]$/.test(key)) {
+    return e.altKey
+      ? e.code === `Key${key.toUpperCase()}`
+      : e.key.toLowerCase() === key.toLowerCase();
+  }
+  if (/^[0-9]$/.test(key)) return e.code === `Digit${key}` || e.key === key;
+  return e.key === key;
 }

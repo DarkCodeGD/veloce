@@ -8,13 +8,17 @@
  * dragging on the empty canvas draws a marquee. Red spacing indicators show the gaps while
  * moving/resizing, and with Alt held between the selection and the hovered layer.
  * Double-clicking a text layer types into it (components/TextEditSession.tsx).
+ * With a drawing tool (D81), a click adds a layer at its default size and a drag draws one;
+ * the Hand tool pans. A right-click opens the Add menu at the click.
  * Zoom and pan (useCanvasCamera) only move the picture: the overlay re-measures from the
  * rendered DOM, so outlines, handles and guides stay on their layers at every zoom.
  */
 import type { Deck, TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { openAddMenu } from "../add-menu.js";
 import { assetUrl, registry } from "../editor-context.js";
+import { addLayer, afterInsert, elementInfos, type InsertContext } from "../insert-actions.js";
 import { typing } from "../keyboard.js";
 import {
   type Box,
@@ -25,12 +29,14 @@ import {
   type Rect,
   resizeCursor,
 } from "../model/geometry.js";
+import { BUILTIN_INSERTABLES } from "../model/insert.js";
 import { ancestorRotation } from "../model/manipulate.js";
 import { editableText, pick, pickTarget } from "../model/selection.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { type Measure, measureBetween } from "../model/spacing.js";
 import { textBoxOf } from "../model/text-box.js";
-import { marqueeDrag, moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
+import { isDrawTool, useTool } from "../tools.js";
+import { drawDrag, marqueeDrag, moveDrag, resizeDrag, rotateDrag } from "./canvas-drags.js";
 import { CanvasSpace } from "./canvas-space.js";
 import {
   type Caret,
@@ -99,6 +105,7 @@ export function EditorCanvas({
   const indexRef = useRef(index);
   indexRef.current = index;
   const { begin, active, feedback } = useCanvasGestures();
+  const tool = useTool();
   const dropping = useFileDrop(wrapperRef, { deck, index, selection, onSelect });
   const [boxes, setBoxes] = useState<{
     hover: OverlayBox | null;
@@ -178,6 +185,7 @@ export function EditorCanvas({
     stage: { w: deck.stage.width, h: deck.stage.height },
     deckId,
     busy: active !== null,
+    hand: tool === "hand",
     selectionRect,
     onChange: measure,
   });
@@ -262,11 +270,43 @@ export function EditorCanvas({
     return v ? { index, space: new CanvasSpace(v.stage, v.scale) } : null;
   };
 
+  /** What adding a layer needs from here (D81). */
+  const insertContext = (): InsertContext => ({
+    deck,
+    slideIndex: index,
+    selection,
+    select: onSelect,
+    editText: (id) => {
+      onSelect([id]);
+      onEditText({ id, caret: "all" });
+    },
+  });
+
   const onPointerDown = (e: React.PointerEvent) => {
-    if (camera.startPan(e)) return; // Space + drag, or the middle button: the hand tool
+    if (camera.startPan(e)) return; // Space + drag, the middle button, or the Hand tool
     if (inTextEditor(e.target)) return; // placing the caret, selecting text
     if (editing) onEditText(null); // a press anywhere else on the canvas ends typing
     if (e.button !== 0 || e.detail > 1) return;
+    const item = isDrawTool(tool) ? BUILTIN_INSERTABLES.find((i) => i.id === tool) : undefined;
+    if (item) {
+      // A drawing tool: a click adds the layer at its default size there, a drag draws it.
+      const start = { x: e.clientX, y: e.clientY };
+      const ctx = insertContext();
+      begin(
+        e,
+        "draw",
+        () => {
+          const c = context();
+          return c ? drawDrag(c, item, elementInfos(), start) : null;
+        },
+        {
+          capture: e.currentTarget,
+          onClick: () => void addLayer(ctx, item, start),
+          onCommitted: (command) => afterInsert(ctx, command),
+        },
+      );
+      return;
+    }
     const hit = hitAt(e.target);
     const target = pickTarget(index, hit, selection);
     // Pressing a layer of a multi-selection keeps the group (to drag it); a click without
@@ -321,9 +361,11 @@ export function EditorCanvas({
     return node ? nodeLabel(node) : "";
   };
   const primary = boxes.selected.length === 1 ? boxes.selected[0] : undefined;
+  /** Space held or the Hand tool on: dragging pans, nothing else is grabbed. */
+  const handUp = camera.spaceHeld || tool === "hand";
   const editable =
     !editing &&
-    !camera.spaceHeld && // the hand tool is up: nothing to grab but the canvas
+    !handUp && // the hand tool is up: nothing to grab but the canvas
     !camera.panning &&
     primary &&
     primary.id !== index.rootId &&
@@ -346,7 +388,8 @@ export function EditorCanvas({
       className={[
         "editor-canvas",
         active ? GESTURE_CLASS[active] : "",
-        camera.panning ? "is-panning" : camera.spaceHeld ? "can-pan" : "",
+        camera.panning ? "is-panning" : handUp ? "can-pan" : "",
+        isDrawTool(tool) ? "is-tool-draw" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -354,7 +397,7 @@ export function EditorCanvas({
       onDoubleClick={(e) => {
         if (inTextEditor(e.target)) return; // selects a word
         // Two quick Space + drags are a double-click too: the hand tool never edits.
-        if (camera.spaceHeld || camera.panning) return;
+        if (handUp || camera.panning || isDrawTool(tool)) return;
         const ids = pick(index, hitAt(e.target), selection, { deep: true });
         onSelect(ids);
         // Reaching a text layer starts typing, caret under the pointer.
@@ -366,6 +409,13 @@ export function EditorCanvas({
         onHoverHit(active || editing || camera.panning ? null : hitAt(e.target))
       }
       onPointerLeave={() => onHoverHit(null)}
+      onContextMenu={(e) => {
+        if (inTextEditor(e.target)) return; // the browser's own menu: spelling, copy
+        // Right-click: the Add menu, adding where you clicked (D81).
+        e.preventDefault();
+        const at = { x: e.clientX, y: e.clientY };
+        openAddMenu({ left: at.x, top: at.y, at });
+      }}
       onDragStart={(e) => e.preventDefault()} // images: no native drag-and-drop
     >
       <div ref={viewportRef} className="canvas" />
@@ -541,6 +591,7 @@ const GESTURE_CLASS = {
   resize: "is-resizing",
   rotate: "is-rotating",
   marquee: "is-selecting",
+  draw: "is-drawing",
 } as const;
 
 const toCentre = (p: Point) => ({ cx: p.x, cy: p.y });

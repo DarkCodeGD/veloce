@@ -17,7 +17,7 @@ import type { Drag, Feedback, Modifiers } from "./canvas-drags.js";
 /** Movement (screen px) before a press on a layer becomes a move: below it, it's a click. */
 export const DRAG_THRESHOLD = 3;
 
-export type GestureKind = "move" | "resize" | "rotate" | "marquee";
+export type GestureKind = "move" | "resize" | "rotate" | "marquee" | "draw";
 
 interface Gesture {
   kind: GestureKind;
@@ -27,6 +27,7 @@ interface Gesture {
   /** Creates the drag once the threshold is passed (it measures the layout then). */
   make: () => Drag | null;
   onClick: (() => void) | undefined;
+  onCommitted: ((command: Command) => void) | undefined;
   drag: Drag | null;
   pointer: Point;
   mods: Modifiers;
@@ -91,10 +92,13 @@ export function useCanvasGestures() {
       {
         threshold = DRAG_THRESHOLD,
         onClick,
+        onCommitted,
         capture = e.currentTarget,
       }: {
         threshold?: number;
         onClick?: () => void;
+        /** After the server applied the drag's command (select what a draw added). */
+        onCommitted?: (command: Command) => void;
         /** Keeps receiving the pointer during the drag (must outlive it: not a handle). */
         capture?: Element;
       } = {},
@@ -107,6 +111,7 @@ export function useCanvasGestures() {
         threshold,
         make,
         onClick,
+        onCommitted,
         drag: null,
         pointer: { x: e.clientX, y: e.clientY },
         mods: modsOf(e),
@@ -142,8 +147,11 @@ export function useCanvasGestures() {
         apply(g);
         const command = g.command;
         end(g);
-        if (command) void run(command).finally(() => setPreview(null));
-        else setPreview(null);
+        if (command) {
+          void run(command)
+            .then((ok) => ok && g.onCommitted?.(command))
+            .finally(() => setPreview(null));
+        } else setPreview(null);
       };
       const onKey = (ev: KeyboardEvent) => {
         if (ev.key === "Escape") {

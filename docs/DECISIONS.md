@@ -1764,3 +1764,43 @@ likely); the package format and signing.
 3. **The roadmap item for nested props shrinks to the image focus point.** It was the only
    other read-only built-in prop. A generic editor for any nested object waits for
    third-party plugins (D79) that actually need one.
+
+## D81 — Adding layers: tools to draw, an Add menu at the pointer, one command registry
+
+**Status:** Accepted (2026-11-20). Builds D62's tool bar; starts D79 §4's command registry.
+
+The user asked for Blender's way in: click a tab to pick what to add, **or** press Shift+A
+to open it where the cursor is. Both, plus Figma's drawing tools.
+
+1. **Tools draw; the Add menu adds at a spot.** The tool bar (Select V, Frame F, Rectangle R
+   / Ellipse O in one slot, Text T, Image, Hand H) arms a tool: a click adds the layer at its
+   default size, a drag draws it (Shift: square, Alt: from the centre), live-previewed. After
+   one layer it's back to Select, and Esc goes back too (Figma). **Why:** single letters are
+   the fastest path for the few things added all the time, and they're what Figma, Keynote
+   and PowerPoint users look for.
+2. **The Add menu opens at the pointer, searchable.** Shift+A over the canvas opens it there,
+   and the layer lands there. A right-click on the canvas opens the same menu, and so does
+   the tool bar's ➕. Typing filters it by word starts ("circ" → Ellipse), arrows and Enter
+   pick, and the last three used sit on top (per viewer, in browser storage). **Why:** six
+   tool buttons can't hold what plugins will add (charts, code, video…), but a searchable
+   menu can. The right-click and the tooltip teach Shift+A, which nobody guesses.
+3. **Where it lands follows the drag-and-drop rules.** The innermost unlocked frame under the
+   point; in a stack or grid, the slot nearest the point (free layers aren't slots); in a free
+   frame, centred on the point and kept inside it. Away from the canvas (the ➕ button,
+   Shift+A over a panel) it goes where a paste would: into the selected frame or after the
+   selected layer. **Why:** one mental model for "where does this go", and golden rule 4:
+   in a stack the engine places it, we only choose the slot.
+4. **One `node.insert` per layer (golden rule 1).** New layers use theme tokens (a frame is a
+   stack card in `$color.surface` with `$radius.md`; shapes take the plugin's default fill),
+   and a new text layer starts typing with its "Text" placeholder selected, so typing
+   replaces it and nothing empty is left behind. **Why:** undo, History, Revert and the AI's
+   view of the deck need nothing new, and agents never meet an empty text layer.
+5. **One command registry (D79 §4).** Each tool and each Add entry is a command (ID, label,
+   icon, shortcut, menu, enabled/checked, run) in one registry that the tool bar, the Add
+   menu, the folded narrow-window menu and the keyboard all read. The Add menu lists every
+   registered element type, so a plugin's element appears without editor code. Shortcuts
+   need exactly their modifiers and are ignored while typing. **Why:** the menu bar, the
+   command palette and plugin commands then become more views and more entries, not new
+   plumbing. The older shortcuts (undo, align, group…) move in with the menu bar.
+6. **The tools stay centred.** The top bar is a three-column grid; the sides shrink and
+   truncate, so the AI's activity pill appearing never shifts the tools under the pointer.

@@ -12,7 +12,7 @@ import {
   type SlideMeasurement,
 } from "@veloce/core";
 import { optimizeInWorker, stopOptimizer } from "@veloce/images";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { atomicWriteFile, slugify } from "./fs.js";
 import { DeckLinter, lintWithRender } from "./lint.js";
 import { HISTORY_LIMIT, UPLOAD_GRACE_MS } from "./open-deck.js";
@@ -396,8 +396,10 @@ describe("SyncHub", () => {
     await b.send({ type: "open", deckId: first.id });
 
     await a.send({ type: "create", requestId: "n1", title: "  Q3 review  ", theme: "midnight" });
-    await tick();
-    expect(a.last("result")).toEqual({ type: "result", requestId: "n1", ok: true, version: 0 });
+    // Creating writes the deck to disk: wait for the reply, not a fixed delay (flaky under load).
+    await vi.waitFor(() =>
+      expect(a.last("result")).toEqual({ type: "result", requestId: "n1", ok: true, version: 0 }),
+    );
     const created = ws.list().find((d) => d.id !== first.id);
     expect(created?.title).toBe("Q3 review"); // trimmed
     // Both tabs hear that it's the active deck (they open it, as for an agent's create_deck).
@@ -410,6 +412,7 @@ describe("SyncHub", () => {
 
     // A theme that isn't built in: an error naming the real ones, and no deck.
     await a.send({ type: "create", requestId: "n2", title: "X", theme: "neon" });
+    await vi.waitFor(() => expect(a.last("result")?.requestId).toBe("n2"));
     expect(a.last("result")).toMatchObject({
       requestId: "n2",
       ok: false,

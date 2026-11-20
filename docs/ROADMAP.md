@@ -28,10 +28,10 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: the image focus point), then
-  the tool bar (D62). The menu bar's command registry is the future plugin API (D79): build
-  it that way.
-- **State:** `pnpm check` is green (639 tests, including real-Chromium lint, preview and editor
+- **Next:** round 5's "Parity with agents" checklist (next: the image focus point), then the
+  size badge. The command registry (D81) is the future plugin API (D79): the menu bar and
+  palette read it.
+- **State:** `pnpm check` is green (669 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -45,7 +45,8 @@
     per-session decks for agents (D58, D59, D68–D70).
   - Round 5: reverting AI changes from History, and agents told what the user changed, retested
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
-    new deck from a File menu (D76, D77).
+    new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
+    and Add menu on a command registry (D81).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -187,19 +188,15 @@ Animate and Present workspaces instead of being squeezed into today's screen.
         schema (D80)
   - [ ] Image focus point: `{x, y}` as a dot to drag on the image preview, not number
         fields (the last read-only built-in prop, D80)
-- [ ] Tool bar in the top bar's centre (D62): Select (V), Frame (F), Shape (R / O, with a
-      menu for other shapes), Text (T), Image and Hand (H). Click to place at the default
-      size, or drag to draw; the new layer is selected, and a new text layer starts typing.
-      One `node.insert` per creation, the op agents use (golden rule 1). Shortcuts in every
-      tooltip; Esc goes back to Select. On narrow windows the tools fold into one menu.
-      Today a text box, shape or frame can only come from pasting, dropping or the AI, which
-      blocks this phase's "a full deck can be built by hand"
+- [x] Tool bar and Add menu: draw with tools, Shift+A / right-click / ➕ to add at a spot,
+      one `node.insert` each (D62, D81)
 - [ ] Size badge under the selection (`176 × 36`, in slide pixels), live while resizing
 - [ ] On-canvas gradient handles: with the paint picker open on a gradient, drag its ends
       (linear), center (radial, angular) and stops on the slide itself, like Figma (D66 §8)
-- [ ] Command registry (D79 §4): every command (ID, label, icon, shortcut, menu place,
-      enabled/checked state, run) registered in one place, which the menu bar, command
-      palette, tool bar and shortcuts all read. Built-ins register through it as plugins will
+- [x] Command registry (D79 §4): tools and the Add menu's entries register in one place the
+      tool bar, Add menu and keyboard read (D81)
+- [ ] Move the remaining commands (undo, duplicate, align, group, zoom…) into the registry,
+      with the menu bar
 - [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
       and its shortcut, a row of `MenuButton`s (the File menu is the first, D76); the deck switcher, Follow AI / Live and Present stay in the bar on
       every workspace (AI activity is never hidden in one workspace)

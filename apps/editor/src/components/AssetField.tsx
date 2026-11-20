@@ -6,13 +6,11 @@
 import { assetKind, type Deck, parseAssetRef } from "@veloce/core";
 import { ImageUp } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { UploadError, uploadAsset } from "../assets.js";
+import { IMAGE_TYPES, UploadError, uploadAsset } from "../assets.js";
 import { assetUrl } from "../editor-context.js";
 import type { Imported } from "../model/asset-insert.js";
 import { showToast } from "../toasts.js";
 import { Field } from "./fields.js";
-
-const IMAGE_TYPES = "image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml";
 
 export function AssetField({
   label,

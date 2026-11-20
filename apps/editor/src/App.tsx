@@ -3,6 +3,7 @@ import { History, Layers, ListChecks, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { redo, revertAgentChanges, run, undo } from "./actions.js";
 import { alignSelection, distributeSelection } from "./align-actions.js";
+import { AddMenu } from "./components/AddMenu.js";
 import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
@@ -20,6 +21,7 @@ import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
 import { syncDeckFonts } from "./deck-fonts.js";
 import { closeDialog, openDialog, useOpenDialog } from "./dialogs.js";
+import { commandForKey, runCommand, setCommandContext } from "./editor-commands.js";
 import { assetUrl, client } from "./editor-context.js";
 import { groupSelection, ungroupSelection } from "./group-actions.js";
 import { deckKeysPassThrough, typing } from "./keyboard.js";
@@ -42,6 +44,7 @@ import {
 } from "./model/selection.js";
 import { indexSlide } from "./model/slide-index.js";
 import { previewDeck, previewStore } from "./preview.js";
+import { setTool, toolStore } from "./tools.js";
 
 const ACTIVITY_MS = 6000;
 /** Alt + these keys align (Figma's layout), by physical key (`KeyboardEvent.code`). */
@@ -92,6 +95,17 @@ export function App() {
   );
   const current: Slide | null = slides[index] ?? null;
   const slideIndex = current ? indexSlide(current) : null;
+  // What registry commands act on (D81). Set while rendering, so the tool bar rendered below
+  // already sees this deck and selection.
+  setCommandContext({
+    ...(deck && current && slideIndex && { deck, slideIndex }),
+    selection,
+    select: setSelection,
+    editText: (id) => {
+      setSelection([id]);
+      setEditing({ id, caret: "all" });
+    },
+  });
   useArrowNudge(slideIndex, selection);
   useClipboard(deck, slideIndex, selection, setSelection);
 
@@ -190,6 +204,12 @@ export function App() {
       if (mod && key === "z") return act(e.shiftKey ? redo : undo);
       if (mod && key === "y") return act(redo);
       if (!current || !slideIndex) return;
+
+      // Tools and the Add menu (D81): registry commands, by their shortcuts. Esc leaves a
+      // tool before it changes the selection.
+      if (e.key === "Escape" && toolStore.get() !== "select") return act(() => setTool("select"));
+      const command = e.repeat ? undefined : commandForKey(e);
+      if (command) return act(() => runCommand(command.id));
 
       if (mod && key === "d" && selection.length > 0) {
         handled();
@@ -398,6 +418,7 @@ export function App() {
       {dialog === "new-deck" && <NewDeckDialog onClose={closeDialog} />}
       {dialog === "deck-info" && deck && <DeckInfoDialog deck={deck} onClose={closeDialog} />}
       {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
+      <AddMenu />
       <Toasts />
       <Tooltips />
     </div>

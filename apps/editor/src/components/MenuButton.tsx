@@ -7,11 +7,17 @@
  * the bar will be a row of these.
  */
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { shortcutKeys } from "../model/shortcuts.js";
+import { PLATFORM } from "../platform.js";
 
 export interface MenuItem {
   label: string;
   icon?: ReactNode;
   disabled?: boolean;
+  /** Shown on the right, the way the tooltips show keys ("Mod+Z" → Ctrl Z). */
+  shortcut?: string;
+  /** The current choice (the active tool): a check-mark item. */
+  checked?: boolean;
   onSelect(): void;
 }
 
@@ -19,10 +25,16 @@ export function MenuButton({
   label,
   items,
   className,
+  trigger,
+  tip,
 }: {
   label: string;
   items: readonly MenuItem[];
   className?: string;
+  /** What the button shows instead of its label (an icon); the label is then its name. */
+  trigger?: ReactNode;
+  /** A tooltip (icon-only buttons). */
+  tip?: string;
 }) {
   /** Where the open menu sits (under the button); null when closed. */
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
@@ -32,7 +44,7 @@ export function MenuButton({
   const menuId = useId();
 
   const enabled = () =>
-    [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].filter(
+    [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]') ?? [])].filter(
       (el) => !el.disabled,
     );
   const close = (refocus = true) => {
@@ -86,6 +98,8 @@ export function MenuButton({
         className={`menu-button${open ? " is-open" : ""}${className ? ` ${className}` : ""}`}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={trigger ? label : undefined}
+        data-tip={open ? undefined : tip}
         aria-controls={open ? menuId : undefined}
         onClick={() => (open ? close(false) : show())}
         onKeyDown={(e) => {
@@ -95,7 +109,7 @@ export function MenuButton({
           }
         }}
       >
-        {label}
+        {trigger ?? label}
       </button>
       {place && (
         <div
@@ -108,10 +122,12 @@ export function MenuButton({
           onKeyDown={onMenuKey}
         >
           {items.map((item) => (
+            // biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-checked is only set on menuitemradio items (the role is chosen just above)
             <button
               key={item.label}
               type="button"
-              role="menuitem"
+              role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+              aria-checked={item.checked}
               className="menu-item"
               disabled={item.disabled}
               onClick={() => {
@@ -123,6 +139,11 @@ export function MenuButton({
             >
               {item.icon && <span className="menu-icon">{item.icon}</span>}
               {item.label}
+              {item.shortcut && (
+                <span className="menu-keys" aria-hidden="true">
+                  {shortcutKeys(item.shortcut, PLATFORM).join(PLATFORM === "mac" ? "" : "+")}
+                </span>
+              )}
             </button>
           ))}
         </div>

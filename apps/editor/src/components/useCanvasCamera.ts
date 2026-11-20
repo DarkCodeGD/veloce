@@ -39,6 +39,8 @@ interface Options {
   deckId: string;
   /** True while a drag (move, resize…) runs: the camera must not move under it. */
   busy: boolean;
+  /** The Hand tool is on (D81): a left-button drag pans, as with Space held. */
+  hand?: boolean;
   /** The selection's bounds in slide pixels, for Zoom to selection. */
   selectionRect(): Rect | null;
   /** Called after the camera changed (the overlay re-measures). */
@@ -77,6 +79,7 @@ export function useCanvasCamera({
   stage,
   deckId,
   busy,
+  hand = false,
   selectionRect,
   onChange,
 }: Options) {
@@ -85,8 +88,8 @@ export function useCanvasCamera({
   const pending = useRef<Pending>(null);
   const frame = useRef(0);
   // Latest values for listeners registered once.
-  const latest = useRef({ stage, busy, selectionRect, onChange, spaceHeld });
-  latest.current = { stage, busy, selectionRect, onChange, spaceHeld };
+  const latest = useRef({ stage, busy, selectionRect, onChange, spaceHeld, hand });
+  latest.current = { stage, busy, selectionRect, onChange, spaceHeld, hand };
 
   const viewportSize = useCallback((): Size | null => {
     const el = view.current?.stage.parentElement;
@@ -278,8 +281,9 @@ export function useCanvasCamera({
   /** Starts a pan if this press is one; returns true when it took the press. */
   const startPan = useCallback(
     (e: React.PointerEvent): boolean => {
-      const hand = e.button === 1 || (e.button === 0 && latest.current.spaceHeld);
-      if (!hand || latest.current.busy) return false;
+      const { spaceHeld: space, hand: handTool, busy: moving } = latest.current;
+      const hand = e.button === 1 || (e.button === 0 && (space || handTool));
+      if (!hand || moving) return false;
       const el = wrapper.current;
       if (!el) return false;
       e.preventDefault(); // middle button: no autoscroll

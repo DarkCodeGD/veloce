@@ -1,11 +1,11 @@
 /**
- * The canvas drags (move, resize, rotate, marquee). Each is created when the gesture starts,
+ * The canvas drags (move, resize, rotate, marquee, draw). Each is created when the gesture starts,
  * captures the layout as it was then (a CanvasSpace), and from there on is a pure function
  * of the pointer: `update(pointer, modifiers)` → the command to preview/commit, plus what to
  * draw on the canvas (guides, the insertion line, a size badge…). useCanvasGestures drives
  * them; the pure maths lives in model/.
  */
-import type { Layout } from "@veloce/core";
+import { createId, type Layout } from "@veloce/core";
 import { resolvedSizing } from "../editor-context.js";
 import type { Command } from "../model/commands.js";
 import {
@@ -20,6 +20,7 @@ import {
   rotateVector,
   topLeft,
 } from "../model/geometry.js";
+import { drawnRect, type ElementInfo, type Insertable, insertCommand } from "../model/insert.js";
 import {
   ancestorRotation,
   dropInto,
@@ -46,7 +47,7 @@ import { type CanvasSpace, subtree } from "./canvas-space.js";
 
 /** Snapping reach and the "beside a frame" edge band, in screen pixels (zoom-independent). */
 const SNAP_PX = 6;
-const EDGE_BAND_PX = 12;
+export const EDGE_BAND_PX = 12;
 
 export interface Modifiers {
   /** Move: lock to one axis. Resize: keep the aspect ratio. Rotate: 15° steps. */
@@ -429,6 +430,53 @@ export function marqueeDrag(
         select(ids); // only when it changes: not a re-render per frame
       }
       return { command: null, feedback: { marquee: area } };
+    },
+  };
+}
+
+/**
+ * Drawing a new layer with a tool (D81): a box from the press to the pointer (Shift: square,
+ * Alt: from the centre). The layer itself previews live, in the frame and slot the press
+ * picked, so what you see while drawing is what you get.
+ */
+export function drawDrag(
+  ctx: Context,
+  item: Insertable,
+  elements: readonly ElementInfo[],
+  start: Point,
+): Drag {
+  const { index, space } = ctx;
+  const frames = space.frames(index, new Set()); // the layout as it was at the press
+  const p0 = space.toSlide(start);
+  const band = EDGE_BAND_PX / space.scale;
+  // One ID for the whole drag, so the preview updates one layer instead of remounting it.
+  const id = createId("nd");
+  return {
+    update(pointer, mods) {
+      const rect = drawnRect(p0, space.toSlide(pointer), mods);
+      const made = insertCommand(index, frames, item, elements, { point: p0, rect }, [], band);
+      const command: Command | null = made && {
+        ...made,
+        ops: made.ops.map((op) =>
+          op.op === "node.insert" ? { ...op, node: { ...op.node, id } } : op,
+        ),
+        select: [id],
+      };
+      const w = Math.round(rect.w);
+      const h = Math.round(rect.h);
+      return {
+        command,
+        feedback: {
+          ghost: {
+            cx: rect.x + rect.w / 2,
+            cy: rect.y + rect.h / 2,
+            w: rect.w,
+            h: rect.h,
+            rotation: 0,
+          },
+          badge: { text: `${w} × ${h}`, at: { x: rect.x + rect.w / 2, y: rect.y + rect.h } },
+        },
+      };
     },
   };
 }

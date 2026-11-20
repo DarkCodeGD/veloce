@@ -374,8 +374,11 @@ textarea::placeholder {
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 
+/* Three columns: the tools stay centred however wide the deck name or the AI activity get
+   (the sides shrink and truncate instead). */
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 20px;
   padding: 0 16px;
@@ -479,11 +482,185 @@ textarea::placeholder {
   border-left: 1px solid var(--border);
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* The tool bar (D62, D81), in the bar's centre column. */
+.toolbar-slot {
+  display: flex;
+  justify-content: center;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.tool-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  transition:
+    background var(--fast),
+    color var(--fast);
+}
+
+.tool-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tool-button.is-active,
+.tool-button.is-active:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tool-button:disabled {
+  opacity: 0.4;
+}
+
+/* Rectangle/Ellipse share a slot: the tool, and a narrow ▾ for the other shape. */
+.tool-split {
+  display: flex;
+  align-items: center;
+}
+
+.tool-split .tool-button {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.toolbar .tool-more {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-strong);
+}
+
+/* Narrow windows: one "Tools" menu instead (D62 §4). */
+.toolbar-folded.menu-button {
+  display: none;
+  margin-left: 0;
+}
+
+@media (max-width: 980px) {
+  .toolbar {
+    display: none;
+  }
+  .toolbar-folded.menu-button {
+    display: inline-block;
+  }
+}
+
+.menu-keys {
+  margin-left: auto;
+  padding-left: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.menu-item[aria-checked="true"] {
+  color: var(--accent-strong);
+}
+
+.menu-item[aria-checked="true"] .menu-icon {
+  color: inherit;
+}
+
+/* The Add menu (D81): Shift+A, a right-click, or the tool bar's ➕. */
+.add-menu {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  width: 232px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.5),
+    0 2px 6px rgb(0 0 0 / 0.3);
+  animation: popup-in var(--fast) var(--ease);
+}
+
+.add-menu-search {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.add-menu-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.add-menu-list {
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+}
+
+.add-menu-section {
+  padding: 8px 8px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.add-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 5px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.add-menu-item.is-active {
+  background: var(--hover);
+}
+
+.add-menu-empty {
+  padding: 10px 8px;
+  color: var(--text-muted);
+}
+
 .topbar-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 14px;
-  margin-left: auto;
   min-width: 0;
 }
 
@@ -1472,6 +1649,13 @@ textarea::placeholder {
   cursor: grabbing;
 }
 
+/* A drawing tool (D81): click to add, drag to draw. The drawn box is a thin outline over
+   the layer previewing inside it. */
+.editor-canvas.is-tool-draw,
+.editor-canvas.is-drawing {
+  cursor: crosshair;
+}
+
 /* Resize: sides are invisible strips along the edges, corners are visible squares. Each
    handle's hit area is larger than what's drawn. */
 .handle {
@@ -1600,6 +1784,12 @@ textarea::placeholder {
   outline: 1.5px dashed var(--accent-strong);
   background: var(--accent-soft);
   opacity: 0.8;
+}
+
+/* Drawing a new layer (D81): a thin outline over the layer previewing inside it. */
+.editor-canvas.is-drawing .outline-ghost {
+  outline: 1px solid var(--accent-strong);
+  background: none;
 }
 
 .drop-target {

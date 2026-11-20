@@ -24,6 +24,9 @@ const KEEP_ORIGINAL_MS = 12_000;
 
 export class UploadError extends Error {}
 
+/** The image types a file picker offers (the ones the server imports). */
+export const IMAGE_TYPES = "image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml";
+
 /** True for a file worth sending: an image or font by its declared type or extension. */
 export function looksImportable(file: File): boolean {
   if (assetKind(file.type) !== "other") return true;

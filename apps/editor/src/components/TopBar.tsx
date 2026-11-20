@@ -8,6 +8,7 @@ import { shortcutAttrs } from "../platform.js";
 import type { ConnectionStatus, LastChange } from "../sync-client.js";
 import { MenuButton } from "./MenuButton.js";
 import { Select } from "./Select.js";
+import { ToolBar } from "./ToolBar.js";
 
 interface Props {
   status: ConnectionStatus;
@@ -53,61 +54,65 @@ export function TopBar({
 
   return (
     <header className="topbar">
-      <MenuButton
-        label="File"
-        items={[
-          { label: "New deck…", icon: <FilePlus2 size={14} />, onSelect: onNewDeck },
-          {
-            label: "Deck info…",
-            icon: <Info size={14} />,
-            disabled: deckId === null,
-            onSelect: onDeckInfo,
-          },
-          {
-            label: "Theme styles…",
-            icon: <Type size={14} />,
-            disabled: deckId === null,
-            onSelect: onThemeStyles,
-          },
-        ]}
-      />
-      <div className="deck-picker">
-        {decks.length > 1 ? (
-          <Select
-            aria-label="Open deck"
-            className="deck-select"
-            value={deckId ?? ""}
-            options={decks.map((d) => ({ value: d.id, label: d.title }))}
-            onChange={onOpenDeck}
-          />
-        ) : (
-          <span className="deck-title">{title ?? "No deck"}</span>
-        )}
-        {position && <span className="deck-position">{position}</span>}
+      <div className="topbar-left">
+        <MenuButton
+          label="File"
+          items={[
+            { label: "New deck…", icon: <FilePlus2 size={14} />, onSelect: onNewDeck },
+            {
+              label: "Deck info…",
+              icon: <Info size={14} />,
+              disabled: deckId === null,
+              onSelect: onDeckInfo,
+            },
+            {
+              label: "Theme styles…",
+              icon: <Type size={14} />,
+              disabled: deckId === null,
+              onSelect: onThemeStyles,
+            },
+          ]}
+        />
+        <div className="deck-picker">
+          {decks.length > 1 ? (
+            <Select
+              aria-label="Open deck"
+              className="deck-select"
+              value={deckId ?? ""}
+              options={decks.map((d) => ({ value: d.id, label: d.title }))}
+              onChange={onOpenDeck}
+            />
+          ) : (
+            <span className="deck-title">{title ?? "No deck"}</span>
+          )}
+          {position && <span className="deck-position">{position}</span>}
+        </div>
+
+        <div className="history">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Undo"
+            data-tip="Undo"
+            {...shortcutAttrs(SHORTCUTS.undo)}
+            onClick={undo}
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Redo"
+            data-tip="Redo"
+            {...shortcutAttrs(SHORTCUTS.redo)}
+            onClick={redo}
+          >
+            <Redo2 size={16} />
+          </button>
+        </div>
       </div>
 
-      <div className="history">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Undo"
-          data-tip="Undo"
-          {...shortcutAttrs(SHORTCUTS.undo)}
-          onClick={undo}
-        >
-          <Undo2 size={16} />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Redo"
-          data-tip="Redo"
-          {...shortcutAttrs(SHORTCUTS.redo)}
-          onClick={redo}
-        >
-          <Redo2 size={16} />
-        </button>
-      </div>
+      <ToolBar />
 
       <div className="topbar-right">
         {activity && (
