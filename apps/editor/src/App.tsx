@@ -3,12 +3,14 @@ import { History, Layers, ListChecks, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { redo, revertAgentChanges, run, undo } from "./actions.js";
 import { alignSelection, distributeSelection } from "./align-actions.js";
+import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
 import { HistoryPanel } from "./components/HistoryPanel.js";
 import { Inspector } from "./components/Inspector.js";
 import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
+import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { Toasts } from "./components/Toasts.js";
 import { Tooltips } from "./components/Tooltips.js";
@@ -77,6 +79,8 @@ export function App() {
   const [hoverHit, setHoverHit] = useState<string | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("slides");
+  /** The open File dialog, if any (D76, D77). */
+  const [dialog, setDialog] = useState<"new-deck" | "deck-info" | null>(null);
   const [follow, setFollow] = useState(true);
   const [activityVisible, setActivityVisible] = useState(false);
 
@@ -172,6 +176,8 @@ export function App() {
       const key = e.key.toLowerCase();
       const history = mod && (key === "z" || key === "y");
       if (typing(e.target) && !(history && deckKeysPassThrough(e.target))) return;
+      // A modal dialog owns the keyboard (Delete on its button must not delete layers).
+      if (e.target instanceof Element && e.target.closest("dialog[open]")) return;
       const handled = () => e.preventDefault();
       /** Claim the key press for the editor and run `action`. */
       const act = (action: () => void) => {
@@ -292,6 +298,8 @@ export function App() {
         follow={follow}
         onFollowChange={setFollow}
         onOpenDeck={(id) => client.open(id)}
+        onNewDeck={() => setDialog("new-deck")}
+        onDeckInfo={() => setDialog("deck-info")}
         position={current ? `${index + 1} / ${slides.length}` : null}
       />
       <div className="workspace">
@@ -377,9 +385,17 @@ export function App() {
             <Inspector deck={deck} slide={current} selection={selection} onSelect={setSelection} />
           </>
         ) : (
-          <EmptyState hasDeck={deck !== null} online={state.status === "online"} />
+          <EmptyState
+            hasDeck={deck !== null}
+            online={state.status === "online"}
+            onNewDeck={() => setDialog("new-deck")}
+          />
         )}
       </div>
+      {dialog === "new-deck" && <NewDeckDialog onClose={() => setDialog(null)} />}
+      {dialog === "deck-info" && deck && (
+        <DeckInfoDialog deck={deck} onClose={() => setDialog(null)} />
+      )}
       <Toasts />
       <Tooltips />
     </div>

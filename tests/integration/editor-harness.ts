@@ -49,6 +49,8 @@ export interface EditorHarness {
   changes: DeckChange[];
   /** Console errors and uncaught exceptions in the page. */
   pageErrors: string[];
+  /** The server's workspace (every deck, not just the first). */
+  workspace: Workspace;
   /** Transactions the editor (origin `user`) has sent so far. */
   userTransactions(): number;
   latestDeck(): Deck;
@@ -156,6 +158,7 @@ export async function startEditor(options: HarnessOptions): Promise<EditorHarnes
     page,
     changes,
     pageErrors,
+    workspace,
     userTransactions: () => changes.filter((c) => c.origin === "user").length,
     latestDeck,
     stored,

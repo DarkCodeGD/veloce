@@ -45,6 +45,9 @@ function client(hub: SyncHub) {
   return { inbox, conn, send, last };
 }
 
+/** Let timers and pending async work (saves, debounced lint) run. */
+const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "veloce-ws-"));
   logs.length = 0;
@@ -383,6 +386,44 @@ describe("Workspace", () => {
 });
 
 describe("SyncHub", () => {
+  it("creates a deck from a tab (File → New): every tab switches to it", async () => {
+    const ws = await open();
+    const first = await ws.create({ title: "First" });
+    const hub = new SyncHub(ws);
+    const a = client(hub);
+    const b = client(hub);
+    await a.send({ type: "open", deckId: first.id });
+    await b.send({ type: "open", deckId: first.id });
+
+    await a.send({ type: "create", requestId: "n1", title: "  Q3 review  ", theme: "midnight" });
+    await tick();
+    expect(a.last("result")).toEqual({ type: "result", requestId: "n1", ok: true, version: 0 });
+    const created = ws.list().find((d) => d.id !== first.id);
+    expect(created?.title).toBe("Q3 review"); // trimmed
+    // Both tabs hear that it's the active deck (they open it, as for an agent's create_deck).
+    for (const tab of [a, b]) {
+      expect(tab.last("decks")).toMatchObject({ activeDeckId: created?.id });
+    }
+    const deck = await ws.get(created?.id ?? "");
+    expect(deck.deck.theme.name).toBe("Midnight");
+    expect(deck.history).toEqual([]);
+
+    // A theme that isn't built in: an error naming the real ones, and no deck.
+    await a.send({ type: "create", requestId: "n2", title: "X", theme: "neon" });
+    expect(a.last("result")).toMatchObject({
+      requestId: "n2",
+      ok: false,
+      error: {
+        code: "INVALID",
+        message: expect.stringMatching(/No built-in theme "neon"\. Themes: light, dark/),
+      },
+    });
+    await a.send({ type: "create", requestId: "n3", title: "   " });
+    expect(a.last("error")?.message).toMatch(/Invalid message/);
+    expect(ws.list()).toHaveLength(2);
+    await ws.close();
+  });
+
   it("syncs snapshots and changes, stamps the user origin, and keeps undo per origin", async () => {
     const ws = await open();
     const deck = await ws.create({ title: "Live" });
@@ -694,7 +735,6 @@ describe("Lint for editor tabs (D73)", () => {
     };
     return { render, measured };
   }
-  const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
 
   it("lints with measurements, or says why visual checks were skipped", async () => {
     const ws = await open();

@@ -59,6 +59,16 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     deckId: IdSchema,
     versions: z.array(z.number().int().min(1)).min(1).max(500),
   }),
+  /**
+   * Make a new deck (what MCP's `create_deck` does): it becomes the active deck, so every
+   * tab switches to it. `theme` is a built-in theme ID (default: light).
+   */
+  z.strictObject({
+    type: z.literal("create"),
+    requestId: RequestIdSchema,
+    title: z.string().trim().min(1).max(300),
+    theme: z.string().min(1).max(64).optional(),
+  }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 

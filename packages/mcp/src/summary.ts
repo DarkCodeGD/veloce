@@ -17,12 +17,28 @@ const SNIPPET = 60;
 export function deckSummary(deck: Deck): string {
   const lines = [
     `Deck "${deck.meta.title}" (id ${deck.id}) · theme ${deck.theme.name} · ${deck.stage.width}×${deck.stage.height} · ${deck.slides.length} slide${deck.slides.length === 1 ? "" : "s"}`,
+    ...metaLines(deck.meta),
   ];
   if (deck.slides.length === 0) lines.push("(no slides yet: add some with upsert_slide)");
   deck.slides.forEach((slide, i) => {
     lines.push("", slideOutline(slide, i));
   });
   return lines.join("\n");
+}
+
+/**
+ * The deck info a person set (File → Deck info, D76), when there is any: what the deck is
+ * for, who it's by and its language, so agents write for that audience in that language.
+ */
+function metaLines(meta: Deck["meta"]): string[] {
+  const lines: string[] = [];
+  if (meta.description) lines.push(`About: ${meta.description}`);
+  const by = [
+    meta.authors?.length && `By ${meta.authors.join(", ")}`,
+    meta.language && `language ${meta.language}`,
+  ].filter(Boolean);
+  if (by.length) lines.push(by.join(" · "));
+  return lines;
 }
 
 /** One slide: its header line, then its node tree. */

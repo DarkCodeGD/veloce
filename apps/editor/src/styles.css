@@ -173,6 +173,23 @@ kbd {
   border-color: #454b5b;
 }
 
+/* The one main action of a dialog (Save, Create). */
+.button-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.button-primary:hover {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .button-danger:hover {
   border-color: var(--danger);
   color: #ff8a8e;
@@ -364,6 +381,67 @@ textarea::placeholder {
   padding: 0 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+}
+
+/* The File menu (D76): the first of the app menu bar's menus. */
+.menu-button {
+  height: 28px;
+  margin-left: -8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.menu-button:hover,
+.menu-button.is-open {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.menu-popup {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.5),
+    0 2px 6px rgb(0 0 0 / 0.3);
+  animation: popup-in var(--fast) var(--ease);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menu-item:hover:not(:disabled),
+.menu-item:focus-visible {
+  outline: none;
+  background: var(--hover);
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+}
+
+.menu-icon {
+  display: inline-flex;
+  color: var(--text-muted);
 }
 
 /* The deck leads the bar (no in-app logo: the app's name is in the window title). */
@@ -3129,4 +3207,126 @@ html.is-scrubbing * {
 
 .paint-image-option.is-on {
   box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Dialogs (components/Dialog.tsx, D76): a native modal <dialog>, airy like the panels. */
+
+.dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+}
+
+/* Opacity only: a transform, even mid-animation, would make the dialog the containing block
+   of its fixed popups (dropdown lists) and shift them. */
+.dialog[open] {
+  animation: dialog-in var(--fast) var(--ease);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.new-deck-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 4px;
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dialog-body {
+  display: grid;
+  gap: 18px;
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.dialog-field > label,
+.dialog-label {
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dialog-field > legend.dialog-label {
+  margin-bottom: 6px;
+}
+
+.dialog-field input[type="text"],
+.dialog-field textarea {
+  width: 100%;
+}
+
+.dialog-hint,
+.dialog-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.dialog-hint {
+  color: var(--text-muted);
+}
+
+.dialog-error {
+  color: #ff8a8e;
+}
+
+.dialog-field.is-invalid input,
+.dialog-field.is-invalid textarea {
+  border-color: var(--danger);
+}
+
+/* "Or start one yourself: New deck" under the empty state's agent steps (D77). */
+.empty-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0 0;
+  color: var(--text-muted);
 }

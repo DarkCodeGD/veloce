@@ -1,11 +1,12 @@
 import type { DeckListing } from "@veloce/core";
-import { Redo2, Undo2 } from "lucide-react";
+import { FilePlus2, Info, Redo2, Undo2 } from "lucide-react";
 import { useEffect } from "react";
 import { redo, undo } from "../actions.js";
 import { originName } from "../model/history.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { shortcutAttrs } from "../platform.js";
 import type { ConnectionStatus, LastChange } from "../sync-client.js";
+import { MenuButton } from "./MenuButton.js";
 import { Select } from "./Select.js";
 
 interface Props {
@@ -17,6 +18,9 @@ interface Props {
   follow: boolean;
   onFollowChange(follow: boolean): void;
   onOpenDeck(deckId: string): void;
+  /** File → New deck… / Deck info… (D76, D77). */
+  onNewDeck(): void;
+  onDeckInfo(): void;
   position: string | null;
 }
 
@@ -35,6 +39,8 @@ export function TopBar({
   follow,
   onFollowChange,
   onOpenDeck,
+  onNewDeck,
+  onDeckInfo,
   position,
 }: Props) {
   // The document leads; the app's name lives in the window/tab title, as in Figma or Keynote.
@@ -44,6 +50,18 @@ export function TopBar({
 
   return (
     <header className="topbar">
+      <MenuButton
+        label="File"
+        items={[
+          { label: "New deck…", icon: <FilePlus2 size={14} />, onSelect: onNewDeck },
+          {
+            label: "Deck info…",
+            icon: <Info size={14} />,
+            disabled: deckId === null,
+            onSelect: onDeckInfo,
+          },
+        ]}
+      />
       <div className="deck-picker">
         {decks.length > 1 ? (
           <Select

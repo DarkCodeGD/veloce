@@ -60,3 +60,14 @@ export async function revertAgentChanges(versions: number[]): Promise<void> {
   );
   showToast({ message, tone: "info", action: { label: "Undo", run: undo } }, 8000);
 }
+
+/** Make a new deck and switch to it (File → New deck). True when it was made. */
+export async function createDeck(title: string, theme?: string): Promise<boolean> {
+  try {
+    await client.createDeck(title, theme);
+    return true;
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+}

@@ -6,6 +6,7 @@
  * `"user"`: the origin comes from the connection, never from the message.
  */
 import {
+  BUILTIN_THEMES,
   ClientMessageSchema,
   type ErrorInfo,
   formatIssues,
@@ -123,6 +124,27 @@ export class SyncHub {
       }
       const message = parsed.data;
       try {
+        if (message.type === "create") {
+          // A new deck (File → New): it becomes the active deck, so this tab and every other
+          // one switch to it through the `decks` event, as when an agent calls create_deck.
+          const id = message.theme;
+          if (id !== undefined && !Object.hasOwn(BUILTIN_THEMES, id)) {
+            throw new VeloceError(
+              "INVALID",
+              `No built-in theme "${id}". Themes: ${Object.keys(BUILTIN_THEMES).join(", ")}.`,
+            );
+          }
+          const theme = id === undefined ? undefined : BUILTIN_THEMES[id];
+          const created = await workspace.create({ title: message.title, ...(theme && { theme }) });
+          if (!closed)
+            safeSend({
+              type: "result",
+              requestId: message.requestId,
+              ok: true,
+              version: created.version,
+            });
+          return;
+        }
         const deck = await workspace.get(message.deckId);
         if (closed) return;
         switch (message.type) {

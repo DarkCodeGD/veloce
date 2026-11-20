@@ -29,6 +29,7 @@ import {
 import { createPortal } from "react-dom";
 import { type Hsva, hsvToHex, type PickedColor, toHsva } from "../model/color.js";
 import { placePopover } from "../model/popover.js";
+import { popupHost } from "./popup-host.js";
 
 /** Chromium's EyeDropper API (not in TypeScript's DOM types yet). */
 type EyeDropperCtor = new () => { open(): Promise<{ sRGBHex: string }> };
@@ -401,6 +402,6 @@ export function ColorPopover({
       </div>
       {children}
     </div>,
-    document.body,
+    popupHost(trigger.current),
   );
 }

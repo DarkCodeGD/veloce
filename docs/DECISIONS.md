@@ -1605,3 +1605,49 @@ findings).
 6. **`SidesField` is generic** (keys, labels, live handlers, a collapse callback) and knows
    nothing about padding, so per-corner radius reuses it after its schema change. The padding
    logic is pure in `model/sides.ts` (`uniformValue` and `mostCommon` are generic too).
+
+## D76 — A File menu and Deck info: the deck's meta, edited and actually used
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist.
+
+1. **A File menu now, the menu bar later.** The top bar starts with "File" (New deck…, Deck
+   info…), a WAI-ARIA menu button (`MenuButton`). **Why:** these commands need a home before
+   the full app menu bar exists; the bar will be a row of the same component, so nothing is
+   thrown away. Picking a command gives focus back to the button first, so a dialog it opens
+   returns focus there when it closes.
+2. **Dialogs are native `<dialog>` with `showModal()`.** The browser traps focus, handles
+   Esc, makes the page inert and restores focus. **Why:** that's the hard, bug-prone part of
+   any modal, and the platform does it right. What we add: focus on the first field (React's
+   `autoFocus` runs before the dialog is shown), never leaving focus on a removed field (keys
+   sent to a detached element never reach the window, so every shortcut went dead), the
+   editor's shortcuts ignoring keys inside an open dialog (Delete on a button must not delete
+   layers), and an opacity-only open animation (a transform would shift fixed popups).
+3. **Popups go into the dialog they're opened from** (`popupHost`): a dropdown portaled to
+   `<body>` from inside a modal dialog is inert, visible but unclickable. Select and the color
+   picker use it.
+4. **Deck info** edits title, description, authors (comma separated) and language as one
+   `deck.updateMeta` with only the changed keys. Limits mirror `DeckMetaSchema`, and errors
+   show in place. Language: common languages by name (`Intl.DisplayNames`), or "Other…" for
+   any BCP 47 tag, tidied by `Intl.getCanonicalLocales` and named as you type. Validation is
+   grammar only, like the schema, so a tag an agent wrote is never rejected.
+5. **The meta is used, so the dialog's promises are true.** Agents' deck summaries now show
+   "About:", authors and language when set, so they write for that audience in that language.
+   The renderer sets `lang` on the slide stage, so screen readers (and hyphenation) follow it.
+   **Why:** the dialog's hints said both; before this, nothing read the description or the
+   language at all.
+
+## D77 — New deck from the editor, the way agents make one
+
+**Status:** Accepted (2026-11-20). Round 5 parity checklist.
+
+1. **A `create` sync message** (`title`, optional built-in `theme` ID) runs
+   `workspace.create`, the same path as MCP's `create_deck`. The new deck becomes the active
+   one, so every tab switches to it through the existing `decks` event. **Why:** golden rule 1;
+   no editor-only creation path, and an agent's next call sees the new deck as current, as if
+   it had made it. An unknown theme is an error that lists the built-in ones.
+2. **File → New deck** asks for a title ("Untitled deck", selected so typing replaces it) and
+   a theme, picked from the same cards as the inspector's Theme section. Colors and fonts are
+   tuned afterwards in the inspector.
+3. **An empty deck can be started by hand.** The empty state's "Slides appear here as your
+   agent builds them" now also offers **New slide** (or **New deck** when there's no deck).
+   **Why:** without it, a deck made by hand was a dead end for anyone not using an agent.

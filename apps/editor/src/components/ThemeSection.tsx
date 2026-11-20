@@ -186,8 +186,8 @@ function AddFontButton({ deck }: { deck: Deck }) {
   );
 }
 
-/** A built-in theme, previewed in its own colors and heading font. */
-function ThemeCard({ theme, on, onPick }: { theme: Theme; on: boolean; onPick(): void }) {
+/** A built-in theme, previewed in its own colors and heading font (also in File → New deck). */
+export function ThemeCard({ theme, on, onPick }: { theme: Theme; on: boolean; onPick(): void }) {
   const c = theme.colors;
   return (
     <button

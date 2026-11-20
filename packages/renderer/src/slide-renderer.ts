@@ -85,6 +85,10 @@ export class SlideRenderer {
     const stage = this.#stage;
     stage.style.width = `${deck.stage.width}px`;
     stage.style.height = `${deck.stage.height}px`;
+    // The deck's language (D76): screen readers read the slides in it, and the browser picks
+    // its hyphenation and spell-check dictionary from it. Unset: inherit the page's.
+    if (deck.meta.language) stage.lang = deck.meta.language;
+    else stage.removeAttribute("lang");
     stage.style.overflow = "hidden";
     if (deck.theme !== this.#theme) {
       applyTheme(stage, deck.theme);

@@ -1,7 +1,18 @@
 import { useState } from "react";
+import { run } from "../actions.js";
+import { addSlide } from "../model/commands.js";
 
 /** Shown until the deck has slides: how to point an AI agent at this Veloce. */
-export function EmptyState({ hasDeck, online }: { hasDeck: boolean; online: boolean }) {
+export function EmptyState({
+  hasDeck,
+  online,
+  onNewDeck,
+}: {
+  hasDeck: boolean;
+  online: boolean;
+  /** Start a deck by hand instead (File → New deck, D77). */
+  onNewDeck(): void;
+}) {
   const command = `claude mcp add --transport http veloce ${location.origin}/mcp`;
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -40,6 +51,21 @@ export function EmptyState({ hasDeck, online }: { hasDeck: boolean; online: bool
             </blockquote>
           </li>
         </ol>
+        {online && (
+          // Building by hand starts here too: a deck made with File → New has no slides yet.
+          <p className="empty-or">
+            Or start {hasDeck ? "it" : "one"} yourself:{" "}
+            {hasDeck ? (
+              <button type="button" className="button" onClick={() => void run(addSlide(-1))}>
+                New slide
+              </button>
+            ) : (
+              <button type="button" className="button" onClick={onNewDeck}>
+                New deck
+              </button>
+            )}
+          </p>
+        )}
       </div>
     </section>
   );

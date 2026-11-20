@@ -21,6 +21,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { moveActive, typeahead } from "../model/listbox.js";
+import { popupHost } from "./popup-host.js";
 
 export interface SelectOption {
   value: string;
@@ -293,7 +294,7 @@ export function Select({
               </div>
             ))}
           </div>,
-          document.body,
+          popupHost(triggerRef.current),
         )}
     </>
   );

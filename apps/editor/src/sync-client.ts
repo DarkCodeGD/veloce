@@ -127,6 +127,19 @@ export class SyncClient {
     return this.#request((requestId) => ({ type: "revert", requestId, deckId, versions }));
   }
 
+  /**
+   * Make a new deck (`theme`: a built-in theme ID). It becomes the active deck, so this tab
+   * (and every other) switches to it, as when an agent calls create_deck.
+   */
+  createDeck(title: string, theme?: string): Promise<void> {
+    return this.#request((requestId) => ({
+      type: "create",
+      requestId,
+      title,
+      ...(theme !== undefined && { theme }),
+    }));
+  }
+
   async #history(type: "undo" | "redo"): Promise<boolean> {
     const deckId = this.#state.deckId;
     if (!deckId) return false;

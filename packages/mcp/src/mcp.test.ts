@@ -552,6 +552,31 @@ describe("themes, docs, previews and decks", () => {
 describe("working alongside the user (D71)", () => {
   const text = (content: string) => ({ type: "text", props: { content } });
 
+  it("shows agents the deck info the user set (D76): what it's about, who, which language", async () => {
+    await connect();
+    await call("create_deck", { title: "Pitch" });
+    expect((await call("get_deck_summary")).text).not.toMatch(/About:|language/);
+    const open = await workspace.get(workspace.activeDeckId ?? "");
+    open.apply({
+      origin: "user",
+      label: "Edit deck info",
+      ops: [
+        {
+          op: "deck.updateMeta",
+          set: {
+            description: "Seed round for investors",
+            authors: ["Ada", "Alan"],
+            language: "pt-BR",
+          },
+        },
+      ],
+    });
+    const summary = (await call("get_deck_summary")).text;
+    expect(summary).toMatch(
+      /Deck "Pitch" [^\n]*\nAbout: Seed round for investors\nBy Ada, Alan · language pt-BR\n/,
+    );
+  });
+
   it("tells the agent what the user changed and reverted, once, and won't resurrect their removals", async () => {
     await connect();
     await call("create_deck", { title: "Shared" });

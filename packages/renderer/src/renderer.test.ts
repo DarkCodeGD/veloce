@@ -255,6 +255,21 @@ describe("SlideRenderer", () => {
     expect(calls).toEqual(["mount:a", "mount:b"]);
   });
 
+  it("marks the stage with the deck's language, and drops it when it's cleared (D76)", () => {
+    const stage = document.createElement("div");
+    const renderer = new SlideRenderer(stage, { registry: registry(), assetUrl: () => "" });
+    let d = deck();
+    renderer.render(d, "one");
+    expect(stage.hasAttribute("lang")).toBe(false);
+    d = edit(d, [{ op: "deck.updateMeta", set: { language: "pt-BR" } }]);
+    renderer.render(d, "one");
+    expect(stage.lang).toBe("pt-BR");
+    d = edit(d, [{ op: "deck.updateMeta", set: { language: null } }]);
+    renderer.render(d, "one");
+    expect(stage.hasAttribute("lang")).toBe(false);
+    renderer.dispose();
+  });
+
   it("updates incrementally: untouched nodes keep their DOM, edited elements get update()", () => {
     const stage = document.createElement("div");
     const renderer = new SlideRenderer(stage, { registry: registry(), assetUrl: () => "" });

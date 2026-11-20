@@ -26,8 +26,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-20
-- **Next:** round 5's "Parity with agents" checklist (next: deck info), then the tool bar (D62).
-- **State:** `pnpm check` is green (607 tests, including real-Chromium lint, preview and editor
+- **Next:** round 5's "Parity with agents" checklist (next: theme editor beyond colors and fonts),
+  then the tool bar (D62).
+- **State:** `pnpm check` is green (622 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -40,7 +41,8 @@
   - Agent feedback rounds 1–3 and a fix-check retest: lint accuracy, clearer errors, and
     per-session decks for agents (D58, D59, D68–D70).
   - Round 5: reverting AI changes from History, and agents told what the user changed, retested
-    and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75).
+    and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
+    new deck from a File menu (D76, D77).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -173,9 +175,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
   - [x] Frame border and shadow in the inspector: Border / Shadow headers with **+** / **−**,
         theme shadow presets or Custom values (D74)
   - [x] Per-side padding: one field, or four with "Individual sides" (`SidesField`, D75)
-  - [ ] Deck info: rename the deck, description, authors, language (`deck.updateMeta`),
-        in a File → Deck info dialog
-  - [ ] New deck from the editor (File → New, with a theme), like `create_deck`
+  - [x] Deck info: File → Deck info dialog; agents see it, slides carry the language (D76)
+  - [x] New deck from the editor: File → New with a theme, New slide in an empty deck (D77)
   - [ ] Theme editor beyond colors and fonts: text styles (size, weight, line height,
         letter spacing, case), and the spacing, radius and shadow scales. Too big for an
         inspector section: a dialog or its own workspace; the inspector keeps colors and
@@ -194,7 +195,7 @@ Animate and Present workspaces instead of being squeezed into today's screen.
 - [ ] On-canvas gradient handles: with the paint picker open on a gradient, drag its ends
       (linear), center (radial, angular) and stops on the slide itself, like Figma (D66 §8)
 - [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
-      and its shortcut; the deck switcher, Follow AI / Live and Present stay in the bar on
+      and its shortcut, a row of `MenuButton`s (the File menu is the first, D76); the deck switcher, Follow AI / Live and Present stay in the bar on
       every workspace (AI activity is never hidden in one workspace)
 - [ ] Workspaces: a switcher with fixed presets of resizable, collapsible panels. Design is
       the first (today's editor); a workspace appears only once its phase ships (Animate
