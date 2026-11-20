@@ -201,13 +201,15 @@ export type ResolvedSizing = Sizing | "auto";
 
 /**
  * Whether `parent` stretches its child along `axis` when the child's sizing is `"auto"`: a
- * stack's cross axis with `align: "stretch"`, a grid cell's width, a grid row's height
- * (unless aligned). Absolute frames never stretch anything.
+ * stack's cross axis with `align: "stretch"`, a grid cell's width and height (unless
+ * `justify` or `align` places items in it). Absolute frames never stretch anything.
  */
 export function stretchedBy(parent: Layout, axis: "width" | "height"): boolean {
   if (parent.mode === "absolute") return false;
   const align = parent.align ?? "stretch";
-  if (parent.mode === "grid") return axis === "width" || align === "stretch";
+  if (parent.mode === "grid") {
+    return (axis === "width" ? (parent.justify ?? "stretch") : align) === "stretch";
+  }
   const main = (parent.direction ?? "column") === "row" ? "width" : "height";
   return axis !== main && align === "stretch";
 }

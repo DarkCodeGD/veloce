@@ -41,7 +41,8 @@ Describe structure and let the engine compute positions: content reflows when te
 - \`{ "mode": "stack", "direction": "row" | "column", "gap", "padding", "align", "justify", "wrap" }\`: a row or column (flexbox).
   - \`align\` (cross axis): start | center | end | stretch (default stretch).
   - \`justify\` (main axis): start | center | end | space-between | space-around | space-evenly.
-- \`{ "mode": "grid", "columns": 3, "gap", "rowGap", "padding", "align" }\`: equal-width columns.
+- \`{ "mode": "grid", "columns": 3, "gap", "rowGap", "padding", "align", "justify" }\`: equal-width columns.
+  - \`align\` (vertical, within each cell) and \`justify\` (horizontal): start | center | end | stretch (default stretch). A layer with a fixed or hug width sits at the cell's start unless \`justify\` places it: \`"justify": "center"\` centres logos in their cells.
 - \`{ "mode": "absolute" }\`: children use \`position: { x, y }\` from the frame's edges (padding does nothing here). Only for overlaps and decoration.
 
 ## Free layers (\`positioning: "free"\`)

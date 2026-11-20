@@ -82,6 +82,7 @@ export function frameLayoutCss(layout: Layout): CssRecord {
         "row-gap": layout.rowGap === undefined ? gap : cssLength(layout.rowGap),
         padding,
         "align-items": FLEX_ALIGN[layout.align ?? "stretch"],
+        "justify-items": FLEX_ALIGN[layout.justify ?? "stretch"],
       };
     }
     case "absolute":
@@ -164,7 +165,7 @@ export function nodeBoxCss(
     case "grid":
       Object.assign(
         css,
-        gridAxis("width", size.width, "stretch"), // grid cells have no horizontal align option
+        gridAxis("width", size.width, parent.justify ?? "stretch"),
         gridAxis("height", size.height, parent.align ?? "stretch"),
       );
       return css;

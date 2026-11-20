@@ -505,6 +505,19 @@ function LayerSection({
 }
 
 const ALIGN = ["start", "center", "end", "stretch"];
+/** A grid cell's two alignments, named for their axis. */
+const CELL_X = [
+  { value: "start", label: "Left" },
+  { value: "center", label: "Center" },
+  { value: "end", label: "Right" },
+  { value: "stretch", label: "Stretch" },
+];
+const CELL_Y = [
+  { value: "start", label: "Top" },
+  { value: "center", label: "Middle" },
+  { value: "end", label: "Bottom" },
+  { value: "stretch", label: "Stretch" },
+];
 /** Where each side's "Custom…" starts: its rendered padding. */
 const PADDING_CSS: Record<Side, string> = {
   top: "paddingTop",
@@ -623,12 +636,21 @@ function LayoutSection({
               ),
             )}
           />
+          {/* Where each layer sits in its cell, in words for each axis (CSS justify-items
+              and align-items). */}
           <SelectField
-            label="Align"
-            value={layout.align}
-            options={ALIGN}
+            label="Horizontal"
+            value={layout.justify}
+            options={CELL_X}
             defaultValue="stretch"
-            onCommit={setLayout("align", "Change alignment")}
+            onCommit={setLayout("justify", "Change horizontal alignment")}
+          />
+          <SelectField
+            label="Vertical"
+            value={layout.align}
+            options={CELL_Y}
+            defaultValue="stretch"
+            onCommit={setLayout("align", "Change vertical alignment")}
           />
         </>
       )}

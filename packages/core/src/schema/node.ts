@@ -67,6 +67,8 @@ export const GridLayoutSchema = z.strictObject({
   padding: PaddingSchema.optional(),
   /** Vertical alignment of items within their cell. Default: `"stretch"`. */
   align: AlignSchema.optional(),
+  /** Horizontal alignment of items within their cell (CSS `justify-items`). Default: `"stretch"`. */
+  justify: AlignSchema.optional(),
 });
 
 /**

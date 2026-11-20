@@ -18,7 +18,7 @@ const text = (id: string, extra = {}) => element("text", { content: id }, { id, 
  *   title,
  *   list (row, gap 24, align center) > [a, b (fill), c],
  *   board (absolute, padding 20) > [p @10,20, q @200,100 turned 90°],
- *   cells (grid, 3 columns, gap 8) > [g1, g2, g3],
+ *   cells (grid, 3 columns, gap 8, centred across) > [g1, g2, g3],
  *   pin (free @5,5), tag (free @50,60),
  * ]
  */
@@ -48,7 +48,7 @@ function makeDeck(): Deck {
           }),
           frame({
             id: "cells",
-            layout: { mode: "grid", columns: 3, gap: 8 },
+            layout: { mode: "grid", columns: 3, gap: 8, justify: "center" },
             children: [text("g1"), text("g2"), text("g3")],
           }),
           text("pin", { positioning: "free", position: { x: 5, y: 5 } }),
@@ -119,7 +119,9 @@ describe("group", () => {
     const { index: after } = apply(command);
     const groupId = command?.select?.[0] ?? "";
     expect(kids(after, "cells")).toEqual(["g1", groupId]);
-    expect(nodeOf(after, groupId)).toMatchObject({ layout: { mode: "grid", columns: 2, gap: 8 } });
+    expect(nodeOf(after, groupId)).toMatchObject({
+      layout: { mode: "grid", columns: 2, gap: 8, justify: "center" },
+    });
   });
 
   it("cuts a free group to the members' box, rotation included, and rebases them", () => {

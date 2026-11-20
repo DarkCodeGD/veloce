@@ -1911,3 +1911,26 @@ the picture and nothing kept a chosen part of it.
 
 `model/crop.test.ts` covers the maths; `phase3-crop.test.ts` covers crop mode, both resize
 rules and reset in real Chromium.
+
+## D85 — Grids align their items across the cell too (`justify`)
+
+**Status:** Accepted (2026-11-20).
+
+A grid had only `align` (vertical, CSS `align-items`), so any layer narrower than its
+column sat at the column's left: a 200px logo couldn't be centred in its cell.
+
+1. **`justify` on grid layouts**: start | center | end | stretch (default stretch), rendered
+   as CSS `justify-items`. **Why `justify`:** it's CSS's word for the inline axis and what
+   stacks already use for their main axis, so agents guess it; stack values like
+   space-between don't apply to one item in a cell, so a grid takes the four alignments
+   only. Optional and additive, so no format change.
+2. **Sizing follows it**, as `align` does for height: `"auto"` width stretches across the
+   cell only while `justify` is stretch (`stretchedBy`), `"hug"` fits its content and
+   follows `justify`, fixed widths are placed by it, `"fill"` always stretches. Grouping a
+   grid's layers copies `justify` with the rest of the flow (D54).
+3. **The inspector names the axes:** a grid shows Horizontal (Left / Center / Right /
+   Stretch) and Vertical (Top / Middle / Bottom / Stretch) instead of one "Align". Stacks
+   keep Align and Justify, where cross and main axis is what matters.
+4. **Agents:** `get_docs("layout")` documents both, with the logo example.
+
+`phase3-grid-align.test.ts` covers it in real Chromium.

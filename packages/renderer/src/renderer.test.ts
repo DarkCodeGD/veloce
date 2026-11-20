@@ -124,7 +124,12 @@ describe("layout → CSS", () => {
       "grid-template-columns": "repeat(3, minmax(0, 1fr))",
       "column-gap": "24px",
       "row-gap": "24px",
+      "justify-items": "stretch",
     });
+    // Grid cells align on both axes.
+    expect(
+      frameLayoutCss({ mode: "grid", columns: 3, justify: "center", align: "end" }),
+    ).toMatchObject({ "justify-items": "center", "align-items": "flex-end" });
     expect(frameLayoutCss({ mode: "stack", padding: { x: 10 } }).padding).toBe("0px 10px 0px 10px");
   });
 
@@ -150,6 +155,14 @@ describe("layout → CSS", () => {
     expect(
       nodeBoxCss(node, { mode: "grid", columns: 2, align: "end" }, { width: "hug", height: "hug" }),
     ).toMatchObject({ "justify-self": "start" });
+    // Centred across the cell: hug fits its content and follows justify-items.
+    const inCell = nodeBoxCss(
+      node,
+      { mode: "grid", columns: 2, justify: "center" },
+      { width: "hug", height: "hug" },
+    );
+    expect(inCell["justify-self"]).toBeUndefined();
+    expect(inCell["align-self"]).toBe("start");
     expect(nodeBoxCss(node, row, { width: 300, height: "fill" })).toMatchObject({
       flex: "0 0 300px",
       width: "300px",

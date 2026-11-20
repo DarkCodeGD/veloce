@@ -110,7 +110,15 @@ function flowLayoutLike(parent: Layout, count: number): Layout {
   if (parent.mode === "grid") {
     const rowGap = parent.rowGap === undefined ? {} : { rowGap: parent.rowGap };
     // The group fills one cell, so its own grid only needs as many columns as it has items.
-    return { mode: "grid", columns: Math.min(count, parent.columns), ...gap, ...rowGap, ...align };
+    const justify = parent.justify ? { justify: parent.justify } : {};
+    return {
+      mode: "grid",
+      columns: Math.min(count, parent.columns),
+      ...gap,
+      ...rowGap,
+      ...align,
+      ...justify,
+    };
   }
   const stack = parent.mode === "stack" ? parent : null;
   return {

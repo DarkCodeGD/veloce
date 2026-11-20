@@ -210,6 +210,10 @@ describe("free positioning in stacks and grids", () => {
     expect(
       freeSizing({ ...grid, align: "start" }, { width: "auto", height: "auto" }, rendered),
     ).toEqual({ width: 1600, height: "hug" });
+    // Placed across the cell (justify): the width fits its content, so it's hug.
+    expect(
+      freeSizing({ ...grid, justify: "center" }, { width: "auto", height: "auto" }, rendered),
+    ).toEqual({ width: "hug", height: 72 });
     // Fixed sizes stay.
     expect(freeSizing(column, { width: 300, height: 200 }, rendered)).toEqual({});
   });
