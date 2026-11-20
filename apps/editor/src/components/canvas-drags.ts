@@ -386,7 +386,7 @@ export function resizeDrag(
         command,
         feedback: {
           guides: snapped.x || snapped.y ? guidesFor(now, targets, snapped) : [],
-          badge: { text: `${Math.round(w)} × ${Math.round(h)}`, at: p },
+          // The size shows in the selection's size badge, live (EditorCanvas).
           measures: parent ? spacingIn(parent, now, new Set([id])) : [],
         },
       };
@@ -482,10 +482,12 @@ export function cropDrag(
       };
       return {
         command,
+        // A trim's size shows in the selection's size badge; a scale says how big the
+        // picture is drawn, as a share of its pixels.
         feedback:
-          part.kind === "trim"
-            ? { badge: { text: `${window.w} × ${window.h}`, at: p } }
-            : { badge: { text: `${Math.round((shown.w / picture.size.w) * 100)}%`, at: p } },
+          part.kind === "scale"
+            ? { badge: { text: `${Math.round((shown.w / picture.size.w) * 100)}%`, at: p } }
+            : {},
       };
     },
   };

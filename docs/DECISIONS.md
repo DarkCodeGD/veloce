@@ -1934,3 +1934,19 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
 4. **Agents:** `get_docs("layout")` documents both, with the logo example.
 
 `phase3-grid-align.test.ts` covers it in real Chromium.
+
+## D86 — The selection's size badge
+
+**Status:** Accepted (2026-11-20).
+
+1. **Always under the selection, not only while dragging:** `176 × 36` in slide pixels,
+   centred under the selection's on-screen bounds. One layer shows its own size (rotation
+   aside, like the inspector's Width and Height); several show the size of their bounds.
+   Whole pixels, or one decimal when a size isn't whole (text that fits its content).
+2. **Live, from the canvas:** it's measured from the rendered layer, like the outlines, so
+   during a resize it follows the preview with no extra plumbing. The resize and trim
+   drags dropped their own size badge at the pointer, which only repeated it; rotate (°)
+   and crop scale (%) keep theirs.
+3. **Clear of the rotate knob:** when the knob shows below the layer it pushes the badge
+   further down (where the knob is, from the layer's rotation); otherwise the badge sits
+   8px under the selection. Hidden while typing and while drawing a marquee.

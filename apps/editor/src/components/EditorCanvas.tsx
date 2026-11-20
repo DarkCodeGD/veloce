@@ -466,6 +466,27 @@ export function EditorCanvas({
     const crop = startingCrop(node.props[picture.cropKey], picture.size, size, focus);
     return { box, crop, size, src: assetUrl(deckId, asset) };
   })();
+  /**
+   * The size badge under the selection (`176 × 36`, slide pixels), live while resizing:
+   * one layer's own size (rotation aside), or the bounds of several. Below the rotate knob
+   * when that's showing underneath.
+   */
+  const sizeBadge = (() => {
+    const selected = boxes.selected;
+    if (editing || selected.length === 0 || active === "marquee") return null;
+    const bounds = unionRects(selected.map(boundingRect));
+    const single = selected.length === 1 ? selected[0] : undefined;
+    const size = single ? single : bounds;
+    let top = bounds.y + bounds.h + BADGE_GAP;
+    if (single && single === primary && editable && active !== "move" && !cropView) {
+      // The knob's centre sits KNOB_REACH past the box's bottom edge, turned with the box.
+      const knobY =
+        single.cy + Math.cos((single.rotation * Math.PI) / 180) * (single.h / 2 + KNOB_REACH);
+      top = Math.max(top, knobY + KNOB_RADIUS + BADGE_GAP);
+    }
+    const text = `${slidePx(size.w / stage.scale)} × ${slidePx(size.h / stage.scale)}`;
+    return { text, left: bounds.x + bounds.w / 2, top };
+  })();
   /** Slide pixels → overlay pixels. */
   const toOverlay = (p: Point): Point => ({
     x: stage.x + p.x * stage.scale,
@@ -583,6 +604,15 @@ export function EditorCanvas({
             to={toOverlay(m.dir === "h" ? { x: m.to, y: m.at } : { x: m.at, y: m.to })}
           />
         ))}
+        {sizeBadge && (
+          <div
+            className="size-badge"
+            data-testid="size-badge"
+            style={{ left: sizeBadge.left, top: sizeBadge.top }}
+          >
+            {sizeBadge.text}
+          </div>
+        )}
         {feedback?.badge && (
           <div
             className="drag-badge"
@@ -639,6 +669,22 @@ function textContentOf(index: SlideIndex, id: string): TextContent {
 }
 
 const CORNERS = ["nw", "ne", "se", "sw"] as const;
+
+/** The size badge's distance from the selection, and the rotate knob's place (styles.css). */
+const BADGE_GAP = 8;
+const KNOB_REACH = 21;
+const KNOB_RADIUS = 9;
+
+/** A size in slide pixels: whole, or to one decimal when it isn't (Figma does the same). */
+const slidePx = (v: number) => String(Math.round(v * 10) / 10);
+
+function unionRects(rects: readonly Rect[]): Rect {
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  const right = Math.max(...rects.map((r) => r.x + r.w));
+  const bottom = Math.max(...rects.map((r) => r.y + r.h));
+  return { x, y, w: right - x, h: bottom - y };
+}
 
 /**
  * Crop mode's overlay (D84), in the layer's own (rotated) box: the whole picture, dimmed

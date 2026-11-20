@@ -80,6 +80,9 @@ async function handleAt(name: string): Promise<Point> {
   if (!b) throw new Error(`no ${name} handle`);
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
+/** The size badge under the selection, or null. */
+const badge = async () =>
+  (await page.locator(".size-badge").count()) ? page.locator(".size-badge").textContent() : null;
 /** Screen pixels per slide pixel. */
 const scale = () =>
   page.locator(".slide-surface").evaluate((el) => el.getBoundingClientRect().width / 1920);
@@ -195,16 +198,31 @@ describe.skipIf(problem !== null)("Phase 3: direct manipulation", { timeout: 60_
     expect(await page.locator(".inspector-head strong").textContent()).toBe("Box A");
   });
 
+  it("shows the selection's size under it, clear of the rotate knob", async () => {
+    await select("Box A");
+    await expect.poll(badge).toBe("200 × 120");
+    const knob = await page.locator('[data-handle="rotate"]').boundingBox();
+    const tag = await page.locator(".size-badge").boundingBox();
+    expect(tag?.y ?? 0).toBeGreaterThan((knob?.y ?? 0) + (knob?.height ?? 0));
+    // Several layers: their bounds (Box A at 40,40 200×120; Box B at 400,300 160×160).
+    await layer("boxB").click({ modifiers: ["Shift"] });
+    await expect.poll(badge).toBe("520 × 420");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect.poll(() => page.locator(".size-badge").count()).toBe(0);
+  });
+
   it("resizes from a corner (Shift keeps the ratio) and from a side, anchoring the far edge", async () => {
     await select("Box A");
     const s = await scale();
     const se = await handleAt("se");
     await page.keyboard.down("Shift");
     await grab(se, { x: se.x + 60, y: se.y + 5 });
-    expect(await page.locator(".drag-badge").textContent()).toMatch(/^\d+ × \d+$/);
+    const width = Math.round(200 + 60 / s);
+    // The size badge follows the resize live.
+    await expect.poll(badge).toBe(`${width} × ${Math.round(width * 0.6)}`);
     await page.mouse.up();
     await page.keyboard.up("Shift");
-    const width = Math.round(200 + 60 / s);
     await expect.poll(() => h.stored("boxA").width).toBe(width);
     expect(h.stored("boxA").height).toBe(Math.round(width * 0.6));
     expect(h.stored("boxA").position).toEqual({ x: 40, y: 40 }); // top-left corner anchored
