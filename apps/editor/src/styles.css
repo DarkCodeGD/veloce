@@ -4718,11 +4718,9 @@ html.is-scrubbing * {
   background: var(--hover);
 }
 
-.layout-pick .thumb-view {
-  margin-bottom: 4px;
-}
-
 .layout-name {
+  /* A little more room under the thumbnail than between the name and its meta. */
+  margin-top: 4px;
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
