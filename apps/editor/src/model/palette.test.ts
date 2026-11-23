@@ -118,3 +118,17 @@ describe("the command palette's list (D92)", () => {
     ]);
   });
 });
+
+describe("components in the palette (D94)", () => {
+  it("come before an equally good layer match", () => {
+    const sections = paletteSections(
+      [
+        { id: "layer:s1/card", kind: "layer", label: "Feature card", detail: "Slide 1" },
+        { id: "component:Feature card", kind: "component", label: "Feature card" },
+      ],
+      "feature",
+      [],
+    );
+    expect(sections.map((s) => s.title)).toEqual(["Components", "Layers"]);
+  });
+});

@@ -37,7 +37,7 @@ export function collectAssetRefs(value: unknown, into: Set<string> = new Set()):
   return into;
 }
 
-/** asset ID → IDs of the slides/nodes that use it. */
+/** asset ID → IDs of the slides/nodes that use it, and `component:<name>` for components. */
 export function assetUsage(deck: Deck): Map<string, string[]> {
   const usage = new Map<string, string[]>();
   const record = (ownerId: string, value: unknown) => {
@@ -47,6 +47,12 @@ export function assetUsage(deck: Deck): Map<string, string[]> {
     record(slide.id, slide.background);
     for (const { node } of walkNodes(slide.root)) {
       record(node.id, node.kind === "frame" ? node.style : node.props);
+    }
+  }
+  // A component's images are in use too: its next copy needs them (D94).
+  for (const [name, component] of Object.entries(deck.components ?? {})) {
+    for (const { node } of walkNodes(component.node)) {
+      record(`component:${name}`, node.kind === "frame" ? node.style : node.props);
     }
   }
   return usage;

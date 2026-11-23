@@ -4542,3 +4542,137 @@ html.is-scrubbing * {
   color: var(--text);
   font-size: 15px;
 }
+
+/* Components tab (D94): a preview per component; a click inserts a copy. */
+
+.components-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  list-style: none;
+}
+
+.component-item {
+  position: relative;
+}
+
+.component-insert {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  text-align: left;
+  transition:
+    border-color var(--fast),
+    background var(--fast);
+}
+
+.component-insert:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.component-preview {
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.component-preview .slide-surface {
+  box-shadow: none;
+}
+
+.component-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  /* Room for the delete button, so long names end before it. */
+  padding-right: 28px;
+}
+
+.component-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-delete {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  opacity: 0;
+}
+
+/* Shown on hover and for keyboard users; touch screens always show it. */
+.component-item:hover .component-delete,
+.component-delete:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .component-delete {
+    opacity: 1;
+  }
+}
+
+.components-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.components-empty p {
+  margin: 0;
+}
+
+/* Save as component: the texts offered as params. */
+
+.component-params {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.component-params legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.component-param {
+  display: grid;
+  grid-template-columns: 16px 150px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.component-param .component-param-name {
+  width: 100%;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.component-param-label {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

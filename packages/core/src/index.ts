@@ -8,6 +8,7 @@ export * from "./anchor.js";
 export * from "./assets.js";
 export * from "./builders.js";
 export * from "./checks.js";
+export * from "./components.js";
 export * from "./default-theme.js";
 export * from "./document.js";
 export * from "./errors.js";

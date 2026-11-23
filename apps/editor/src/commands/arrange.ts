@@ -2,9 +2,10 @@
  * The Arrange menu (D89): align and distribute (Figma's Alt keys, by physical key), group,
  * auto layout, and moving a layer among its siblings without dragging (WCAG 2.5.7).
  */
-import { GalleryVerticalEnd } from "lucide-react";
+import { Component, GalleryVerticalEnd } from "lucide-react";
 import { run } from "../actions.js";
 import { alignSelection, distributeSelection } from "../align-actions.js";
+import { openDialog } from "../dialogs.js";
 import { autoLayoutSelection, groupSelection, ungroupSelection } from "../group-actions.js";
 import type { AlignEdge, DistributeAxis } from "../model/align.js";
 import { reorderNode } from "../model/commands.js";
@@ -121,6 +122,21 @@ export function arrangeCommands(): EditorCommand[] {
       keywords: "stack flow arrange",
       enabled: hasSelection,
       run: grouping(autoLayoutSelection),
+    },
+    {
+      // D94. No shortcut: Figma's Ctrl+Alt+K is AltGr+K on many keyboards (D89).
+      id: "arrange.saveComponent",
+      label: "Save as component…",
+      icon: Component,
+      group: "arrange",
+      menu: "arrange",
+      section: "component",
+      keywords: "create component reuse template symbol",
+      enabled: (c) => {
+        const id = onlySelected(c);
+        return id !== undefined && onSlide(c) && id !== c.slideIndex.rootId;
+      },
+      run: () => openDialog("save-component"),
     },
     moveLayer("arrange.moveUp", "Move layer up", SHORTCUTS.moveUp, -1),
     moveLayer("arrange.moveDown", "Move layer down", SHORTCUTS.moveDown, 1),

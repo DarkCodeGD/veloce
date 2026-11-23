@@ -13,7 +13,8 @@ export type DialogId =
   | "shortcuts"
   | "preferences"
   | "save-version"
-  | "versions";
+  | "versions"
+  | "save-component";
 
 let open: DialogId | null = null;
 const listeners = new Set<() => void>();

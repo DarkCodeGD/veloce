@@ -4,17 +4,26 @@
  * Compared with core's strict schema, agents may:
  * - omit `kind` (a node with `children` is a frame; one with `type` is an element),
  * - omit `id` (one is generated and returned, so later calls can reference it),
- * - omit a frame's `layout` (a vertical stack) and an element's `props` (`{}`).
+ * - omit a frame's `layout` (a vertical stack) and an element's `props` (`{}`),
+ * - write `{ "use": "<component>", "with": { … } }` anywhere a node goes (D94): it's
+ *   expanded here into a plain copy, so core ops and the undo log only see plain nodes.
  *
  * Everything else is validated exactly like any other edit, by core and the plugin registry.
  */
 import {
   AnchorSchema,
+  ComponentNameSchema,
+  collectIds,
+  componentNotFound,
   createId,
   DEFAULT_SLIDE_LAYOUT,
+  type Deck,
   ElementTypeSchema,
+  type ElementValidator,
   FrameStyleSchema,
+  getComponent,
   IdSchema,
+  instantiateComponent,
   LayoutSchema,
   type Node,
   OpSchema,
@@ -63,7 +72,21 @@ export const ElementInputSchema = z.strictObject({
     .describe("Validated by the element type's schema."),
 });
 
-export type NodeInput = z.infer<typeof ElementInputSchema> | FrameInput;
+/** A copy of a saved component (D94), with its params and the root's own fields. */
+export const UseInputSchema = z.strictObject({
+  use: ComponentNameSchema.describe("A component's name (see list_components)."),
+  with: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe("Param values by name; a param left out keeps the component's own value."),
+  ...nodeCommon,
+  id: IdSchema.optional().describe(
+    'The copy\'s ID; its inner nodes get "<id>-<their ID in the component>". Generated if omitted.',
+  ),
+});
+export type UseInput = z.infer<typeof UseInputSchema>;
+
+export type NodeInput = z.infer<typeof ElementInputSchema> | FrameInput | UseInput;
 export interface FrameInput extends Omit<z.infer<typeof FrameFieldsInput>, "children"> {
   children: NodeInput[];
 }
@@ -85,6 +108,7 @@ export const FrameInputSchema = z.strictObject({
 export const NodeInputSchema: z.ZodType<NodeInput> = z.union([
   FrameInputSchema,
   ElementInputSchema,
+  UseInputSchema,
 ]);
 
 export const SlideInputSchema = z.strictObject({
@@ -136,12 +160,23 @@ export type OpInput = z.infer<typeof OpInputSchema>;
  */
 export type GeneratedIds = Set<string>;
 
-export function normalizeNode(input: NodeInput, generated?: GeneratedIds): Node {
+export interface NormalizeContext {
+  generated?: GeneratedIds;
+  /** The deck the input goes into: its components expand `use` nodes. */
+  deck?: Deck;
+  /** Checks the values params write into elements, so a bad one is blamed on its param. */
+  validateElement?: ElementValidator;
+  /** IDs in use (filled from `deck` on first need): copies' inner IDs avoid them. */
+  taken?: Set<string>;
+}
+
+export function normalizeNode(input: NodeInput, ctx: NormalizeContext = {}, at = "node"): Node {
+  if ("use" in input) return expandUse(input, ctx, at);
   const { id: given, kind: _kind, ...rest } = input;
   let id = given;
   if (id === undefined) {
     id = createId("nd");
-    generated?.add(id);
+    ctx.generated?.add(id);
   }
   if ("children" in input) {
     const frame = rest as Omit<FrameInput, "id" | "kind">;
@@ -150,14 +185,31 @@ export function normalizeNode(input: NodeInput, generated?: GeneratedIds): Node 
       id,
       kind: "frame",
       layout: frame.layout ?? { mode: "stack" },
-      children: frame.children.map((child) => normalizeNode(child, generated)),
+      children: frame.children.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`)),
     };
   }
   const element = rest as Omit<z.infer<typeof ElementInputSchema>, "id" | "kind">;
   return { ...element, id, kind: "element", props: element.props ?? {} };
 }
 
-export function normalizeSlide(input: SlideInput, generated?: GeneratedIds): Slide {
+/** A `use` node: a plain copy of the component, the root's own fields laid over it. */
+function expandUse(input: UseInput, ctx: NormalizeContext, at: string): Node {
+  const { use, with: values, id, ...fields } = input;
+  const deck = ctx.deck ?? { components: undefined };
+  const component = getComponent(deck, use);
+  if (!component) throw componentNotFound(deck, use, `${at}.use`);
+  ctx.taken ??= ctx.deck ? collectIds(ctx.deck) : new Set();
+  const copy = instantiateComponent(use, component, {
+    with: values,
+    id,
+    taken: ctx.taken,
+    validateElement: ctx.validateElement,
+    at,
+  });
+  return { ...copy, ...fields };
+}
+
+export function normalizeSlide(input: SlideInput, ctx: NormalizeContext = {}, at = "slide"): Slide {
   const { id, layout, style, children, ...fields } = input;
   return {
     id: id ?? createId("sl"),
@@ -167,17 +219,17 @@ export function normalizeSlide(input: SlideInput, generated?: GeneratedIds): Sli
       kind: "frame",
       layout: layout ?? DEFAULT_SLIDE_LAYOUT,
       ...(style && { style }),
-      children: children.map((child) => normalizeNode(child, generated)),
+      children: children.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`)),
     },
   };
 }
 
-export function normalizeOp(input: OpInput, generated?: GeneratedIds): unknown {
+export function normalizeOp(input: OpInput, ctx: NormalizeContext = {}, at = "ops[0]"): unknown {
   if (input.op === "slide.insert" && "slide" in input && !("root" in input.slide)) {
-    return { ...input, slide: normalizeSlide(input.slide as SlideInput, generated) };
+    return { ...input, slide: normalizeSlide(input.slide as SlideInput, ctx, `${at}.slide`) };
   }
   if (input.op === "node.insert") {
-    return { ...input, node: normalizeNode(input.node as NodeInput, generated) };
+    return { ...input, node: normalizeNode(input.node as NodeInput, ctx, `${at}.node`) };
   }
   return input;
 }

@@ -48,7 +48,7 @@ export const versionInfo = ({ id, name, savedAt, deck }: DeckVersion): VersionIn
 
 /**
  * The ops that turn `current` into `target` (an older copy of the same deck): its slides,
- * theme, title and other meta, and the assets it registered. One transaction, so undo puts
+ * theme, title and other meta, components, and the assets it registered. One transaction, so undo puts
  * everything back. The stage (slide size) isn't changed: no op can, and a deck keeps its own.
  *
  * Every current slide is removed and every saved one inserted, even an unchanged one: plain
@@ -57,6 +57,15 @@ export const versionInfo = ({ id, name, savedAt, deck }: DeckVersion): VersionIn
 export function restoreOps(current: Deck, target: Deck): Op[] {
   const ops: Op[] = [];
   for (const slide of current.slides) ops.push({ op: "slide.remove", id: slide.id });
+  // Components that differ go before the assets (they may hold the last use of one), and
+  // the version's come back after them (they may need one it adds).
+  const before = current.components ?? {};
+  const after = target.components ?? {};
+  const changed = (name: string) =>
+    !Object.hasOwn(after, name) || JSON.stringify(before[name]) !== JSON.stringify(after[name]);
+  for (const name of Object.keys(before)) {
+    if (changed(name)) ops.push({ op: "component.remove", name });
+  }
   // Assets: drop what the version didn't have (nothing uses them once the slides are gone),
   // add what it had (bytes the server kept for it).
   for (const id of Object.keys(current.assets)) {
@@ -64,6 +73,11 @@ export function restoreOps(current: Deck, target: Deck): Op[] {
   }
   for (const [id, asset] of Object.entries(target.assets)) {
     if (!Object.hasOwn(current.assets, id)) ops.push({ op: "asset.add", id, asset });
+  }
+  for (const [name, component] of Object.entries(after)) {
+    if (!Object.hasOwn(before, name) || changed(name)) {
+      ops.push({ op: "component.save", name, component });
+    }
   }
   target.slides.forEach((slide, index) => {
     ops.push({ op: "slide.insert", slide, index });

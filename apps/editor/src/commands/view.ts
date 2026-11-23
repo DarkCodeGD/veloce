@@ -45,6 +45,7 @@ const PANELS: ReadonlyArray<{ panel: Panel; label: string; shortcut: string }> =
   { panel: "layers", label: "Layers", shortcut: SHORTCUTS.panelLayers },
   { panel: "history", label: "History", shortcut: SHORTCUTS.panelHistory },
   { panel: "issues", label: "Issues", shortcut: SHORTCUTS.panelIssues },
+  { panel: "components", label: "Components", shortcut: SHORTCUTS.panelComponents },
 ];
 
 /** Shows or collapses one of the workspace's panels (a check box in View). */

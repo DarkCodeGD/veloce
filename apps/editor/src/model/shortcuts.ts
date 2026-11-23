@@ -52,6 +52,7 @@ export const SHORTCUTS = {
   panelLayers: "Alt+2",
   panelHistory: "Alt+3",
   panelIssues: "Alt+4",
+  panelComponents: "Alt+5",
   keyboardShortcuts: "Mod+/",
   // VS Code's and Figma's key for settings.
   preferences: "Mod+,",

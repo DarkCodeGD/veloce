@@ -116,6 +116,7 @@ describe("tool listing", () => {
     };
     expect(size("apply_ops")).toBeLessThan(1000);
     expect(size("upsert_slide")).toBeLessThan(16_000);
+    expect(size("save_component")).toBeLessThan(1500);
     const instructions = client.getInstructions();
     expect(instructions).toMatch(/upsert_slide/);
   });
@@ -701,5 +702,145 @@ describe("working alongside the user (D71)", () => {
     });
     const undone = await call("undo_agent_changes");
     expect(undone.text).toMatch(/^Undid 1 step: "Fade"\. Changed: s3\.\n\n.*(lint|issue)/is);
+  });
+});
+
+describe("components (D94)", () => {
+  const CARD = {
+    name: "Feature card",
+    description: "Title and one line",
+    node: {
+      id: "card",
+      layout: { mode: "stack", gap: "$space.sm" },
+      style: { fill: "$color.surface" },
+      children: [
+        { id: "card-title", type: "text", props: { content: "Title", style: "$text.h3" } },
+        { id: "card-body", type: "text", props: { content: "Body" } },
+      ],
+    },
+    params: {
+      title: "card-title.props.content",
+      body: ["card-body.props.content"],
+      accent: { description: "Card fill", targets: "card.style.fill" },
+    },
+  };
+
+  it("saves a card once and inserts copies with use/with, as plain nodes", async () => {
+    await connect();
+    await call("create_deck", { title: "Reuse" });
+    expect((await call("list_components")).text).toMatch(/no components yet/);
+
+    const saved = await call("save_component", CARD);
+    expect(saved.isError).toBe(false);
+    expect(saved.text).toContain('Save component "Feature card": done');
+    expect(saved.text).toContain("accent (Card fill) → card.style.fill");
+
+    const slide = await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        layout: { mode: "grid", columns: 2 },
+        children: [
+          { use: "Feature card", id: "c1", with: { title: "Faster", accent: "$color.primary" } },
+          { use: "Feature card", id: "c2", width: 300, with: { body: "Cheaper" } },
+        ],
+      },
+    });
+    expect(slide.isError).toBe(false);
+    expect(slide.text).toContain('c1-title: text "Faster"');
+    expect(slide.text).toContain('c2-body: text "Cheaper"');
+
+    const open = await workspace.get(workspace.activeDeckId as string);
+    const c1 = open.deck.slides[0]?.root.children[0];
+    expect(c1).toMatchObject({ id: "c1", style: { fill: "$color.primary" } });
+    expect(open.deck.slides[0]?.root.children[1]).toMatchObject({ id: "c2", width: 300 });
+    // Copies are plain: nothing in the slide points at the component.
+    expect(JSON.stringify(open.deck.slides)).not.toContain("use");
+
+    // node.insert takes one too, and edits work by the derived IDs.
+    const ops = await call("apply_ops", {
+      label: "Third card",
+      ops: [
+        {
+          op: "node.insert",
+          parentId: open.deck.slides[0]?.root.id,
+          node: { use: "Feature card", id: "c3" },
+        },
+        { op: "node.update", id: "c1-body", set: { props: { content: "2× the speed" } } },
+      ],
+    });
+    expect(ops.isError).toBe(false);
+    expect(ops.text).toContain("c3, c3-title, c3-body");
+
+    const summary = await call("get_deck_summary");
+    expect(summary.text).toContain('Components: "Feature card" (title, body, accent)');
+    expect((await call("get_docs", { topic: "components" })).text).toContain("# Components");
+  });
+
+  it("tells the agent what to fix: names, params, values and existing components", async () => {
+    await connect();
+    await call("create_deck", { title: "Reuse" });
+    await call("save_component", CARD);
+
+    const unknown = await call("upsert_slide", {
+      slide: { children: [{ type: "text", props: { content: "x" } }, { use: "Feature crad" }] },
+    });
+    expect(unknown.text).toMatch(
+      /No component "Feature crad"[\s\S]*At: slide\.children\[1\]\.use[\s\S]*Did you mean "Feature card"/,
+    );
+
+    const param = await call("upsert_slide", {
+      slide: { children: [{ use: "Feature card", with: { titel: "x" } }] },
+    });
+    expect(param.text).toMatch(
+      /no param "titel"[\s\S]*slide\.children\[0\]\.with\.titel[\s\S]*"title"/,
+    );
+
+    const value = await call("upsert_slide", {
+      slide: { children: [{ use: "Feature card", with: { accent: 42 } }] },
+    });
+    expect(value.text).toMatch(/"accent" doesn't fit card\.style\.fill/);
+    expect(value.text).toContain("slide.children[0].with.accent");
+
+    const again = await call("save_component", CARD);
+    expect(again.text).toMatch(/already exists[\s\S]*overwrite: true/);
+    expect((await call("save_component", { ...CARD, overwrite: true })).isError).toBe(false);
+
+    const badTarget = await call("save_component", {
+      ...CARD,
+      name: "Broken",
+      params: { title: "card-titel.props.content" },
+    });
+    expect(badTarget.text).toMatch(
+      /targets node "card-titel"[\s\S]*At: params\.title\.targets\[0\][\s\S]*"card-title"/,
+    );
+  });
+
+  it("saves a node already on a slide, and undo takes the component back", async () => {
+    await connect();
+    await call("create_deck", { title: "Reuse" });
+    await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        children: [
+          {
+            id: "badge",
+            layout: { mode: "stack" },
+            children: [{ id: "badge-label", type: "text", props: { content: "New" } }],
+          },
+        ],
+      },
+    });
+    const saved = await call("save_component", {
+      name: "Badge",
+      from: "badge",
+      params: { label: "badge-label.props.content" },
+    });
+    expect(saved.isError).toBe(false);
+    expect((await call("list_components")).text).toContain('"Badge"');
+    expect((await call("save_component", { name: "X", from: "s1" })).text).toMatch(/is a slide/);
+
+    await call("undo_agent_changes", {});
+    const open = await workspace.get(workspace.activeDeckId as string);
+    expect(open.deck.components).toBeUndefined();
   });
 });

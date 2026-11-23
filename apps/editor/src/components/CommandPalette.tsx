@@ -4,7 +4,8 @@
  * - every command in the registry (the menus, the tools, the Add menu's layers), with its
  *   keys, so a plugin's command shows up here with no extra code;
  * - the settings: switches flip right here, the rest open Preferences on their tab;
- * - the deck's slides (go to one) and layers (go to its slide and select it).
+ * - the deck's slides (go to one) and layers (go to its slide and select it);
+ * - its components (insert a copy, D94).
  *
  * Typing filters (`paletteSections`); arrows move, Enter runs, Esc closes. Nothing typed
  * shows the last few commands run, then all of them. The keyboard stays in the search box
@@ -13,6 +14,7 @@
 import type { Deck, Settings, SettingsPatch } from "@veloce/core";
 import {
   Check,
+  Component as ComponentIcon,
   Layers,
   type LucideIcon,
   RectangleHorizontal,
@@ -30,6 +32,7 @@ import {
   MENU_BAR,
   runCommand,
 } from "../editor-commands.js";
+import { insertComponent } from "../insert-actions.js";
 import { deckLayers, type PaletteEntry, paletteSections, slideLabel } from "../model/palette.js";
 import { shortcutKeys } from "../model/shortcuts.js";
 import { nodeLabel } from "../model/slide-index.js";
@@ -148,6 +151,18 @@ function paletteRows(deck: Deck | undefined, current: Settings): Row[] {
       run: () => commandContext().goToSlide(slide.id),
     });
   });
+  for (const [name, component] of Object.entries(deck.components ?? {})) {
+    rows.push({
+      id: `component:${name}`,
+      kind: "component",
+      // By its name, like a layer, so it ranks like one; the detail says what Enter does.
+      label: name,
+      detail: "Insert component",
+      keywords: `insert add component ${component.description ?? ""}`,
+      icon: ComponentIcon,
+      run: () => void insertComponent(name),
+    });
+  }
   for (const { slideId, slideIndex, node } of deckLayers(deck)) {
     rows.push({
       id: `layer:${slideId}/${node.id}`,

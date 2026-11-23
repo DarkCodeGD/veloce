@@ -1,3 +1,4 @@
+export * from "./component.js";
 export * from "./deck.js";
 export * from "./node.js";
 export * from "./paint.js";

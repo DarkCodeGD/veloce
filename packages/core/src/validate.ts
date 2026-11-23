@@ -7,9 +7,10 @@
  */
 import { collectAssetRefs } from "./assets.js";
 import type { ApplyContext } from "./checks.js";
+import { componentProblem } from "./components.js";
 import { type ErrorCode, formatIssues, formatPath } from "./errors.js";
 import { type Deck, DeckSchema, FORMAT_VERSION } from "./schema/deck.js";
-import { MAX_DEPTH } from "./schema/node.js";
+import { MAX_DEPTH, type Node } from "./schema/node.js";
 import { walkNodes } from "./tree.js";
 
 export interface ValidationIssue {
@@ -53,6 +54,19 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
     );
   }
 
+  /** Plugin checks: an unknown type is a warning (the renderer shows a fallback). */
+  const checkElement = (node: Node, prefix = "") => {
+    if (node.kind !== "element" || !ctx.validateElement) return;
+    const check = ctx.validateElement(node.type, node.props);
+    if (check.ok) return;
+    const issue: ValidationIssue = {
+      severity: check.reason === "unknown-type" ? "warning" : "error",
+      code: check.reason === "unknown-type" ? "NOT_FOUND" : "INVALID",
+      message: `${prefix}Element "${node.id}" (${node.type}): ${check.message}`,
+    };
+    (issue.severity === "warning" ? warnings : errors).push(issue);
+  };
+
   const seen = new Set<string>();
   const checkId = (id: string, path: string) => {
     if (seen.has(id)) error("CONFLICT", `Duplicate ID "${id}"`, path);
@@ -79,17 +93,26 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
           error("NOT_FOUND", `Node "${node.id}" uses missing asset ${ref}`, `slides[${s}]`);
         }
       }
-      if (node.kind === "element" && ctx.validateElement) {
-        const check = ctx.validateElement(node.type, node.props);
-        if (!check.ok) {
-          const issue: ValidationIssue = {
-            severity: check.reason === "unknown-type" ? "warning" : "error",
-            code: check.reason === "unknown-type" ? "NOT_FOUND" : "INVALID",
-            message: `Element "${node.id}" (${node.type}): ${check.message}`,
-          };
-          (issue.severity === "warning" ? warnings : errors).push(issue);
+      checkElement(node);
+    }
+  }
+
+  // Components (D94): sound templates whose assets exist. Their IDs are their own (a copy
+  // gets fresh ones), so they don't count against the slides'.
+  for (const [name, component] of Object.entries(deck.components ?? {})) {
+    const at = `components.${name}`;
+    const problem = componentProblem(component);
+    if (problem) {
+      error(problem.code, `Component "${name}": ${problem.message}`, at);
+      continue;
+    }
+    for (const { node } of walkNodes(component.node)) {
+      for (const ref of collectAssetRefs(node.kind === "frame" ? node.style : node.props)) {
+        if (!Object.hasOwn(deck.assets, ref)) {
+          error("NOT_FOUND", `Component "${name}" uses missing asset ${ref}`, at);
         }
       }
+      checkElement(node, `Component "${name}": `);
     }
   }
 

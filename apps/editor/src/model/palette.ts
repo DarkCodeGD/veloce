@@ -1,6 +1,6 @@
 /**
  * The command palette's list (D92), pure: what it can find (commands, settings, slides,
- * layers) as entries, and what a search shows of them, in sections.
+ * layers, components) as entries, and what a search shows of them, in sections.
  *
  * Every word typed must start a word of the name, its context or its keywords, as in the
  * Add menu ("al le" finds Align left, "3" finds slide 3), and the best matches lead
@@ -12,7 +12,7 @@ import type { Deck, Node, Slide } from "@veloce/core";
 import type { MenuSection } from "./insert.js";
 import { nodeLabel } from "./slide-index.js";
 
-export type PaletteKind = "command" | "setting" | "slide" | "layer";
+export type PaletteKind = "command" | "setting" | "slide" | "layer" | "component";
 
 export interface PaletteEntry {
   /** Unique across kinds: `command:edit.undo`, `slide:s1`, `layer:s1/title`. */
@@ -26,15 +26,23 @@ export interface PaletteEntry {
   disabled?: boolean;
 }
 
+/** Also the order of sections that match equally well: inserting a component before a layer. */
 const TITLES: Record<PaletteKind, string> = {
   command: "Commands",
   setting: "Settings",
   slide: "Slides",
+  component: "Components",
   layer: "Layers",
 };
 
 /** The most a search shows of each kind. */
-const LIMITS: Record<PaletteKind, number> = { command: 30, setting: 8, slide: 8, layer: 12 };
+const LIMITS: Record<PaletteKind, number> = {
+  command: 30,
+  setting: 8,
+  slide: 8,
+  layer: 12,
+  component: 8,
+};
 
 /**
  * The palette's sections. With a search: the matches, by kind (commands first), each kind

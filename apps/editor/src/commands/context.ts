@@ -10,7 +10,7 @@ import type { CommandSpec } from "../model/command-registry.js";
 import type { SlideIndex } from "../model/slide-index.js";
 
 /** The left panel's tabs. */
-export type Panel = "slides" | "layers" | "history" | "issues";
+export type Panel = "slides" | "layers" | "history" | "issues" | "components";
 
 export interface CommandContext {
   /** The open deck, if any (it may have no slides yet). */

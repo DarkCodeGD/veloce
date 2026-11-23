@@ -14,6 +14,9 @@ import {
   type AssetInfo,
   assetKind,
   BUILTIN_THEMES,
+  type Component,
+  ComponentNameSchema,
+  type ComponentParam,
   type Deck,
   findBuiltinTheme,
   findNode,
@@ -21,12 +24,15 @@ import {
   fontStackFor,
   formatBytes,
   formatIssues,
+  getComponent,
   type HistoryEntry,
   MAX_ASSET_BYTES,
   type Node,
   notFoundHint,
   type Op,
   type Origin,
+  ParamNameSchema,
+  ParamTargetSchema,
   type Theme,
   ThemeSchema,
   VeloceError,
@@ -43,8 +49,15 @@ import type { PluginRegistry } from "@veloce/plugin-api";
 import { z } from "zod";
 import { othersChanges } from "./changes.js";
 import { docTopics, getDocs, paletteLine } from "./docs.js";
-import { normalizeOp, normalizeSlide, OpInputSchema, SlideInputSchema } from "./input.js";
-import { boundsTable, deckSummary, formatLint, slideOutline } from "./summary.js";
+import {
+  NodeInputSchema,
+  normalizeNode,
+  normalizeOp,
+  normalizeSlide,
+  OpInputSchema,
+  SlideInputSchema,
+} from "./input.js";
+import { boundsTable, componentOutline, deckSummary, formatLint, slideOutline } from "./summary.js";
 
 export interface ToolContext {
   workspace: Workspace;
@@ -243,10 +256,15 @@ interface CommitErrors {
    * and point paths into the slide it sent (`slide.children[1]`, not `ops[0].slide.root…`).
    */
   asSlide?: boolean;
+  /** The agent sent a component (save_component): paths point into what it sent. */
+  asComponent?: boolean;
 }
 
 /** Rewrites a core error into the terms of what the agent actually sent. */
-function presentError(error: ErrorLike, { generated, asSlide }: CommitErrors): ErrorLike {
+function presentError(
+  error: ErrorLike,
+  { generated, asSlide, asComponent }: CommitErrors,
+): ErrorLike {
   let { message, path } = error;
   if (generated?.size) {
     message = message.replace(
@@ -257,6 +275,10 @@ function presentError(error: ErrorLike, { generated, asSlide }: CommitErrors): E
   if (asSlide) {
     message = message.replace(/^ops\[\d+\] \([a-z.]+\): /i, "");
     path = path?.replace(/^ops\[\d+\]\.slide(\.root)?/, "slide").replace(/^ops\[\d+\]$/, "");
+  }
+  if (asComponent) {
+    message = message.replace(/^ops\[\d+\] \([a-z.]+\): /i, "");
+    path = path?.replace(/^ops\[\d+\]\.(component\.)?/, "").replace(/^ops\[\d+\]$/, "");
   }
   return { ...error, message, path: path || undefined };
 }
@@ -381,6 +403,7 @@ const upsertSlide = defineTool({
     "Create a slide, or replace an existing one (same slide ID), in one call.",
     'Describe structure: nodes are elements { "type", "props" } or frames { "layout", "style", "children" }. The slide itself is a frame (default: a column centered top-to-bottom; children stretch across, so add align: "center" to center hug-width content).',
     "Omitted IDs are generated and returned; give stable IDs to nodes you may change later.",
+    'A node can also be a copy of a saved component: { "use": "<name>", "with": { <param>: <value> } } (see list_components).',
     "Replacing rebuilds the whole slide: to fix or tweak an existing slide, use apply_ops (node.update by ID) instead.",
     "Returns the slide outline and lint issues to fix.",
     'Example: { "slide": { "children": [ { "type": "text", "props": { "content": "Hello", "style": "$text.display" } } ] } }',
@@ -405,7 +428,11 @@ const upsertSlide = defineTool({
   async run({ slide: input, index, overwrite }, ctx) {
     const open = await currentDeck(ctx);
     const generated = new Set<string>();
-    const normalized = normalizeSlide(input, generated);
+    const normalized = normalizeSlide(input, {
+      generated,
+      deck: open.deck,
+      validateElement: ctx.registry.validateElement,
+    });
     const existing = findSlide(open.deck, normalized.id);
     const remover = open.removedBy(normalized.id);
     if (!existing && !overwrite && remover && remover !== ctx.origin) {
@@ -510,7 +537,8 @@ const applyOps = defineTool({
   async run({ label, ops: inputs }, ctx) {
     const open = await currentDeck(ctx);
     const generated = new Set<string>();
-    const ops = inputs.map((input) => normalizeOp(input, generated));
+    const normalize = { generated, deck: open.deck, validateElement: ctx.registry.validateElement };
+    const ops = inputs.map((input, i) => normalizeOp(input, normalize, `ops[${i}]`));
     const { before, after } = await commit(ctx, open, label, ops, { generated });
     const created = ops.flatMap((op) => {
       const node = (op as { op: string; node?: Node }).node;
@@ -520,6 +548,166 @@ const applyOps = defineTool({
     return text(
       `Applied "${label}" (${ops.length} op${ops.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}`,
       changed.length ? await lintReport(ctx, open, changed) : "",
+    );
+  },
+});
+
+/** A param as agents may write it: one target, a list, or with a description. */
+const ParamTargetsInput = z.union([ParamTargetSchema, z.array(ParamTargetSchema).min(1).max(10)]);
+const ParamInput = z.union([
+  ParamTargetsInput,
+  z.strictObject({
+    description: z.string().max(300).optional(),
+    targets: ParamTargetsInput,
+  }),
+]);
+
+function normalizeParam(input: z.infer<typeof ParamInput>): ComponentParam {
+  const list = (t: string | string[]) => (typeof t === "string" ? [t] : t);
+  if (typeof input === "string" || Array.isArray(input)) return { targets: list(input) };
+  return {
+    ...(input.description && { description: input.description }),
+    targets: list(input.targets),
+  };
+}
+
+const saveComponent = defineTool({
+  name: "save_component",
+  title: "Save a component",
+  description: [
+    'Save a node (a card, tile, badge, a drawing made of shapes…) under a name, to insert copies of it anywhere with { "use": "<name>", "with": { … } } in upsert_slide children or node.insert.',
+    "Give the template as `node` (same shape as upsert_slide nodes, with IDs on what params target) or copy one already on a slide with `from`.",
+    'params map a value to template fields: { "title": "card-title.props.content", "accent": { "description": "Card fill", "targets": ["card.style.fill"] } }.',
+    'Copies are plain nodes: changing one, or the component later, never changes the others. Guide: get_docs("components").',
+  ].join(" "),
+  input: z.strictObject({
+    name: ComponentNameSchema,
+    description: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('What it\'s for, e.g. "Feature card: title and one line".'),
+    node: NodeInputSchema.optional().describe("The template. Give IDs to the nodes params target."),
+    from: z
+      .string()
+      .optional()
+      .describe("Or: the ID of a node already on a slide, copied with everything inside it."),
+    params: z
+      .record(ParamNameSchema, ParamInput)
+      .optional()
+      .describe('Param name → "<node ID>.<field>" target(s) inside the template.'),
+    overwrite: z
+      .boolean()
+      .optional()
+      .describe("Replace the component already saved under this name."),
+  }),
+  // The node is upsert_slide's node shape: listed again in full it would double the size.
+  displaySchema: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: 'e.g. "Feature card" or "kpi-tile".' },
+      description: { type: "string", description: "What it's for." },
+      node: {
+        type: "object",
+        description:
+          "The template: a node exactly like upsert_slide's (frame with layout/style/children, or element with type/props). Give IDs to the nodes params target.",
+        additionalProperties: true,
+      },
+      from: {
+        type: "string",
+        description: "Or: the ID of a node already on a slide, copied with everything inside it.",
+      },
+      params: {
+        type: "object",
+        description:
+          'Param name → target "<node ID>.<field>", a list of targets, or { description, targets }.',
+        additionalProperties: true,
+      },
+      overwrite: {
+        type: "boolean",
+        description: "Replace the component already saved under this name.",
+      },
+    },
+    required: ["name"],
+    additionalProperties: false,
+  },
+  async run({ name, description, node, from, params, overwrite }, ctx) {
+    const open = await currentDeck(ctx);
+    if ((node === undefined) === (from === undefined)) {
+      throw new ToolError({
+        message: "Give the template as either `node` or `from`",
+        hint: "`node` describes it (like an upsert_slide node); `from` copies a node already on a slide by its ID.",
+      });
+    }
+    const existing = getComponent(open.deck, name);
+    if (existing && !overwrite) {
+      throw new ToolError({
+        message: `A component named "${name}" already exists`,
+        hint: "Pick another name, or pass overwrite: true to replace it (copies already on slides don't change). list_components shows it.",
+      });
+    }
+    let template: Node;
+    if (from !== undefined) {
+      const found = findNode(open.deck, from);
+      if (!found) {
+        const slide = findSlide(open.deck, from)?.slide;
+        throw new ToolError({
+          message: `Node "${from}" not found`,
+          path: "from",
+          hint: slide
+            ? `"${from}" is a slide. Pass a node on it, e.g. its root frame "${slide.root.id}".`
+            : "get_deck_summary lists the deck's node IDs.",
+        });
+      }
+      template = found.node;
+    } else {
+      template = normalizeNode(
+        node as NonNullable<typeof node>,
+        { deck: open.deck, validateElement: ctx.registry.validateElement },
+        "node",
+      );
+    }
+    const component: Component = {
+      ...(description && { description }),
+      ...(params &&
+        Object.keys(params).length > 0 && {
+          params: Object.fromEntries(
+            Object.entries(params).map(([param, input]) => [param, normalizeParam(input)]),
+          ),
+        }),
+      node: template,
+    };
+    const label = `${existing ? "Replace" : "Save"} component "${name}"`;
+    await commit(ctx, open, label, [{ op: "component.save", name, component }], {
+      asComponent: true,
+    });
+    const names = Object.keys(component.params ?? {});
+    const example = names[0] ? `, "with": { "${names[0]}": … }` : "";
+    return text(
+      `${label}: done. Insert copies with { "use": "${name}"${example} } wherever a node goes.`,
+      componentOutline(name, component),
+    );
+  },
+});
+
+const listComponents = defineTool({
+  name: "list_components",
+  title: "List components",
+  description:
+    'The deck\'s saved components: what each is for, its params (and the fields they fill), and its template tree. Insert one with { "use": "<name>", "with": { … } }.',
+  input: z.strictObject({}),
+  annotations: { readOnlyHint: true },
+  async run(_args, ctx) {
+    const open = await currentDeck(ctx);
+    const all = Object.entries(open.deck.components ?? {});
+    if (all.length === 0) {
+      return text(
+        "This deck has no components yet. Build a repeated piece once and save it with save_component.",
+      );
+    }
+    return text(
+      `${all.length} component${all.length === 1 ? "" : "s"}. Insert with { "use": "<name>", "with": { <param>: <value> } }; a copy's inner IDs are "<copy id>-<template id>".`,
+      ...all.map(([name, component]) => componentOutline(name, component)),
     );
   },
 });
@@ -887,6 +1075,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   getSlide,
   upsertSlide,
   applyOps,
+  saveComponent,
+  listComponents,
   listElementTypes,
   setTheme,
   addAsset,

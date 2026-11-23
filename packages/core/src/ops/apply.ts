@@ -14,8 +14,10 @@ import {
   assertNewIds,
   subtreeIds,
 } from "../checks.js";
+import { caseClash, componentNotFound, componentProblem, getComponent } from "../components.js";
 import { parseOrThrow, VeloceError } from "../errors.js";
 import { diffPatch, type JsonObject, mergePatch } from "../json.js";
+import { MAX_COMPONENTS } from "../schema/component.js";
 import { type Deck, DeckMetaSchema, SlideFieldsSchema } from "../schema/deck.js";
 import { ElementNodeSchema, FrameFieldsSchema, type FrameNode, type Node } from "../schema/node.js";
 import { notFoundHint } from "../suggest.js";
@@ -70,6 +72,10 @@ export function applyOp(deck: Deck, op: Op, ctx: ApplyContext = {}): OpResult {
       return assetAdd(deck, op);
     case "asset.remove":
       return assetRemove(deck, op);
+    case "component.save":
+      return componentSave(deck, op, ctx);
+    case "component.remove":
+      return componentRemove(deck, op);
   }
 }
 
@@ -231,11 +237,53 @@ function assetRemove(deck: Deck, op: OpOf<"asset.remove">): OpResult {
   const users = assetUsage(deck).get(op.id);
   if (users?.length) {
     throw new VeloceError("FORBIDDEN", `Asset ${op.id} is still used by ${quoteList(users)}`, {
-      hint: "Remove or change those slides/nodes first.",
+      hint: "Remove or change those slides, nodes or components first.",
     });
   }
   const { [op.id]: _removed, ...assets } = deck.assets;
   return { deck: { ...deck, assets }, inverse: { op: "asset.add", id: op.id, asset } };
+}
+
+// ── Components (D94) ──────────────────────────────────────────────────────────────────
+
+function componentSave(deck: Deck, op: OpOf<"component.save">, ctx: ApplyContext): OpResult {
+  const { name, component } = op;
+  const clash = caseClash(deck, name);
+  if (clash) {
+    throw new VeloceError("CONFLICT", `A component named "${clash}" already exists`, {
+      hint: `Names differ by more than case. Save as "${clash}" to replace it, or pick another name.`,
+      path: "name",
+    });
+  }
+  const old = getComponent(deck, name);
+  const all = deck.components ?? {};
+  if (!old && Object.keys(all).length >= MAX_COMPONENTS) {
+    throw new VeloceError("FORBIDDEN", `This deck already has ${MAX_COMPONENTS} components`, {
+      hint: "Remove components nobody uses (component.remove) before saving another.",
+    });
+  }
+  const problem = componentProblem(component);
+  if (problem) throw problem;
+  assertAssetsExist(deck, component.node, `component "${name}"`);
+  assertElementsValid(component.node, ctx, "component.node");
+  return {
+    deck: { ...deck, components: { ...all, [name]: component } },
+    inverse: old
+      ? { op: "component.save", name, component: old }
+      : { op: "component.remove", name },
+  };
+}
+
+function componentRemove(deck: Deck, op: OpOf<"component.remove">): OpResult {
+  const component = getComponent(deck, op.name);
+  if (!component) throw componentNotFound(deck, op.name);
+  const { [op.name]: _removed, ...rest } = deck.components ?? {};
+  // No components left: the field goes too (optional fields are omitted, not empty).
+  const { components: _all, ...without } = deck;
+  return {
+    deck: Object.keys(rest).length > 0 ? { ...deck, components: rest } : without,
+    inverse: { op: "component.save", name: op.name, component },
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────────────

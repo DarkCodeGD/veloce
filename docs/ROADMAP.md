@@ -28,9 +28,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 6 (reuse)
 - **Last updated:** 2026-11-24
-- **Next:** round 6, components (copy on insert). Round 5 (app shell) is done.
-- **State:** `pnpm check` is green (807 tests, including real-Chromium lint, preview and editor
-  tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
+- **Next:** round 6, slide layouts (slide-level components). Components are done (D94).
+- **State:** `pnpm check` is green (837 tests, including real-Chromium lint, preview and editor
+  tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
     MCP and a view-only editor. The first real Claude Code runs' issues are fixed (D37, D38).
@@ -46,6 +46,7 @@
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
     done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90); Preferences (D91); the command palette (D92); versions (D93).
+  - Round 6: components, copied on insert, for agents and people (D94).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -220,15 +221,13 @@ Agents rebuild the same card 4–8 times per slide and can't reuse a drawing the
 shapes, which means large, repetitive MCP payloads and drifting styles. Humans want the
 same slide structure every time without rebuilding it.
 
-- [ ] Components (copy on insert): save any subtree as a named component with a few
-      declared params (e.g. `color`, `label`, `level`) that map to node fields. Inserting
-      makes a plain copy with fresh IDs, so the document never links to it: undo, morph and
-      export work as they do today. Stored per deck (`components` in `document.json`, a
-      format addition with its decision entry). Pure data, no code
-- [ ] MCP: `save_component`, `list_components`, and `node.insert` with
-      `{ "use": "<name>", "with": { … } }`, expanded where MCP input is normalized, so core
-      ops and the undo log only ever see plain nodes (golden rule 1)
-- [ ] Editor: "Save as component" on a selection, and a components panel to insert from
+- [x] Components (copy on insert): a named subtree with params mapping to node fields,
+      stored in `document.json`, saved and removed by invertible ops, copies plain with
+      readable IDs (D94)
+- [x] MCP: `save_component`, `list_components`, and `{ "use", "with" }` anywhere a node goes,
+      expanded where MCP input is normalized (D94)
+- [x] Editor: Arrange → Save as component (texts offered as params), a Components tab with
+      previews to insert from, and the palette (D94)
 - [ ] Slide layouts are slide-level components: "Save slide as layout", "New slide from
       layout" (title, title + content, two columns, section header…), with built-in ones
       per theme. Agents use them with the same `use`/`with`

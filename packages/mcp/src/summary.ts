@@ -3,6 +3,7 @@
  * agent needs to make an edit, element types, and text snippets. No blobs, no full props.
  */
 import {
+  type Component,
   type Deck,
   isFreeLayer,
   type Layout,
@@ -21,6 +22,16 @@ export function deckSummary(deck: Deck): string {
     `Deck "${deck.meta.title}" (id ${deck.id}) · theme ${deck.theme.name} · ${deck.stage.width}×${deck.stage.height} · ${deck.slides.length} slide${deck.slides.length === 1 ? "" : "s"}`,
     ...metaLines(deck.meta),
   ];
+  const components = Object.entries(deck.components ?? {});
+  if (components.length > 0) {
+    const list = components.map(([name, c]) => {
+      const params = Object.keys(c.params ?? {});
+      return `"${name}"${params.length ? ` (${params.join(", ")})` : ""}`;
+    });
+    lines.push(
+      `Components: ${list.join(", ")}. Insert copies with { "use": name, "with": { … } }; list_components shows them.`,
+    );
+  }
   if (deck.slides.length === 0) lines.push("(no slides yet: add some with upsert_slide)");
   deck.slides.forEach((slide, i) => {
     lines.push("", slideOutline(slide, i));
@@ -47,6 +58,21 @@ function metaLines(meta: Deck["meta"]): string[] {
 export function slideOutline(slide: Slide, index: number): string {
   const lines = [slideHeader(slide, index)];
   for (const child of slide.root.children) outline(child, slide.root.layout, 1, lines);
+  return lines.join("\n");
+}
+
+/** A component for list_components (D94): what it's for, its params, then its template tree. */
+export function componentOutline(name: string, component: Component): string {
+  const lines = [`"${name}"${component.description ? `: ${component.description}` : ""}`];
+  const params = Object.entries(component.params ?? {});
+  if (params.length > 0) {
+    lines.push("  params:");
+    for (const [param, { description, targets }] of params) {
+      lines.push(`    ${param}${description ? ` (${description})` : ""} → ${targets.join(", ")}`);
+    }
+  } else lines.push("  no params");
+  lines.push("  template:");
+  outline(component.node, { mode: "stack" }, 2, lines);
   return lines.join("\n");
 }
 

@@ -2,6 +2,7 @@
  * Slides and the deck: the top of the document model.
  */
 import { z } from "zod";
+import { ComponentsSchema } from "./component.js";
 import { FrameNodeSchema } from "./node.js";
 import { PaintSchema } from "./paint.js";
 import { AssetIdSchema, IdSchema } from "./primitives.js";
@@ -92,5 +93,10 @@ export const DeckSchema = z.strictObject({
   slides: z.array(SlideSchema).max(5000),
   /** Asset registry keyed by SHA-256. The bytes live outside the document (in the .veloce zip). */
   assets: z.record(AssetIdSchema, AssetInfoSchema),
+  /**
+   * Saved components by name (D94): templates to insert as plain copies. Omitted when there
+   * are none. Their asset references count as uses, like a slide's.
+   */
+  components: ComponentsSchema.optional(),
 });
 export type Deck = z.infer<typeof DeckSchema>;

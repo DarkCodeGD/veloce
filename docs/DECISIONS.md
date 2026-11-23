@@ -2204,3 +2204,55 @@ message is something else, so code and UI say "versions").
    versions. **Privacy:** a shared file carries its versions, old content included.
    Delete version clears them; Phase 7 adds "Save a copy without versions", and exports
    never include them.
+
+## D94 — Components: saved subtrees, inserted as plain copies
+
+**Status:** Accepted (2026-11-24). Round 6. Linked components stay in "After 1.0".
+
+1. **Copy on insert, never linked.** A component is a template node plus a few params;
+   inserting one (`instantiateComponent` in core) makes an ordinary node with fresh IDs.
+   Nothing on a slide points at a component, so undo, morph, lint, export and every op work
+   on copies as they do today, and changing or deleting a component never touches its
+   copies. **Why:** linked instances need an override model and invertible ops across
+   instances (After 1.0); copies give agents the win now (a card defined once instead of
+   rebuilt 4–8 times per slide) with no new rules anywhere else.
+2. **Stored per deck, in `document.json`:** `components` keyed by name, omitted when there
+   are none. A format addition: optional, so files without it mean what they did, and no
+   Veloce has shipped without it. Names are words in any script joined by single spaces,
+   `-` or `_` (agents type them in `use`), unique ignoring case. At most 200 per deck, 20
+   params each. Template IDs are their own namespace (a copy gets fresh ones).
+3. **Saving and removing are ops** (`component.save`, `component.remove`), each with an
+   exact inverse, unlike versions (D93 §3). **Why:** a component is part of the document an
+   agent builds with, so it's undone with the change that made it (undo per origin, golden
+   rule 7), agents hear about it, and versions restore it (`restoreOps` diffs components).
+   A component's image counts as a use: `asset.remove` is refused under it, and its bytes
+   are kept.
+4. **Params are pure data:** `{ description?, targets: ["<node ID>.<field>"…] }`. Inserting
+   `{ "use": "Card", "with": { "title": "Q3" } }` writes each value at its targets (`null`
+   removes the field), then the copy is validated like any node: a value that doesn't fit
+   is reported against its param (`with.title: …`), an unknown param suggests the nearest.
+   Targets can't write `id`, `kind`, `type` or `children`, only fields an edit may change,
+   and writing walks own keys only (no prototype keys, even `constructor`). No code, no
+   expressions. **Why:** the schema stays the one source of truth for what's valid
+   (golden rule 5), and a malicious file can't do more than a bad edit.
+5. **Readable IDs for copies:** the copy's root takes the given `id`; inner nodes get
+   `<copy id>-<template ID>`, without the template root's prefix (`card-title` in copy `c1`
+   is `c1-title`), or a generated ID when that's taken. **Why:** an agent can edit a copy's
+   title right after inserting it, without reading the slide back.
+6. **MCP:** `save_component` (a `node` like upsert_slide's, or `from` a node on a slide;
+   params as one target, a list, or `{ description, targets }`; replacing needs
+   `overwrite: true`) and `list_components` (params and template outline). `{ use, with }`
+   works anywhere a node goes, and is expanded where MCP input is normalized, so core ops
+   and the undo log only see plain nodes (golden rule 1). The deck summary names the
+   components; `get_docs("components")` explains them. save_component lists a compact
+   schema (its `node` is upsert_slide's), keeping tool listings small.
+7. **Editor:** Arrange → Save as component… (one layer; no shortcut, Ctrl+Alt is AltGr,
+   D89) offers each text as a param, renamable or left out, and drops where the layer sat
+   (position, anchor, free): a copy is placed where it's inserted. The Components tab
+   (Alt+5) lists them A to Z with a preview: the template laid out at the deck's stage
+   size, the camera framing its measured box (at most 50%). A click inserts a copy where
+   the Add menu would put a layer; the bin deletes the component (one undo step, copies
+   stay). The command palette finds components by name ("Insert component").
+8. **Kept out for now:** dragging a component onto the canvas, editing a component in
+   place, a library shared between decks, and linked instances (After 1.0). Slide layouts
+   come next, as slide-level components with the same `use`/`with`.

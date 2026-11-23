@@ -1,6 +1,7 @@
 import type { Slide } from "@veloce/core";
 import {
   ChevronRight,
+  Component as ComponentIcon,
   History,
   Layers,
   ListChecks,
@@ -21,6 +22,7 @@ import { revertAgentChanges, run } from "./actions.js";
 import type { Panel } from "./commands/context.js";
 import { AddMenu } from "./components/AddMenu.js";
 import { CommandPalette } from "./components/CommandPalette.js";
+import { ComponentsPanel } from "./components/ComponentsPanel.js";
 import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
@@ -30,6 +32,7 @@ import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { PreferencesDialog } from "./components/PreferencesDialog.js";
+import { SaveComponentDialog } from "./components/SaveComponentDialog.js";
 import { ShortcutsDialog } from "./components/ShortcutsDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { Splitter } from "./components/Splitter.js";
@@ -60,6 +63,7 @@ const TABS: Array<{ id: Panel; label: string; icon: typeof History }> = [
   { id: "layers", label: "Layers", icon: Layers },
   { id: "history", label: "History", icon: History },
   { id: "issues", label: "Issues", icon: ListChecks },
+  { id: "components", label: "Components", icon: ComponentIcon },
 ];
 
 /** A resizable panel's size and window cap, as the CSS reads them (`--panel-size`). */
@@ -298,6 +302,8 @@ export function App() {
                     onSelect={select}
                     onHover={setLayerHover}
                   />
+                ) : panel === "components" ? (
+                  <ComponentsPanel deck={deck} deckId={deckId} />
                 ) : panel === "issues" ? (
                   <IssuesPanel
                     deck={deck}
@@ -405,6 +411,7 @@ export function App() {
       {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
       {dialog === "save-version" && deck && <SaveVersionDialog onClose={closeDialog} />}
       {dialog === "versions" && deck && <VersionsDialog deckId={deck.id} onClose={closeDialog} />}
+      {dialog === "save-component" && deck && <SaveComponentDialog onClose={closeDialog} />}
       <CommandPalette deck={deck ?? undefined} />
       <AddMenu />
       <Toasts />

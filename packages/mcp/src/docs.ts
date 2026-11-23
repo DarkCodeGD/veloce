@@ -27,10 +27,11 @@ Rules:
 - Use theme tokens ("$color.primary", "$text.h1", "$space.lg"), not raw colors and font sizes.
 - One idea per slide, short text, strong hierarchy. Detail goes in speaker notes.
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
+- Something repeats (cards, tiles, badges, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 - Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
-Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("element/text").`;
+Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("element/text").`;
 
 const LAYOUT = `# Layout
 
@@ -93,6 +94,44 @@ const DESIGN = `# Design rules
 - **Icons:** there is no icon element yet. Don't use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font. Use shapes, numbers or short words instead.
 - **Numbers:** show a big number ($text.display, $color.primary) with a short caption instead of a sentence.
 - **Check your work:** fix every lint error; run render_preview on slides with images, many elements or custom layouts.`;
+
+const COMPONENTS = `# Components
+
+Save a node (and everything in it) once, then insert copies anywhere. Copies are plain nodes:
+editing a copy, or the component later, never changes the others.
+
+**Save** with save_component: \`name\`, a \`description\` (what it's for), the template as
+\`node\` (same shape as upsert_slide nodes) or \`from\` (the ID of a node already on a slide),
+and \`params\`. A param maps one value to fields inside the template, as
+\`"<node ID>.<field>"\`:
+
+\`\`\`json
+{ "name": "Feature card", "description": "Icon-less card: title and one line",
+  "node": { "id": "card", "layout": { "mode": "stack", "gap": "$space.sm", "padding": "$space.lg" },
+            "style": { "fill": "$color.surface", "radius": "$radius.md" },
+            "children": [ { "id": "card-title", "type": "text", "props": { "content": "Title", "style": "$text.h3" } },
+                          { "id": "card-body", "type": "text", "props": { "content": "Body", "style": "$text.body" } } ] },
+  "params": { "title": "card-title.props.content", "body": "card-body.props.content",
+              "accent": { "description": "Card fill", "targets": ["card.style.fill"] } } }
+\`\`\`
+
+**Insert** with \`{ "use": "<name>", "with": { <param>: <value> } }\` anywhere a node goes:
+upsert_slide children, frame children, or a node.insert op. Params left out keep the
+template's value; \`null\` removes the field. The copy's own fields (\`id\`, \`width\`,
+\`position\`, \`name\`…) can be set next to \`use\`.
+
+\`\`\`json
+{ "layout": { "mode": "grid", "columns": 3, "gap": "$space.md" }, "children": [
+  { "use": "Feature card", "id": "c1", "with": { "title": "Faster", "body": "2× the speed" } },
+  { "use": "Feature card", "id": "c2", "with": { "title": "Cheaper", "accent": "$color.primary" } } ] }
+\`\`\`
+
+**IDs:** the copy gets its \`id\` (or a generated one), and each inner node
+\`<copy id>-<its ID in the template>\` without the template root's prefix: \`card-title\` in
+copy \`c1\` is \`c1-title\`. Edit it later with node.update like any node.
+
+list_components shows the deck's components with their params and templates. Saving under an
+existing name needs \`overwrite: true\` (copies already on slides don't change).`;
 
 const OPS = `# Ops (apply_ops)
 
@@ -193,6 +232,7 @@ export function docTopics(registry: PluginRegistry): string[] {
     "design",
     "theme",
     "ops",
+    "components",
     "lint",
     ...registry.types().map((t) => `element/${t}`),
   ];
@@ -211,6 +251,8 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
       return DESIGN;
     case "ops":
       return OPS;
+    case "components":
+      return COMPONENTS;
     case "theme":
       return themeDocs(deck);
     case "lint":

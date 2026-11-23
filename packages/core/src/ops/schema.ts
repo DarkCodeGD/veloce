@@ -8,6 +8,7 @@
  * nested objects merge, arrays/values replace, `null` deletes a field.
  */
 import { z } from "zod";
+import { ComponentNameSchema, ComponentSchema } from "../schema/component.js";
 import { AssetInfoSchema, SlideSchema } from "../schema/deck.js";
 import { NodeSchema } from "../schema/node.js";
 import { AssetIdSchema, IdSchema } from "../schema/primitives.js";
@@ -72,6 +73,21 @@ export const AssetAddOp = z.strictObject({
 /** Unregister an asset. Refused while anything still references it. */
 export const AssetRemoveOp = z.strictObject({ op: z.literal("asset.remove"), id: AssetIdSchema });
 
+/**
+ * Save a component under `name` (D94), or replace the one saved there. Copies already on
+ * slides don't change: they were never linked to it.
+ */
+export const ComponentSaveOp = z.strictObject({
+  op: z.literal("component.save"),
+  name: ComponentNameSchema,
+  component: ComponentSchema,
+});
+/** Forget a component. Its copies on slides stay. */
+export const ComponentRemoveOp = z.strictObject({
+  op: z.literal("component.remove"),
+  name: ComponentNameSchema,
+});
+
 export const OpSchema = z.discriminatedUnion("op", [
   SlideInsertOp,
   SlideRemoveOp,
@@ -85,6 +101,8 @@ export const OpSchema = z.discriminatedUnion("op", [
   DeckSetThemeOp,
   AssetAddOp,
   AssetRemoveOp,
+  ComponentSaveOp,
+  ComponentRemoveOp,
 ]);
 export type Op = z.infer<typeof OpSchema>;
 export type OpType = Op["op"];

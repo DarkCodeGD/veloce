@@ -10,8 +10,10 @@ import { IMAGE_TYPES } from "./assets.js";
 import { EDGE_BAND_PX } from "./components/canvas-drags.js";
 import { mainCanvasSpace } from "./components/canvas-space.js";
 import { importFiles } from "./components/import-files.js";
+import { commandContext } from "./editor-commands.js";
 import { registry } from "./editor-context.js";
 import type { Command } from "./model/commands.js";
+import { insertComponentCommand } from "./model/components.js";
 import { type ElementInfo, type Insertable, insertCommand } from "./model/insert.js";
 import type { SlideIndex } from "./model/slide-index.js";
 import { setTool } from "./tools.js";
@@ -71,6 +73,21 @@ export async function addLayer(
     at && space ? { point: space.toSlide(at) } : null,
     ctx.selection,
     space ? EDGE_BAND_PX / space.scale : undefined,
+  );
+  if (command && (await run(command))) afterInsert(ctx, command);
+}
+
+/** A copy of component `name` (D94), placed like an Add menu layer, then selected. */
+export async function insertComponent(name: string): Promise<void> {
+  const ctx = commandContext();
+  if (!ctx.deck || !ctx.slideIndex) return;
+  const space = mainCanvasSpace();
+  const command = insertComponentCommand(
+    ctx.deck,
+    ctx.slideIndex,
+    space ? space.frames(ctx.slideIndex, new Set()) : [],
+    name,
+    ctx.selection,
   );
   if (command && (await run(command))) afterInsert(ctx, command);
 }
