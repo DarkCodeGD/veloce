@@ -4676,3 +4676,78 @@ html.is-scrubbing * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Slide → New slide from layout (D95): the layouts, drawn in the deck's theme. */
+
+.layouts-dialog {
+  width: min(820px, calc(100vw - 32px));
+}
+
+.layouts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px 12px;
+  max-height: min(60vh, 560px);
+  margin: 0;
+  padding: 2px 4px 4px 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.layout-card {
+  position: relative;
+}
+
+.layout-pick {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  text-align: left;
+  transition:
+    border-color var(--fast),
+    background var(--fast);
+}
+
+.layout-pick:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.layout-pick .thumb-view {
+  margin-bottom: 4px;
+}
+
+.layout-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.layout-delete {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  opacity: 0;
+}
+
+.layout-card:hover .layout-delete,
+.layout-delete:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .layout-delete {
+    opacity: 1;
+  }
+}

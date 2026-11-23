@@ -15,6 +15,7 @@ export * from "./errors.js";
 export * from "./fonts.js";
 export * from "./ids.js";
 export * from "./json.js";
+export * from "./layouts.js";
 export * from "./lint.js";
 export * from "./measure.js";
 export * from "./ops/apply.js";

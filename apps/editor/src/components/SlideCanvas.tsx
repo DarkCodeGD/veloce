@@ -17,6 +17,8 @@ interface Props {
    * the camera centres on its box, `padding` around it, never above `MAX_FOCUS_ZOOM`.
    */
   focus?: string;
+  /** A picture inside a button or list item that names it: hidden from screen readers. */
+  decorative?: boolean;
 }
 
 /**
@@ -40,7 +42,16 @@ function cameraOn(view: SlideView, el: HTMLElement, id: string, padding: number)
 }
 
 /** A live, scaled render of one slide. Re-rendering is incremental and cheap. */
-export function SlideCanvas({ deck, deckId, slideId, padding, className, lazy, focus }: Props) {
+export function SlideCanvas({
+  deck,
+  deckId,
+  slideId,
+  padding,
+  className,
+  lazy,
+  focus,
+  decorative,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const view = useRef<SlideView | null>(null);
   const deckIdRef = useRef(deckId);
@@ -108,5 +119,5 @@ export function SlideCanvas({ deck, deckId, slideId, padding, className, lazy, f
     return () => observer.disconnect();
   }, [focus]);
 
-  return <div ref={ref} className={className} />;
+  return <div ref={ref} className={className} aria-hidden={decorative || undefined} />;
 }

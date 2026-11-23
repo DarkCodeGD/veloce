@@ -728,7 +728,7 @@ describe("components (D94)", () => {
   it("saves a card once and inserts copies with use/with, as plain nodes", async () => {
     await connect();
     await call("create_deck", { title: "Reuse" });
-    expect((await call("list_components")).text).toMatch(/no components yet/);
+    expect((await call("list_components")).text).toMatch(/No components yet/);
 
     const saved = await call("save_component", CARD);
     expect(saved.isError).toBe(false);
@@ -837,10 +837,97 @@ describe("components (D94)", () => {
     });
     expect(saved.isError).toBe(false);
     expect((await call("list_components")).text).toContain('"Badge"');
-    expect((await call("save_component", { name: "X", from: "s1" })).text).toMatch(/is a slide/);
+    expect((await call("save_component", { name: "X", from: "nope" })).text).toMatch(
+      /No node or slide "nope"/,
+    );
 
     await call("undo_agent_changes", {});
     const open = await workspace.get(workspace.activeDeckId as string);
     expect(open.deck.components).toBeUndefined();
+  });
+});
+
+describe("slide layouts (D95)", () => {
+  it("starts slides from a built-in layout, children in its slot, IDs from the slide's", async () => {
+    await connect();
+    await call("create_deck", { title: "Layouts" });
+    const listed = await call("list_components");
+    expect(listed.text).toContain('"Title and content" (built in, slot content)');
+    expect((await call("get_deck_summary")).text).toContain(
+      "Slide layouts: Title, Title and content",
+    );
+
+    const made = await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        use: "Title and content",
+        with: { title: "Three reasons" },
+        notes: "Say why",
+        children: [{ id: "point", type: "text", props: { content: "Faster" } }],
+      },
+    });
+    expect(made.text).toContain('s1-title: text "Three reasons"');
+    const open = await workspace.get(workspace.activeDeckId as string);
+    const slide = open.deck.slides[0];
+    expect(slide?.notes).toBe("Say why");
+    expect(slide?.root.children[1]).toMatchObject({
+      id: "s1-content",
+      children: [{ id: "point" }],
+    });
+
+    // Rebuilt: the same readable IDs again, not generated ones.
+    const again = await call("upsert_slide", {
+      slide: { id: "s1", use: "Section header", with: { title: "Part two" } },
+    });
+    expect(again.text).toContain('s1-title: text "Part two"');
+    expect((await workspace.get(open.id)).deck.slides[0]?.background).toBe("$color.primary");
+  });
+
+  it("saves a slide as the deck's own layout, which replaces a built-in of that name", async () => {
+    await connect();
+    await call("create_deck", { title: "Layouts" });
+    await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        background: "$color.surface",
+        children: [
+          { id: "big", type: "text", props: { content: "Hello", style: "$text.display" } },
+        ],
+      },
+    });
+    const saved = await call("save_component", {
+      name: "Title",
+      from: "s1",
+      params: { title: "big.props.content" },
+    });
+    expect(saved.text).toContain('Save slide layout "Title": done');
+    const made = await call("upsert_slide", {
+      slide: { id: "s2", use: "Title", with: { title: "Hi" } },
+    });
+    expect(made.isError).toBe(false);
+    const deck = (await workspace.get(workspace.activeDeckId as string)).deck;
+    expect(deck.slides[1]).toMatchObject({ background: "$color.surface" });
+    expect(deck.slides[1]?.root.children[0]).toMatchObject({
+      id: "s2-big",
+      props: { content: "Hi" },
+    });
+    expect((await call("list_components")).text).not.toContain('"Title" (built in');
+  });
+
+  it("says when a layout and a component are mixed up", async () => {
+    await connect();
+    await call("create_deck", { title: "Layouts" });
+    const asNode = await call("upsert_slide", { slide: { children: [{ use: "Quote" }] } });
+    expect(asNode.text).toMatch(/"Quote" is a slide layout[\s\S]*"use": "Quote"/);
+    const styled = await call("upsert_slide", {
+      slide: { use: "Quote", layout: { mode: "stack" } },
+    });
+    expect(styled.text).toMatch(/takes the layout's layout and style[\s\S]*At: slide\.layout/);
+    const noSlot = await call("upsert_slide", {
+      slide: { use: "Quote", children: [{ type: "text", props: { content: "x" } }] },
+    });
+    expect(noSlot.text).toMatch(/takes no children/);
+    const typo = await call("upsert_slide", { slide: { use: "Titel" } });
+    expect(typo.text).toMatch(/Did you mean "Title"/);
   });
 });

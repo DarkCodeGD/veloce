@@ -5,8 +5,9 @@
  * - omit `kind` (a node with `children` is a frame; one with `type` is an element),
  * - omit `id` (one is generated and returned, so later calls can reference it),
  * - omit a frame's `layout` (a vertical stack) and an element's `props` (`{}`),
- * - write `{ "use": "<component>", "with": { … } }` anywhere a node goes (D94): it's
- *   expanded here into a plain copy, so core ops and the undo log only see plain nodes.
+ * - write `{ "use": "<component>", "with": { … } }` anywhere a node goes (D94), or as a
+ *   whole slide with a slide layout (D95): it's expanded here into a plain copy, so core
+ *   ops and the undo log only see plain nodes.
  *
  * Everything else is validated exactly like any other edit, by core and the plugin registry.
  */
@@ -21,9 +22,10 @@ import {
   ElementTypeSchema,
   type ElementValidator,
   FrameStyleSchema,
-  getComponent,
+  findComponent,
   IdSchema,
   instantiateComponent,
+  instantiateSlide,
   LayoutSchema,
   type Node,
   OpSchema,
@@ -32,6 +34,7 @@ import {
   SizingSchema,
   type Slide,
   SlideSchema,
+  VeloceError,
 } from "@veloce/core";
 import { z } from "zod";
 
@@ -72,19 +75,33 @@ export const ElementInputSchema = z.strictObject({
     .describe("Validated by the element type's schema."),
 });
 
+const WithSchema = z
+  .record(z.string(), z.unknown())
+  .optional()
+  .describe("Param values by name; a param left out keeps the component's own value.");
+
 /** A copy of a saved component (D94), with its params and the root's own fields. */
-export const UseInputSchema = z.strictObject({
+const UseFieldsInput = z.strictObject({
   use: ComponentNameSchema.describe("A component's name (see list_components)."),
-  with: z
-    .record(z.string(), z.unknown())
-    .optional()
-    .describe("Param values by name; a param left out keeps the component's own value."),
+  with: WithSchema,
   ...nodeCommon,
   id: IdSchema.optional().describe(
     'The copy\'s ID; its inner nodes get "<id>-<their ID in the component>". Generated if omitted.',
   ),
 });
-export type UseInput = z.infer<typeof UseInputSchema>;
+export interface UseInput extends z.infer<typeof UseFieldsInput> {
+  children?: NodeInput[] | undefined;
+}
+export const UseInputSchema = z.strictObject({
+  ...UseFieldsInput.shape,
+  get children(): z.ZodOptional<z.ZodArray<z.ZodType<NodeInput>>> {
+    return z
+      .array(NodeInputSchema)
+      .max(1000)
+      .optional()
+      .describe("For a component with a slot: what goes in it, in place of its placeholder.");
+  },
+});
 
 export type NodeInput = z.infer<typeof ElementInputSchema> | FrameInput | UseInput;
 export interface FrameInput extends Omit<z.infer<typeof FrameFieldsInput>, "children"> {
@@ -123,7 +140,15 @@ export const SlideInputSchema = z.strictObject({
     'Layout of the slide\'s root frame. Default: a column centered top-to-bottom, with "$space.xl" padding and "$space.md" gap. Children stretch across; add align: "center" to center hug-width content.',
   ),
   style: FrameStyleSchema.optional().describe("Style of the slide's root frame."),
-  children: z.array(NodeInputSchema).max(1000).describe("The slide's content."),
+  use: ComponentNameSchema.optional().describe(
+    'A slide layout to start from (D95), e.g. "Title and content" (see list_components). Its params go in `with`, and `children` fill its slot; leave out layout and style.',
+  ),
+  with: WithSchema,
+  children: z
+    .array(NodeInputSchema)
+    .max(1000)
+    .optional()
+    .describe("The slide's content (with `use`: what goes in the layout's slot)."),
 });
 export type SlideInput = z.infer<typeof SlideInputSchema>;
 
@@ -194,10 +219,16 @@ export function normalizeNode(input: NodeInput, ctx: NormalizeContext = {}, at =
 
 /** A `use` node: a plain copy of the component, the root's own fields laid over it. */
 function expandUse(input: UseInput, ctx: NormalizeContext, at: string): Node {
-  const { use, with: values, id, ...fields } = input;
+  const { use, with: values, id, children, ...fields } = input;
   const deck = ctx.deck ?? { components: undefined };
-  const component = getComponent(deck, use);
+  const component = findComponent(deck, use);
   if (!component) throw componentNotFound(deck, use, `${at}.use`);
+  if (component.slide) {
+    throw new VeloceError("INVALID", `"${use}" is a slide layout, not a component`, {
+      hint: `Start a slide from it: upsert_slide { "slide": { "use": "${use}", "with": { … } } }.`,
+      path: `${at}.use`,
+    });
+  }
   ctx.taken ??= ctx.deck ? collectIds(ctx.deck) : new Set();
   const copy = instantiateComponent(use, component, {
     with: values,
@@ -205,21 +236,55 @@ function expandUse(input: UseInput, ctx: NormalizeContext, at: string): Node {
     taken: ctx.taken,
     validateElement: ctx.validateElement,
     at,
+    children: children?.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`)),
   });
   return { ...copy, ...fields };
 }
 
 export function normalizeSlide(input: SlideInput, ctx: NormalizeContext = {}, at = "slide"): Slide {
-  const { id, layout, style, children, ...fields } = input;
+  const { id, layout, style, children, use, with: values, ...fields } = input;
+  const slideId = id ?? createId("sl");
+  const nodes = (list: NodeInput[] | undefined) =>
+    list?.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`));
+  if (use !== undefined) {
+    if (layout || style) {
+      throw new VeloceError(
+        "INVALID",
+        "A slide from a layout takes the layout's layout and style",
+        {
+          hint: "Leave out `layout` and `style` (or leave out `use` and describe the slide yourself).",
+          path: `${at}.${layout ? "layout" : "style"}`,
+        },
+      );
+    }
+    const deck = ctx.deck ?? { components: undefined };
+    const component = findComponent(deck, use);
+    if (!component) throw componentNotFound(deck, use, `${at}.use`);
+    ctx.taken ??= ctx.deck ? collectIds(ctx.deck) : new Set();
+    const slide = instantiateSlide(use, component, slideId, {
+      with: values,
+      taken: ctx.taken,
+      validateElement: ctx.validateElement,
+      at,
+      children: nodes(children),
+    });
+    return { ...slide, ...fields };
+  }
+  if (values !== undefined) {
+    throw new VeloceError("INVALID", "`with` needs `use`: params belong to a slide layout", {
+      hint: 'Add "use": "<layout name>", or leave out `with`.',
+      path: `${at}.with`,
+    });
+  }
   return {
-    id: id ?? createId("sl"),
+    id: slideId,
     ...fields,
     root: {
       id: createId("nd"),
       kind: "frame",
       layout: layout ?? DEFAULT_SLIDE_LAYOUT,
       ...(style && { style }),
-      children: children.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`)),
+      children: nodes(children) ?? [],
     },
   };
 }

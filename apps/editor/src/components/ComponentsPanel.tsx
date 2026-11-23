@@ -18,9 +18,10 @@ import { SlideCanvas } from "./SlideCanvas.js";
 export function ComponentsPanel({ deck, deckId }: { deck: Deck; deckId: string }) {
   // By name, so the list keeps its order whatever happens to the deck's (an undone delete
   // adds the component back last).
-  const all = Object.entries(deck.components ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }),
-  );
+  // Slide layouts (D95) live in Slide → New slide from layout, not here.
+  const all = Object.entries(deck.components ?? {})
+    .filter(([, c]) => !c.slide)
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
   if (all.length === 0) {
     return (
       <div className="panel-empty components-empty">
@@ -77,6 +78,7 @@ function ComponentItem({
           padding={10}
           focus={component.node.id}
           lazy
+          decorative
         />
         <span className="component-text">
           <span className="component-name">{name}</span>

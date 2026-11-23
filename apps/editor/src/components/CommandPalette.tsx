@@ -11,7 +11,7 @@
  * shows the last few commands run, then all of them. The keyboard stays in the search box
  * throughout (the WAI-ARIA combobox pattern, like the Add menu).
  */
-import type { Deck, Settings, SettingsPatch } from "@veloce/core";
+import { type Deck, type Settings, type SettingsPatch, slideLayouts } from "@veloce/core";
 import {
   Check,
   Component as ComponentIcon,
@@ -22,7 +22,9 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { run } from "../actions.js";
 import { closePalette, paletteStore } from "../command-palette.js";
+import { slidePosition } from "../commands/context.js";
 import { openPreferences, type PreferencesTab } from "../dialogs.js";
 import {
   commandContext,
@@ -33,6 +35,7 @@ import {
   runCommand,
 } from "../editor-commands.js";
 import { insertComponent } from "../insert-actions.js";
+import { newSlideFromLayoutCommand } from "../model/components.js";
 import { deckLayers, type PaletteEntry, paletteSections, slideLabel } from "../model/palette.js";
 import { shortcutKeys } from "../model/shortcuts.js";
 import { nodeLabel } from "../model/slide-index.js";
@@ -152,6 +155,7 @@ function paletteRows(deck: Deck | undefined, current: Settings): Row[] {
     });
   });
   for (const [name, component] of Object.entries(deck.components ?? {})) {
+    if (component.slide) continue; // layouts below
     rows.push({
       id: `component:${name}`,
       kind: "component",
@@ -161,6 +165,27 @@ function paletteRows(deck: Deck | undefined, current: Settings): Row[] {
       keywords: `insert add component ${component.description ?? ""}`,
       icon: ComponentIcon,
       run: () => void insertComponent(name),
+    });
+  }
+  for (const { name, component } of slideLayouts(deck)) {
+    rows.push({
+      id: `layout:${name}`,
+      kind: "component",
+      label: name,
+      detail: "New slide from layout",
+      keywords: `new slide layout ${component.description ?? ""}`,
+      icon: RectangleHorizontal,
+      run: () => {
+        const c = commandContext();
+        if (!c.deck) return;
+        const at = slidePosition(c);
+        const command = newSlideFromLayoutCommand(
+          c.deck,
+          name,
+          at === -1 ? c.deck.slides.length - 1 : at,
+        );
+        if (command) void run(command).then((ok) => ok && c.goToSlide(command.select?.[0] ?? ""));
+      },
     });
   }
   for (const { slideId, slideIndex, node } of deckLayers(deck)) {

@@ -2256,3 +2256,40 @@ message is something else, so code and UI say "versions").
 8. **Kept out for now:** dragging a component onto the canvas, editing a component in
    place, a library shared between decks, and linked instances (After 1.0). Slide layouts
    come next, as slide-level components with the same `use`/`with`.
+
+## D95 — Slide layouts are slide-level components, with built-in ones
+
+**Status:** Accepted (2026-11-24). Round 6. Builds on D94.
+
+1. **A slide layout is a component with `slide`** (`{ background? }`): its node is a
+   slide's root frame, and `use` makes a whole slide (`instantiateSlide`). Same record,
+   ops, params, undo and file storage as components; one name space. **Why:** one
+   mechanism for agents and code, not a second, parallel store.
+2. **Slots:** a component (layout or not) may name a frame as its `slot`; children given
+   with `use` replace that frame's placeholder content. `Title and content` fills its
+   `content` frame this way, so an agent writes a whole slide in one call:
+   `{ "use": "Title and content", "with": { "title": … }, "children": [ … ] }`. Without a slot,
+   children are refused with a hint (insert them with node.insert).
+3. **Built in, from theme tokens only:** Title, Title and content, Two columns, Section
+   header (on the primary color), Big number and Quote live in core (`BUILTIN_LAYOUTS`), not
+   in files, so every deck has them and they take on its theme (a test checks each token
+   exists in every built-in theme). A deck's own component with the same name (ignoring
+   case) replaces the built-in for that deck. Names follow D94's rule, so "Title and
+   content", not "Title + content": agents type them.
+4. **IDs from the slide's:** a slide `s3` made from a layout has `s3-title`, `s3-content`.
+   When an agent rebuilds its own slide with upsert_slide, the old slide's IDs are free again,
+   so the copy gets the same readable IDs (applies to D94 copies inside it too).
+5. **MCP:** `upsert_slide` (and `slide.insert`) take `use` / `with` on the slide; `layout`
+   and `style` are refused next to `use` (they come from the layout). `save_component`
+   `from: "<slide id>"` saves a slide layout, and `slot` names a slot. `list_components`
+   lists layer components, then every layout (own and built-in), with slots; the deck
+   summary names the layouts. Mixing them up (a layout as a node, a component as a slide)
+   says which to use.
+6. **Editor:** Slide → New slide from layout… shows every layout drawn in the deck's theme,
+   the deck's own first; a click adds the slide after the current one and goes there. The
+   deck's own can be deleted (one undo step; slides made from them stay). Slide → Save slide
+   as layout… saves the slide on screen (its background too), its texts offered as params.
+   The command palette finds layouts ("New slide from layout"). Previews are decorative
+   (`aria-hidden`), so a card's name is its accessible name.
+7. **Kept out for now:** applying a layout to an existing slide, editing a layout in place,
+   per-theme layout variants beyond tokens, and layouts shared between decks (After 1.0).

@@ -106,14 +106,12 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
       error(problem.code, `Component "${name}": ${problem.message}`, at);
       continue;
     }
-    for (const { node } of walkNodes(component.node)) {
-      for (const ref of collectAssetRefs(node.kind === "frame" ? node.style : node.props)) {
-        if (!Object.hasOwn(deck.assets, ref)) {
-          error("NOT_FOUND", `Component "${name}" uses missing asset ${ref}`, at);
-        }
+    for (const ref of collectAssetRefs(component)) {
+      if (!Object.hasOwn(deck.assets, ref)) {
+        error("NOT_FOUND", `Component "${name}" uses missing asset ${ref}`, at);
       }
-      checkElement(node, `Component "${name}": `);
     }
+    for (const { node } of walkNodes(component.node)) checkElement(node, `Component "${name}": `);
   }
 
   if (errors.length) return { ok: false, errors: errors.slice(0, MAX_REPORTED), warnings };

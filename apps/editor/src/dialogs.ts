@@ -14,7 +14,9 @@ export type DialogId =
   | "preferences"
   | "save-version"
   | "versions"
-  | "save-component";
+  | "save-component"
+  | "save-layout"
+  | "layouts";
 
 let open: DialogId | null = null;
 const listeners = new Set<() => void>();

@@ -1,8 +1,10 @@
 /**
- * The Slide menu (D89): new, duplicate, delete and reorder slides, plus going between slides
- * with the keys (not in a menu: the slide list is right there).
+ * The Slide menu (D89): new (blank or from a layout, D95), duplicate, delete and reorder
+ * slides, save one as a layout, plus going between slides with the keys (not in a menu: the
+ * slide list is right there).
  */
 import { run } from "../actions.js";
+import { openDialog } from "../dialogs.js";
 import { addSlide, deleteSlide, duplicateSlide, moveSlide } from "../model/commands.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { type CommandContext, type EditorCommand, onSlide, slidePosition } from "./context.js";
@@ -84,6 +86,16 @@ export function slideCommands(): EditorCommand[] {
       },
     },
     {
+      id: "slide.newFromLayout",
+      label: "New slide from layout…",
+      keywords: "add page template title section two columns quote",
+      group: "slide",
+      menu: "slide",
+      section: "make",
+      enabled: (c) => c.deck !== undefined,
+      run: () => openDialog("layouts"),
+    },
+    {
       id: "slide.duplicate",
       label: "Duplicate slide",
       keywords: "copy",
@@ -135,5 +147,15 @@ export function slideCommands(): EditorCommand[] {
     ),
     navigate("slide.first", "First slide", SHORTCUTS.firstSlide, [], () => 0),
     navigate("slide.last", "Last slide", SHORTCUTS.lastSlide, [], (_at, count) => count - 1),
+    {
+      id: "slide.saveLayout",
+      label: "Save slide as layout…",
+      keywords: "template layout master reuse",
+      group: "slide",
+      menu: "slide",
+      section: "layout",
+      enabled: onSlide,
+      run: () => openDialog("save-layout"),
+    },
   ];
 }

@@ -5,9 +5,14 @@
  * A param maps one value to node fields inside the template: `"title.props.content"` is the
  * `props.content` of the template node with ID `title`. Inserting `{ use, with }` writes each
  * given value there (see components.ts); a param left out keeps the template's own value.
+ *
+ * A component with `slide` is a slide layout (D95): its node is a slide's root frame, and
+ * `use` makes a whole slide. A `slot` names the frame that children given with `use` fill.
  */
 import { z } from "zod";
 import { NodeSchema } from "./node.js";
+import { PaintSchema } from "./paint.js";
+import { IdSchema } from "./primitives.js";
 
 /** The most components one deck keeps. */
 export const MAX_COMPONENTS = 200;
@@ -59,6 +64,13 @@ export const ComponentSchema = z.strictObject({
     .optional(),
   /** The template: copied with fresh IDs on every insert, never linked to. */
   node: NodeSchema,
+  /**
+   * The frame inside the template that children given with `use` go into, replacing what
+   * the template has there (its placeholder). Without one, `use` takes no children.
+   */
+  slot: IdSchema.optional(),
+  /** Present for a slide layout (D95): the new slide's own fields. `node` is its root frame. */
+  slide: z.strictObject({ background: PaintSchema.optional() }).optional(),
 });
 export type Component = z.infer<typeof ComponentSchema>;
 

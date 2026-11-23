@@ -28,6 +28,7 @@ Rules:
 - One idea per slide, short text, strong hierarchy. Detail goes in speaker notes.
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
 - Something repeats (cards, tiles, badges, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
+- Slide layouts (Title, Title and content, Two columns, Section header, Big number, Quote, and the deck's own) start a slide: upsert_slide { "slide": { "use": "Title and content", "with": { "title": "…" }, "children": [ … ] } }.
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 - Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
@@ -131,7 +132,28 @@ template's value; \`null\` removes the field. The copy's own fields (\`id\`, \`w
 copy \`c1\` is \`c1-title\`. Edit it later with node.update like any node.
 
 list_components shows the deck's components with their params and templates. Saving under an
-existing name needs \`overwrite: true\` (copies already on slides don't change).`;
+existing name needs \`overwrite: true\` (copies already on slides don't change).
+
+**Slots:** a component can name a frame as its \`slot\` (save_component \`slot\`); \`children\`
+given with \`use\` go there, in place of the template's placeholder.
+
+# Slide layouts
+
+A slide layout is a component for a whole slide: \`use\` it as the slide in upsert_slide (or a
+slide.insert op). Params go in \`with\`; \`children\` fill its slot; the slide's own \`id\`,
+\`name\`, \`notes\`, \`background\` and \`hidden\` sit next to \`use\` (not \`layout\` or \`style\`:
+those come from the layout). Inner IDs start with the slide's: \`s3-title\`.
+
+\`\`\`json
+{ "slide": { "id": "s3", "use": "Title and content", "with": { "title": "Three reasons" },
+  "children": [ { "use": "Feature card", "with": { "title": "Faster" } } ] } }
+\`\`\`
+
+Built in (they follow the deck's theme): **Title** (title, subtitle), **Title and content**
+(title, body; slot: content), **Two columns** (title, left, right), **Section header** (title,
+subtitle; on the primary color), **Big number** (number, caption), **Quote** (quote, author).
+Save a slide of your own as a layout with save_component \`{ "name": "…", "from": "<slide id>" }\`;
+one named like a built-in replaces it in this deck.`;
 
 const OPS = `# Ops (apply_ops)
 

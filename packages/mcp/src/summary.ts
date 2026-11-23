@@ -11,6 +11,7 @@ import {
   type Node,
   type Slide,
   type SlideMeasurement,
+  slideLayouts,
   TextContentSchema,
   toPlainText,
 } from "@veloce/core";
@@ -22,7 +23,7 @@ export function deckSummary(deck: Deck): string {
     `Deck "${deck.meta.title}" (id ${deck.id}) · theme ${deck.theme.name} · ${deck.stage.width}×${deck.stage.height} · ${deck.slides.length} slide${deck.slides.length === 1 ? "" : "s"}`,
     ...metaLines(deck.meta),
   ];
-  const components = Object.entries(deck.components ?? {});
+  const components = Object.entries(deck.components ?? {}).filter(([, c]) => !c.slide);
   if (components.length > 0) {
     const list = components.map(([name, c]) => {
       const params = Object.keys(c.params ?? {});
@@ -32,6 +33,10 @@ export function deckSummary(deck: Deck): string {
       `Components: ${list.join(", ")}. Insert copies with { "use": name, "with": { … } }; list_components shows them.`,
     );
   }
+  const layouts = slideLayouts(deck).map(({ name, builtin }) => (builtin ? name : `${name} (own)`));
+  lines.push(
+    `Slide layouts: ${layouts.join(", ")}. Start a slide with { "use": name, "with": { … } } in upsert_slide.`,
+  );
   if (deck.slides.length === 0) lines.push("(no slides yet: add some with upsert_slide)");
   deck.slides.forEach((slide, i) => {
     lines.push("", slideOutline(slide, i));
@@ -62,8 +67,11 @@ export function slideOutline(slide: Slide, index: number): string {
 }
 
 /** A component for list_components (D94): what it's for, its params, then its template tree. */
-export function componentOutline(name: string, component: Component): string {
-  const lines = [`"${name}"${component.description ? `: ${component.description}` : ""}`];
+export function componentOutline(name: string, component: Component, note?: string): string {
+  const tags = [note, component.slot && `slot ${component.slot}`].filter(Boolean).join(", ");
+  const lines = [
+    `"${name}"${tags ? ` (${tags})` : ""}${component.description ? `: ${component.description}` : ""}`,
+  ];
   const params = Object.entries(component.params ?? {});
   if (params.length > 0) {
     lines.push("  params:");

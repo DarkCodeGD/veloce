@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { assetUsage } from "../assets.js";
 import { element, frame } from "../builders.js";
 import type { ElementValidator } from "../checks.js";
-import { componentProblem, instantiateComponent } from "../components.js";
+import { componentProblem, instantiateComponent, instantiateSlide } from "../components.js";
+import { BUILTIN_LAYOUTS, findComponent, slideLayouts } from "../layouts.js";
 import type { Op } from "../ops/schema.js";
 import { type Component, ComponentNameSchema } from "../schema/component.js";
 import type { Deck } from "../schema/deck.js";
+import { BUILTIN_THEMES } from "../themes.js";
+import { isTokenRef, resolveToken } from "../tokens.js";
 import { applyTransaction } from "../transaction.js";
-import { walkNodes } from "../tree.js";
+import { collectIds, walkNodes } from "../tree.js";
 import { validateDeck } from "../validate.js";
 import { restoreOps } from "../versions.js";
 import { deepFreeze, fixtureDeck, IMAGE_ID } from "./fixtures.js";
@@ -212,5 +215,85 @@ describe("inserting a copy", () => {
   it("removes a field for a null value", () => {
     const copy = instantiateComponent("Card", CARD, { with: { color: null } });
     expect(copy.kind === "frame" && copy.style).toEqual({});
+  });
+});
+
+describe("slide layouts (D95)", () => {
+  const tokensIn = (value: unknown): string[] =>
+    typeof value === "string"
+      ? isTokenRef(value)
+        ? [value]
+        : []
+      : value && typeof value === "object"
+        ? Object.values(value).flatMap(tokensIn)
+        : [];
+
+  it("are sound, and every token they use exists in every built-in theme", () => {
+    for (const [name, layout] of Object.entries(BUILTIN_LAYOUTS)) {
+      expect(componentProblem(layout), name).toBeNull();
+      expect(layout.slide, name).toBeDefined();
+      for (const theme of Object.values(BUILTIN_THEMES)) {
+        for (const ref of tokensIn(layout)) {
+          expect(resolveToken(theme, ref), `${name}: ${ref} in ${theme.name}`).toBeDefined();
+        }
+      }
+    }
+  });
+
+  it("make a whole slide, IDs from the slide's, children in the slot", () => {
+    const deck = fixtureDeck();
+    const layout = findComponent(deck, "Title and content");
+    if (!layout) throw new Error("no layout");
+    const cards = [element("text", { content: "One" }, { id: "one" })];
+    const slide = instantiateSlide("Title and content", layout, "s3", {
+      with: { title: "Why now" },
+      children: cards,
+      taken: collectIds(deck),
+    });
+    expect(ids(slide.root)).toEqual([slide.root.id, "s3-title", "s3-content", "one"]);
+    expect(slide.root.children[0]).toMatchObject({ props: { content: "Why now" } });
+    const added = apply(deck, { op: "slide.insert", slide });
+    expect(added.deck.slides.at(-1)?.id).toBe("s3");
+
+    const section = findComponent(deck, "Section header");
+    if (!section) throw new Error("no layout");
+    expect(instantiateSlide("Section header", section, "s4").background).toBe("$color.primary");
+  });
+
+  it("say what's wrong: a component as a slide, children without a slot", () => {
+    expect(() => instantiateSlide("Card", CARD, "s9")).toThrow(/a component, not a slide layout/);
+    expect(() =>
+      instantiateComponent("Card", CARD, { children: [element("text", {}, { id: "x" })] }),
+    ).toThrow(expect.objectContaining({ path: "children" }));
+    expect(componentProblem({ ...CARD, slot: "card-title" })?.message).toContain("isn't a frame");
+  });
+
+  it("a deck's own layout replaces the built-in, whatever its case", () => {
+    const own: Component = { node: frame({ id: "root" }), slide: {} };
+    const deck = apply(fixtureDeck(), { op: "component.save", name: "title", component: own }).deck;
+    expect(findComponent(deck, "title")).toEqual(own);
+    expect(findComponent(deck, "Title")).toBeUndefined();
+    expect(slideLayouts(deck).map((l) => l.name)).not.toContain("Title");
+    expect(findComponent(fixtureDeck(), "constructor")).toBeUndefined();
+  });
+
+  it("count a layout's background image as a use", () => {
+    const withBackground: Component = {
+      node: frame({ id: "root" }),
+      slide: { background: { type: "image", asset: `asset:${IMAGE_ID}` } as never },
+    };
+    const deck = apply(
+      { ...fixtureDeck(), assets: { [IMAGE_ID]: { mime: "image/png", bytes: 3 } } },
+      { op: "component.save", name: "Photo", component: withBackground },
+    ).deck;
+    expect(assetUsage(deck).get(IMAGE_ID)).toEqual(["component:Photo"]);
+  });
+});
+
+describe("built-in layout names", () => {
+  it("are valid component names (agents type them in use)", () => {
+    for (const name of Object.keys(BUILTIN_LAYOUTS)) {
+      expect(ComponentNameSchema.safeParse(name).success, name).toBe(true);
+    }
   });
 });

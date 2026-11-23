@@ -5,6 +5,7 @@ import {
   type Deck,
   element,
   frame,
+  slideLayouts as slideLayoutsOf,
   walkNodes,
 } from "@veloce/core";
 import { describe, expect, it } from "vitest";
@@ -12,6 +13,9 @@ import type { Command } from "./commands.js";
 import {
   componentPreviewDeck,
   insertComponentCommand,
+  LAYOUT_PREVIEW_ID,
+  layoutPreviewDeck,
+  newSlideFromLayoutCommand,
   proposeParams,
   removeComponentCommand,
   saveComponentCommand,
@@ -138,5 +142,46 @@ describe("a component's preview", () => {
     expect(preview.slides).toHaveLength(1);
     expect(preview.slides[0]?.root.children[0]).toBe(component.node);
     expect(preview.stage).toEqual(deck.stage);
+  });
+});
+
+describe("slide layouts (D95)", () => {
+  it("saves the slide on screen as a layout, and starts new slides from it", () => {
+    const deck = makeDeck();
+    const slide = deck.slides[0];
+    if (!slide) throw new Error("no slide");
+    const save = saveComponentCommand(deck, {
+      name: "Plan",
+      node: slide.root,
+      params: [{ param: "title", target: "title.props.content" }],
+      slide: { background: "$color.surface" },
+    });
+    expect(save.label).toBe('Save slide layout "Plan"');
+    const saved = apply(deck, save);
+    expect(saved.components?.Plan?.slide).toEqual({ background: "$color.surface" });
+
+    const add = newSlideFromLayoutCommand(saved, "Plan", 0);
+    const next = apply(saved, add);
+    const made = next.slides[1];
+    expect(made?.id).toBe(add?.select?.[0]);
+    expect(made?.background).toBe("$color.surface");
+    expect(indexSlide(made as never).nodes.get(`${made?.id}-title`)?.node).toMatchObject({
+      props: { content: "Our plan" },
+    });
+    // A layout isn't a layer component.
+    expect(insertComponentCommand(saved, indexOf(saved), [], "Plan", [])).toBeNull();
+  });
+
+  it("starts slides from the built-in ones, and previews them in the deck's theme", () => {
+    const deck = makeDeck();
+    const add = newSlideFromLayoutCommand(deck, "Quote", 0);
+    expect(add?.label).toBe('New slide from "Quote"');
+    expect(apply(deck, add).slides).toHaveLength(2);
+    const layout = slideLayoutsOf(deck).find((l) => l.name === "Quote")?.component;
+    if (!layout) throw new Error("no layout");
+    const preview = layoutPreviewDeck(deck, "Quote", layout);
+    expect(preview.slides.map((s) => s.id)).toEqual([LAYOUT_PREVIEW_ID]);
+    expect(preview.theme).toBe(deck.theme);
+    expect(newSlideFromLayoutCommand(deck, "Nope", 0)).toBeNull();
   });
 });

@@ -30,6 +30,7 @@ import { HistoryPanel } from "./components/HistoryPanel.js";
 import { Inspector } from "./components/Inspector.js";
 import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
+import { LayoutsDialog } from "./components/LayoutsDialog.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { PreferencesDialog } from "./components/PreferencesDialog.js";
 import { SaveComponentDialog } from "./components/SaveComponentDialog.js";
@@ -412,6 +413,10 @@ export function App() {
       {dialog === "save-version" && deck && <SaveVersionDialog onClose={closeDialog} />}
       {dialog === "versions" && deck && <VersionsDialog deckId={deck.id} onClose={closeDialog} />}
       {dialog === "save-component" && deck && <SaveComponentDialog onClose={closeDialog} />}
+      {dialog === "save-layout" && deck && <SaveComponentDialog layout onClose={closeDialog} />}
+      {dialog === "layouts" && deck && deckId && (
+        <LayoutsDialog deck={deck} deckId={deckId} onClose={closeDialog} />
+      )}
       <CommandPalette deck={deck ?? undefined} />
       <AddMenu />
       <Toasts />

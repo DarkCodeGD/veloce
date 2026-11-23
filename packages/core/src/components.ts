@@ -18,9 +18,10 @@ import type { ElementValidator } from "./checks.js";
 import { VeloceError } from "./errors.js";
 import { createId } from "./ids.js";
 import { isPlainObject, type JsonObject } from "./json.js";
+import { BUILTIN_LAYOUTS } from "./layouts.js";
 import type { Component } from "./schema/component.js";
-import type { Deck } from "./schema/deck.js";
-import { MAX_DEPTH, type Node, NodeSchema } from "./schema/node.js";
+import type { Deck, Slide } from "./schema/deck.js";
+import { type FrameNode, MAX_DEPTH, type Node, NodeSchema } from "./schema/node.js";
 import { suggest } from "./suggest.js";
 import { subtreeHeight, walkNodes } from "./tree.js";
 
@@ -66,9 +67,9 @@ export function caseClash(deck: WithComponents, name: string): string | undefine
   return componentNames(deck).find((n) => n !== name && n.toLowerCase() === lower);
 }
 
-/** "No component "crad". Did you mean "card"?" with the names there are. */
+/** "No component "crad". Did you mean "card"?" with the names there are (built-in layouts too). */
 export function componentNotFound(deck: WithComponents, name: string, path?: string): VeloceError {
-  const names = componentNames(deck);
+  const names = [...new Set([...componentNames(deck), ...Object.keys(BUILTIN_LAYOUTS)])];
   const close = suggest(name, names);
   const hint = close.length
     ? `Did you mean ${close.map((c) => `"${c}"`).join(" or ")}?`
@@ -100,7 +101,30 @@ export function componentProblem(component: Component): VeloceError | null {
     }
     nodes.set(node.id, node);
   }
-  if (1 + subtreeHeight(component.node) > MAX_DEPTH) {
+  if (component.slide && component.node.kind !== "frame") {
+    return new VeloceError("INVALID", "A slide layout's node must be a frame (the slide's root)", {
+      hint: "Save a slide's root frame as the layout, or leave out `slide` for a layer component.",
+      path: "component.node",
+    });
+  }
+  if (component.slot !== undefined && nodes.get(component.slot)?.kind !== "frame") {
+    const frames = [...nodes.values()].filter((n) => n.kind === "frame").map((n) => n.id);
+    return new VeloceError(
+      nodes.has(component.slot) ? "INVALID" : "NOT_FOUND",
+      `The slot "${component.slot}" isn't a frame in the component`,
+      {
+        hint: frames.length
+          ? `The slot is the frame that children given with \`use\` go into: one of ${frames
+              .slice(0, 15)
+              .map((f) => `"${f}"`)
+              .join(", ")}.`
+          : "The component has no frames: leave out `slot`.",
+        path: "component.slot",
+      },
+    );
+  }
+  // A layout's root is a slide's root (depth 0); anything else sits at least one level down.
+  if ((component.slide ? 0 : 1) + subtreeHeight(component.node) > MAX_DEPTH) {
     return new VeloceError("FORBIDDEN", `The component nests too deep (max ${MAX_DEPTH} levels)`, {
       hint: "Flatten the structure: use a grid or stack layout instead of nesting frames.",
       path: "component.node",
@@ -167,6 +191,10 @@ export interface InstantiateOptions {
   validateElement?: ElementValidator | undefined;
   /** Where the `use` sits in the caller's input, for error paths (`slide.children[2]`). */
   at?: string | undefined;
+  /** What inner IDs start with (`<prefix>-<template ID>`). Default: the copy's root ID. */
+  prefix?: string | undefined;
+  /** Nodes for the component's slot, in place of its placeholder (already plain, with IDs). */
+  children?: readonly Node[] | undefined;
 }
 
 /**
@@ -212,7 +240,49 @@ export function instantiateComponent(
   const problem = firstIssue(copy, component, name);
   if (problem) throw located(problem, at);
   checkWrittenElements(copy, component, name, given, options.validateElement, at);
-  return withFreshIds(copy, options.id, options.taken ?? new Set());
+  if (options.children && component.slot === undefined) {
+    throw new VeloceError("INVALID", `Component "${name}" takes no children (it has no slot)`, {
+      hint: "Leave out `children`, then add nodes to the copy with node.insert into one of its frames.",
+      path: `${at}children`,
+    });
+  }
+  return withFreshIds(copy, {
+    rootId: options.id,
+    prefix: options.prefix,
+    taken: options.taken ?? new Set(),
+    slot:
+      options.children && component.slot
+        ? { id: component.slot, children: options.children }
+        : undefined,
+  });
+}
+
+/**
+ * A new slide from a slide layout (D95): its root frame a copy of the layout's, with the
+ * params written in and `children` in its slot; inner IDs start with the slide's ID
+ * (`s3-title`), so the agent that named the slide can edit them right away.
+ */
+export function instantiateSlide(
+  name: string,
+  component: Component,
+  slideId: string,
+  options: Omit<InstantiateOptions, "id" | "prefix"> = {},
+): Slide {
+  if (!component.slide) {
+    throw new VeloceError("INVALID", `"${name}" is a component, not a slide layout`, {
+      hint: `Put it inside a slide instead: { "use": "${name}" } among the slide's children.`,
+      ...(options.at && { path: `${options.at}.use` }),
+    });
+  }
+  const taken = options.taken ?? new Set<string>();
+  taken.add(slideId);
+  const root = instantiateComponent(name, component, { ...options, taken, prefix: slideId });
+  const background = component.slide.background;
+  return {
+    id: slideId,
+    ...(background !== undefined && { background: cloneJson(background) }),
+    root: root as FrameNode,
+  };
 }
 
 /** A deep copy of a JSON value (documents are JSON; core has no `structuredClone` typings). */
@@ -317,8 +387,16 @@ function located(error: VeloceError, at: string): VeloceError {
   });
 }
 
+interface Renaming {
+  rootId: string | undefined;
+  prefix: string | undefined;
+  taken: Set<string>;
+  /** The slot's template ID and what fills it (kept as given: they have their own IDs). */
+  slot: { id: string; children: readonly Node[] } | undefined;
+}
+
 /** Re-IDs the copy (see the module comment), recording every new ID in `taken`. */
-function withFreshIds(copy: Node, rootId: string | undefined, taken: Set<string>): Node {
+function withFreshIds(copy: Node, { rootId, prefix, taken, slot }: Renaming): Node {
   const fresh = (): string => {
     let id = createId("nd");
     while (taken.has(id)) id = createId("nd");
@@ -332,14 +410,15 @@ function withFreshIds(copy: Node, rootId: string | undefined, taken: Set<string>
     const suffix = templateId.startsWith(`${templateRoot}-`)
       ? templateId.slice(templateRoot.length + 1)
       : templateId;
-    const derived = `${root}-${suffix}`;
+    const derived = `${prefix ?? root}-${suffix}`;
     const id = derived.length <= 64 && !taken.has(derived) ? derived : fresh();
     taken.add(id);
     return id;
   };
-  const visit = (node: Node): Node =>
-    node.kind === "frame"
-      ? { ...node, id: idFor(node.id), children: node.children.map(visit) }
-      : { ...node, id: idFor(node.id) };
+  const visit = (node: Node): Node => {
+    if (node.kind !== "frame") return { ...node, id: idFor(node.id) };
+    const children = slot && node.id === slot.id ? [...slot.children] : node.children.map(visit);
+    return { ...node, id: idFor(node.id), children };
+  };
   return visit(copy);
 }

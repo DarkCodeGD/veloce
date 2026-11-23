@@ -264,7 +264,7 @@ function componentSave(deck: Deck, op: OpOf<"component.save">, ctx: ApplyContext
   }
   const problem = componentProblem(component);
   if (problem) throw problem;
-  assertAssetsExist(deck, component.node, `component "${name}"`);
+  assertAssetsExist(deck, component, `component "${name}"`);
   assertElementsValid(component.node, ctx, "component.node");
   return {
     deck: { ...deck, components: { ...all, [name]: component } },

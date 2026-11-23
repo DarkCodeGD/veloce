@@ -1,11 +1,18 @@
 /**
  * Arrange → Save as component… (D94): the selected layer, saved under a name to insert again
- * from the Components tab (or by agents, with `use`). Its texts are offered as params, which
- * agents fill in when they insert a copy; each can be renamed or left out.
+ * from the Components tab (or by agents, with `use`). Slide → Save slide as layout… (D95):
+ * the whole slide, to start new slides from. Its texts are offered as params, which agents
+ * fill in when they use it; each can be renamed or left out.
  *
  * Saving is an ordinary op, so it's one undo step, and the toast offers Undo too.
  */
-import { ComponentNameSchema, getComponent, type Node, PARAM_NAME_PATTERN } from "@veloce/core";
+import {
+  ComponentNameSchema,
+  getComponent,
+  type Node,
+  PARAM_NAME_PATTERN,
+  type Slide,
+} from "@veloce/core";
 import { useId, useState } from "react";
 import { run } from "../actions.js";
 import { commandContext } from "../editor-commands.js";
@@ -17,31 +24,62 @@ interface Draft extends ParamProposal {
   keep: boolean;
 }
 
-/** The layer the dialog saves: the one selected when it opened. */
-function selectedLayer(): Node | null {
+/** What the dialog saves, as it was when it opened. */
+interface Source {
+  node: Node;
+  /** Saving a whole slide: a slide layout, with the slide's own fields. */
+  slide?: Pick<Slide, "background">;
+  /** Its name where it came from, when it has one. */
+  name?: string | undefined;
+  /** How the hint refers to it: “Feature card”, this slide. */
+  label: string;
+}
+
+/** The selected layer, or (for a layout) the slide on screen. */
+function source(layout: boolean): Source | null {
   const c = commandContext();
+  if (!c.slideIndex) return null;
+  if (layout) {
+    const slide = c.slideIndex.slide;
+    return {
+      node: slide.root,
+      slide: slide.background !== undefined ? { background: slide.background } : {},
+      name: slide.name,
+      label: "this slide",
+    };
+  }
   const id = c.selection.length === 1 ? c.selection[0] : undefined;
-  if (!id || !c.slideIndex || id === c.slideIndex.rootId) return null;
-  return c.slideIndex.nodes.get(id)?.node ?? null;
+  if (!id || id === c.slideIndex.rootId) return null;
+  const node = c.slideIndex.nodes.get(id)?.node;
+  return node ? { node, name: node.name, label: `“${nodeLabel(node)}”` } : null;
 }
 
-/** The layer's name when it's a valid component name, else "Component N". */
-function suggestedName(node: Node): string {
+/** Its own name when that's a valid component name, else "Component N" / "Layout N". */
+function suggestedName(from: Source): string {
   const deck = commandContext().deck;
-  const named = node.name?.trim();
+  const named = from.name?.trim();
   if (named && ComponentNameSchema.safeParse(named).success) return named;
-  const count = Object.keys(deck?.components ?? {}).length;
-  return `Component ${count + 1}`;
+  const count = Object.values(deck?.components ?? {}).filter((c) => !!c.slide === !!from.slide);
+  return `${from.slide ? "Layout" : "Component"} ${count.length + 1}`;
 }
 
-export function SaveComponentDialog({ onClose }: { onClose(): void }) {
-  const [node] = useState(selectedLayer);
-  if (!node) return null;
-  return <SaveComponentForm node={node} onClose={onClose} />;
+export function SaveComponentDialog({
+  onClose,
+  layout = false,
+}: {
+  onClose(): void;
+  /** Save the slide on screen as a slide layout (D95). */
+  layout?: boolean;
+}) {
+  const [from] = useState(() => source(layout));
+  if (!from) return null;
+  return <SaveComponentForm from={from} onClose={onClose} />;
 }
 
-function SaveComponentForm({ node, onClose }: { node: Node; onClose(): void }) {
-  const [name, setName] = useState(() => suggestedName(node));
+function SaveComponentForm({ from, onClose }: { from: Source; onClose(): void }) {
+  const { node } = from;
+  const what = from.slide ? "slide layout" : "component";
+  const [name, setName] = useState(() => suggestedName(from));
   const [description, setDescription] = useState("");
   const [params, setParams] = useState<Draft[]>(() =>
     proposeParams(node).map((p) => ({ ...p, keep: true })),
@@ -77,9 +115,10 @@ function SaveComponentForm({ node, onClose }: { node: Node; onClose(): void }) {
       description,
       node,
       params: kept.map((p) => ({ param: p.param.trim(), target: p.target })),
+      ...(from.slide && { slide: from.slide }),
     });
     const done = await run(command, {
-      undoToast: `${replacing ? "Replaced" : "Saved"} component "${trimmed}"`,
+      undoToast: `${replacing ? "Replaced" : "Saved"} ${what} "${trimmed}"`,
     });
     setBusy(false);
     if (done) onClose();
@@ -92,7 +131,7 @@ function SaveComponentForm({ node, onClose }: { node: Node; onClose(): void }) {
 
   return (
     <Dialog
-      title="Save as component"
+      title={from.slide ? "Save slide as layout" : "Save as component"}
       className="save-component-dialog"
       onClose={onClose}
       onSubmit={() => void save()}
@@ -113,8 +152,10 @@ function SaveComponentForm({ node, onClose }: { node: Node; onClose(): void }) {
         error={error}
         hint={
           replacing
-            ? `Replaces the saved “${trimmed}”. Copies already on slides stay as they are.`
-            : `Insert copies of “${nodeLabel(node)}” from the Components tab. Agents use it by this name.`
+            ? `Replaces the saved “${trimmed}”. Slides and copies made from it stay as they are.`
+            : from.slide
+              ? "Start new slides like this one from Slide → New slide from layout. Agents use it by this name."
+              : `Insert copies of ${from.label} from the Components tab. Agents use it by this name.`
         }
       >
         <input
@@ -146,7 +187,9 @@ function SaveComponentForm({ node, onClose }: { node: Node; onClose(): void }) {
           <legend>Params</legend>
           <p id={paramsId} className={paramError ? "dialog-error" : "dialog-hint"}>
             {paramError ??
-              "Texts an agent fills in when it inserts a copy. Untick the ones that stay the same."}
+              (from.slide
+                ? "Texts an agent fills in when it starts a slide from it. Untick the ones that stay the same."
+                : "Texts an agent fills in when it inserts a copy. Untick the ones that stay the same.")}
           </p>
           {params.map((p, i) => (
             <div key={p.target} className="component-param">

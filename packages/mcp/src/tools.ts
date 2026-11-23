@@ -17,6 +17,7 @@ import {
   type Component,
   ComponentNameSchema,
   type ComponentParam,
+  collectIds,
   type Deck,
   findBuiltinTheme,
   findNode,
@@ -26,6 +27,7 @@ import {
   formatIssues,
   getComponent,
   type HistoryEntry,
+  IdSchema,
   MAX_ASSET_BYTES,
   type Node,
   notFoundHint,
@@ -33,6 +35,7 @@ import {
   type Origin,
   ParamNameSchema,
   ParamTargetSchema,
+  slideLayouts,
   type Theme,
   ThemeSchema,
   VeloceError,
@@ -428,10 +431,16 @@ const upsertSlide = defineTool({
   async run({ slide: input, index, overwrite }, ctx) {
     const open = await currentDeck(ctx);
     const generated = new Set<string>();
+    // Rebuilding a slide frees its IDs: copies in it get the same readable ones again
+    // (s3-title), not generated ones because the old slide still had them.
+    const taken = collectIds(open.deck);
+    const replaced = input.id === undefined ? undefined : findSlide(open.deck, input.id)?.slide;
+    if (replaced) for (const { node } of walkNodes(replaced.root)) taken.delete(node.id);
     const normalized = normalizeSlide(input, {
       generated,
       deck: open.deck,
       validateElement: ctx.registry.validateElement,
+      taken,
     });
     const existing = findSlide(open.deck, normalized.id);
     const remover = open.removedBy(normalized.id);
@@ -591,7 +600,12 @@ const saveComponent = defineTool({
     from: z
       .string()
       .optional()
-      .describe("Or: the ID of a node already on a slide, copied with everything inside it."),
+      .describe(
+        "Or: the ID of a node already on a slide, copied with everything inside it; a slide's ID saves the whole slide as a slide layout.",
+      ),
+    slot: IdSchema.optional().describe(
+      "A frame in the template that children given with `use` fill, in place of its placeholder.",
+    ),
     params: z
       .record(ParamNameSchema, ParamInput)
       .optional()
@@ -615,7 +629,12 @@ const saveComponent = defineTool({
       },
       from: {
         type: "string",
-        description: "Or: the ID of a node already on a slide, copied with everything inside it.",
+        description:
+          "Or: the ID of a node on a slide (copied with everything in it), or of a slide: then it's a slide layout.",
+      },
+      slot: {
+        type: "string",
+        description: "A frame in the template that `children` given with `use` fill.",
       },
       params: {
         type: "object",
@@ -631,12 +650,12 @@ const saveComponent = defineTool({
     required: ["name"],
     additionalProperties: false,
   },
-  async run({ name, description, node, from, params, overwrite }, ctx) {
+  async run({ name, description, node, from, params, slot, overwrite }, ctx) {
     const open = await currentDeck(ctx);
     if ((node === undefined) === (from === undefined)) {
       throw new ToolError({
         message: "Give the template as either `node` or `from`",
-        hint: "`node` describes it (like an upsert_slide node); `from` copies a node already on a slide by its ID.",
+        hint: "`node` describes it (like an upsert_slide node); `from` copies a node already on a slide by its ID, or a whole slide (a slide layout) by the slide's ID.",
       });
     }
     const existing = getComponent(open.deck, name);
@@ -647,19 +666,23 @@ const saveComponent = defineTool({
       });
     }
     let template: Node;
+    /** Set when `from` names a slide: the component is a slide layout (D95). */
+    let layout: Component["slide"];
     if (from !== undefined) {
-      const found = findNode(open.deck, from);
-      if (!found) {
-        const slide = findSlide(open.deck, from)?.slide;
+      const slide = findSlide(open.deck, from)?.slide;
+      const found = slide ? null : findNode(open.deck, from);
+      if (slide) {
+        template = slide.root;
+        layout = slide.background !== undefined ? { background: slide.background } : {};
+      } else if (found) {
+        template = found.node;
+      } else {
         throw new ToolError({
-          message: `Node "${from}" not found`,
+          message: `No node or slide "${from}"`,
           path: "from",
-          hint: slide
-            ? `"${from}" is a slide. Pass a node on it, e.g. its root frame "${slide.root.id}".`
-            : "get_deck_summary lists the deck's node IDs.",
+          hint: "get_deck_summary lists the deck's slide and node IDs.",
         });
       }
-      template = found.node;
     } else {
       template = normalizeNode(
         node as NonNullable<typeof node>,
@@ -676,15 +699,20 @@ const saveComponent = defineTool({
           ),
         }),
       node: template,
+      ...(slot !== undefined && { slot }),
+      ...(layout && { slide: layout }),
     };
-    const label = `${existing ? "Replace" : "Save"} component "${name}"`;
+    const what = layout ? "slide layout" : "component";
+    const label = `${existing ? "Replace" : "Save"} ${what} "${name}"`;
     await commit(ctx, open, label, [{ op: "component.save", name, component }], {
       asComponent: true,
     });
     const names = Object.keys(component.params ?? {});
     const example = names[0] ? `, "with": { "${names[0]}": … }` : "";
     return text(
-      `${label}: done. Insert copies with { "use": "${name}"${example} } wherever a node goes.`,
+      layout
+        ? `${label}: done. Start slides from it with upsert_slide { "slide": { "use": "${name}"${example} } }.`
+        : `${label}: done. Insert copies with { "use": "${name}"${example} } wherever a node goes.`,
       componentOutline(name, component),
     );
   },
@@ -692,22 +720,25 @@ const saveComponent = defineTool({
 
 const listComponents = defineTool({
   name: "list_components",
-  title: "List components",
+  title: "List components and slide layouts",
   description:
-    'The deck\'s saved components: what each is for, its params (and the fields they fill), and its template tree. Insert one with { "use": "<name>", "with": { … } }.',
+    'The deck\'s components and slide layouts (its own and the built-in ones): what each is for, its params (and the fields they fill), and its template tree. Use one with { "use": "<name>", "with": { … } }.',
   input: z.strictObject({}),
   annotations: { readOnlyHint: true },
   async run(_args, ctx) {
     const open = await currentDeck(ctx);
-    const all = Object.entries(open.deck.components ?? {});
-    if (all.length === 0) {
-      return text(
-        "This deck has no components yet. Build a repeated piece once and save it with save_component.",
-      );
-    }
+    const own = Object.entries(open.deck.components ?? {});
+    const parts = own.filter(([, c]) => !c.slide);
+    const layouts = slideLayouts(open.deck);
     return text(
-      `${all.length} component${all.length === 1 ? "" : "s"}. Insert with { "use": "<name>", "with": { <param>: <value> } }; a copy's inner IDs are "<copy id>-<template id>".`,
-      ...all.map(([name, component]) => componentOutline(name, component)),
+      parts.length > 0
+        ? `Components (${parts.length}). Insert with { "use": "<name>", "with": { <param>: <value> } } wherever a node goes; a copy's inner IDs are "<copy id>-<template id>".`
+        : "No components yet. Build a repeated piece once and save it with save_component.",
+      ...parts.map(([name, component]) => componentOutline(name, component)),
+      `Slide layouts (${layouts.length}). Start a slide with upsert_slide { "slide": { "id": "s3", "use": "<name>", "with": { … }, "children": [ … ] } }: children fill its slot; inner IDs are "<slide id>-<template id>". Save your own with save_component { from: "<slide id>" }.`,
+      ...layouts.map(({ name, component, builtin }) =>
+        componentOutline(name, component, builtin ? "built in" : undefined),
+      ),
     );
   },
 });

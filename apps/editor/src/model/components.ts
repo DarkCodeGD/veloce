@@ -1,6 +1,7 @@
 /**
  * Components in the editor (D94), pure: what "Save as component" proposes and sends, what
- * inserting one sends, and the little deck a component's preview draws.
+ * inserting one sends, and the little deck a component's preview draws. Slide layouts too
+ * (D95): saving a slide as one, and a new slide from one.
  *
  * Inserting is a plain copy made by core's `instantiateComponent` (the same expansion agents'
  * `use` gets), placed like a new layer from the Add menu: into the selected frame, after the
@@ -10,9 +11,12 @@ import {
   type Component,
   type ComponentParam,
   collectIds,
+  createId,
   type Deck,
+  findComponent,
   getComponent,
   instantiateComponent,
+  instantiateSlide,
   type Node,
   PARAM_NAME_PATTERN,
   type Slide,
@@ -84,26 +88,35 @@ export interface SaveComponentInput {
   node: Node;
   /** The params kept, by name. */
   params: ReadonlyArray<{ param: string; target: string }>;
+  /** Saving a whole slide as a slide layout (D95): its own fields. `node` is its root. */
+  slide?: Pick<Slide, "background">;
 }
 
 export function saveComponentCommand(deck: Deck, input: SaveComponentInput): Command {
   const params: Record<string, ComponentParam> = {};
   for (const { param, target } of input.params) params[param] = { targets: [target] };
   const description = input.description?.trim();
+  const layout = input.slide;
   const component: Component = {
     ...(description && { description }),
     ...(input.params.length > 0 && { params }),
-    node: templateOf(input.node),
+    node: layout ? input.node : templateOf(input.node),
+    ...(layout && {
+      slide: layout.background !== undefined ? { background: layout.background } : {},
+    }),
   };
   const replacing = getComponent(deck, input.name) !== undefined;
   return {
-    label: `${replacing ? "Replace" : "Save"} component "${input.name}"`,
+    label: `${replacing ? "Replace" : "Save"} ${layout ? "slide layout" : "component"} "${input.name}"`,
     ops: [{ op: "component.save", name: input.name, component }],
   };
 }
 
-export function removeComponentCommand(name: string): Command {
-  return { label: `Delete component "${name}"`, ops: [{ op: "component.remove", name }] };
+export function removeComponentCommand(name: string, layout = false): Command {
+  return {
+    label: `Delete ${layout ? "layout" : "component"} "${name}"`,
+    ops: [{ op: "component.remove", name }],
+  };
 }
 
 /** A copy of component `name` on the current slide, selected afterwards. */
@@ -115,7 +128,7 @@ export function insertComponentCommand(
   selection: readonly string[],
 ): Command | null {
   const component = getComponent(deck, name);
-  if (!component) return null;
+  if (!component || component.slide) return null;
   const copy = instantiateComponent(name, component, { taken: collectIds(deck) });
   const placed = placeNew(index, frames, copy, null, selection);
   const node: Node = placed.position ? { ...copy, position: placed.position } : copy;
@@ -151,4 +164,27 @@ export function componentPreviewDeck(deck: Deck, component: Component): Deck {
     },
   };
   return { ...deck, slides: [slide] };
+}
+
+/** A new slide from slide layout `name` (D95), after the slide at `afterIndex`; shown next. */
+export function newSlideFromLayoutCommand(
+  deck: Deck,
+  name: string,
+  afterIndex: number,
+): Command | null {
+  const layout = findComponent(deck, name);
+  if (!layout?.slide) return null;
+  const slide = instantiateSlide(name, layout, createId("sl"), { taken: collectIds(deck) });
+  return {
+    label: `New slide from "${name}"`,
+    ops: [{ op: "slide.insert", slide, index: afterIndex + 1 }],
+    select: [slide.id],
+  };
+}
+
+export const LAYOUT_PREVIEW_ID = "layout-preview";
+
+/** A one-slide deck showing what a slide from layout `name` looks like in this deck. */
+export function layoutPreviewDeck(deck: Deck, name: string, layout: Component): Deck {
+  return { ...deck, slides: [instantiateSlide(name, layout, LAYOUT_PREVIEW_ID)] };
 }

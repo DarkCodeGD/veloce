@@ -49,11 +49,10 @@ export function assetUsage(deck: Deck): Map<string, string[]> {
       record(node.id, node.kind === "frame" ? node.style : node.props);
     }
   }
-  // A component's images are in use too: its next copy needs them (D94).
+  // A component's images are in use too: its next copy needs them (D94), and so is a slide
+  // layout's background (D95).
   for (const [name, component] of Object.entries(deck.components ?? {})) {
-    for (const { node } of walkNodes(component.node)) {
-      record(`component:${name}`, node.kind === "frame" ? node.style : node.props);
-    }
+    record(`component:${name}`, component);
   }
   return usage;
 }
