@@ -1,5 +1,6 @@
 /**
- * Arrow keys move the selected free layers (in absolute frames) by 1 px, Shift by 10: the
+ * Arrow keys move the selected free layers (in absolute frames) by 1 px, Shift by 10 (or the
+ * distances set in Preferences, D91): the
  * keyboard alternative to dragging them (WCAG 2.5.7). Like a drag, held keys preview
  * locally and releasing the last one commits one transaction (one undo step), however many
  * times the key repeated. Layers in stacks reorder with Alt+↑/↓ instead (App).
@@ -11,6 +12,7 @@ import { type Point, rotateVector } from "../model/geometry.js";
 import { ancestorRotation, isFree, movedPosition, moveTo } from "../model/manipulate.js";
 import { type SlideIndex, topmost } from "../model/slide-index.js";
 import { setPreview } from "../preview.js";
+import { settings } from "../settings.js";
 
 const ARROWS: Record<string, Point> = {
   ArrowLeft: { x: -1, y: 0 },
@@ -53,7 +55,8 @@ export function useArrowNudge(index: SlideIndex | null, selection: readonly stri
       if (!v || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || typing(e.target))
         return;
       e.preventDefault();
-      const step = e.shiftKey ? 10 : 1;
+      const { nudge, nudgeBig } = settings().editing; // Preferences (D91)
+      const step = e.shiftKey ? nudgeBig : nudge;
       offset = { x: (offset?.x ?? 0) + v.x * step, y: (offset?.y ?? 0) + v.y * step };
       held.add(e.key);
       setPreview(command()?.ops ?? null);

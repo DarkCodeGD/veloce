@@ -6,7 +6,7 @@
  */
 import { useSyncExternalStore } from "react";
 
-export type DialogId = "new-deck" | "deck-info" | "theme-styles" | "shortcuts";
+export type DialogId = "new-deck" | "deck-info" | "theme-styles" | "shortcuts" | "preferences";
 
 let open: DialogId | null = null;
 const listeners = new Set<() => void>();

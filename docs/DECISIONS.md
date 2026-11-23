@@ -2098,3 +2098,42 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
    A stored layout is parsed defensively (unknown workspaces or panels and broken values are
    dropped, sizes clamped), so another version's layout can't break the app. Trade-off: the
    web editor on another port or machine starts from the presets.
+
+## D91 — Preferences: one settings file the server owns, applied live
+
+**Status:** Accepted (2026-11-24). Implements D53 §5.
+
+1. **One file per user, owned by the server** (`SettingsStore`, doc-server): where each OS
+   keeps app settings (`~/.config/veloce/settings.json` on Linux, `%APPDATA%\Veloce` on
+   Windows, `~/Library/Application Support/Veloce` on macOS), or `--settings` /
+   `$VELOCE_SETTINGS`. Never in a `.veloce` file, never an op: no undo, no history, agents
+   don't change it. **Why:** they're how this person works, not the deck (D53 §5); the
+   server already owns every file, and Electron will use the same folders.
+2. **No setting ships that does nothing.** The Interface tab (UI scale, light/dark) waits
+   for Phase 6: CSS `zoom` on the page moved every popover (the View menu opened 27 px off
+   its button at 125 %), while Electron's zoom factor scales everything consistently; and
+   there's no light token set yet. A tab with nothing in it would be an empty tab (D53 §3).
+3. **One Zod schema in core** (`SettingsSchema`) serves the file, the sync protocol and the
+   dialog. Reading is forgiving field by field: a missing, broken or out-of-range value
+   falls back to its default and the rest is kept; a file that isn't JSON is copied to
+   `settings.json.broken` before anything overwrites it. Writing is strict: a patch with an
+   unknown field or a bad value is refused with the field named. A `version` field leaves
+   room for a migration. **Why:** a hand edit or another version's file must never stop
+   the app from starting, and nothing invalid ever gets written.
+4. **Live over the sync socket.** Every tab gets a `settings` message on connecting and after
+   every change; `settings.update` changes some fields. The server applies the autosave
+   pause and undo depth to the running workspace at once (the undo limit is read at each
+   step). The decks folder and the port apply at the next start, and the dialog says what's
+   in use now. Precedence at start: a flag, then the environment, then the setting, then
+   the default, so a one-off `--port` never changes what's saved. **Why:** settings are
+   server state like the deck, so no tab can disagree with the file.
+5. **No Save button** (VS Code, Figma): each change applies and is saved at once, and
+   nothing changes optimistically (the server answers in about a millisecond). Fields read
+   like the inspector's: the default as a grey placeholder, a changed value with a reset
+   button.
+6. **What each setting changes:** Snapping off works like holding Alt on every drag. The
+   nudge distances replace 1 / 10 px. Lint off, or a muted rule, only changes what this
+   editor shows (the Issues tab and badges): agents always get every issue. Follow AI sets
+   the top bar switch when the setting arrives or changes.
+7. **Keymap is the shortcut list with a search** (by name, keys or keywords), the same view
+   of the registry as Help → Keyboard shortcuts (D89). Rebinding waits for after 1.0.

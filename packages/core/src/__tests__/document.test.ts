@@ -163,6 +163,16 @@ describe("DeckDocument: per-origin undo/redo", () => {
     expect(doc.canUndo("system")).toBe(false);
   });
 
+  it("reads a live history limit at each step (a changed setting, D91)", () => {
+    let limit = 3;
+    const doc = new DeckDocument(fixtureDeck(), { historyLimit: () => limit });
+    for (const o of [0.1, 0.2, 0.3, 0.4]) doc.apply(update("user", "title", o));
+    expect(doc.undoLabels("user")).toHaveLength(3);
+    limit = 1; // lowered: the next step trims the stack
+    doc.apply(update("user", "title", 0.5));
+    expect(doc.undoLabels("user")).toHaveLength(1);
+  });
+
   it("knows which assets an undo or redo could add back (their bytes must be kept)", () => {
     const [a, b] = ["a".repeat(64), "b".repeat(64)];
     const info = { mime: "image/png", bytes: 3, name: "x.png", width: 1, height: 1 };

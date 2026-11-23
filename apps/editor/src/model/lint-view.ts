@@ -7,10 +7,47 @@
  * "this slide" for the slide, a short title per rule, and fixes in the inspector's words
  * ("set its height to Hug content"). Unknown rules (a newer server) fall back to core's text.
  */
-import { type Deck, findNode, type LintIssue, type LintSeverity, type Node } from "@veloce/core";
+import {
+  type Deck,
+  findNode,
+  type LintIssue,
+  type LintReport,
+  type LintRule,
+  type LintSeverity,
+  type Node,
+} from "@veloce/core";
 import { nodeLabel } from "./slide-index.js";
 
 const SEVERITY_RANK: Record<LintSeverity, number> = { error: 0, warning: 1, info: 2 };
+
+/** Each rule's name for people: Preferences lists them to mute (D91). */
+export const RULE_NAMES: Record<LintRule, string> = {
+  overflow: "Content doesn't fit",
+  "off-canvas": "Off the slide",
+  overlap: "Layers overlap",
+  "low-contrast": "Hard to read (contrast)",
+  "small-text": "Text too small",
+  "empty-slide": "Empty slide",
+  "too-much-text": "Too much text",
+  "alt-text": "No image description",
+  "unknown-token": "Missing theme style",
+  "empty-space": "Unbalanced layout",
+  "ignored-position": "Position has no effect",
+  "ignored-padding": "Padding has no effect",
+};
+
+/**
+ * The report as the editor shows it (D91): without the rules muted in Preferences. Agents
+ * still get every issue; muting is how this person reads the deck.
+ */
+export function withoutMuted(
+  report: LintReport | null,
+  muted: readonly string[],
+): LintReport | null {
+  if (!report || muted.length === 0) return report;
+  const hidden = new Set(muted);
+  return { ...report, issues: report.issues.filter((issue) => !hidden.has(issue.rule)) };
+}
 
 export interface IssueView {
   /** Stable React key. */

@@ -17,6 +17,7 @@ import type { Op } from "./ops/schema.js";
 import { OpSchema } from "./ops/schema.js";
 import type { Deck } from "./schema/deck.js";
 import { IdSchema } from "./schema/primitives.js";
+import { type Settings, SettingsPatchSchema } from "./settings.js";
 import { applyTransaction, type Origin } from "./transaction.js";
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -69,6 +70,12 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     title: z.string().trim().min(1).max(300),
     theme: z.string().min(1).max(64).optional(),
   }),
+  /** Change some app settings (D91). Every tab, this one too, gets the new `settings`. */
+  z.strictObject({
+    type: z.literal("settings.update"),
+    requestId: RequestIdSchema,
+    patch: SettingsPatchSchema,
+  }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
@@ -107,12 +114,26 @@ export type ServerMessage =
    * `version` is the deck version it describes (older than the replica's while re-checking).
    */
   | ({ type: "lint"; deckId: string } & LintReport)
+  /** The app settings (D91), on connecting and whenever they change. */
+  | ({ type: "settings" } & SettingsReport)
   | { type: "result"; requestId: string; ok: true; version: number }
   | { type: "result"; requestId: string; ok: false; error: ErrorInfo }
   /** A protocol-level problem (malformed message, unknown deck). */
   | { type: "error"; message: string };
 
 export type ChangeMessage = Extract<ServerMessage, { type: "change" }>;
+
+/** The settings, and what the running server actually uses where a change waits for a restart. */
+export interface SettingsReport {
+  settings: Settings;
+  /** The settings file, or null when the server keeps them in memory only (tests). */
+  file: string | null;
+  running: {
+    /** The decks folder in use (a --dir flag or VELOCE_DIR beats the setting). */
+    decksFolder: string;
+    port: number;
+  };
+}
 
 /** A deck's lint at one version. */
 export interface LintReport {

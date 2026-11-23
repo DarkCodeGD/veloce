@@ -3,6 +3,7 @@ import {
   createSlide,
   element,
   frame,
+  LINT_RULES,
   type LintIssue,
   lintDeck,
   type SlideMeasurement,
@@ -12,8 +13,10 @@ import {
   humanizeMessage,
   issueCounts,
   layerSeverities,
+  RULE_NAMES,
   slideBadges,
   viewIssues,
+  withoutMuted,
 } from "./lint-view.js";
 
 const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
@@ -154,5 +157,31 @@ describe("Issues panel wording (D73)", () => {
       detail: "Odd.",
       hint: "Do X.",
     });
+  });
+});
+
+describe("muting lint rules (D91)", () => {
+  const issue = (rule: LintIssue["rule"]): LintIssue => ({
+    rule,
+    severity: "warning",
+    slideId: "s1",
+    nodeIds: [],
+    message: "m",
+    fix: "f",
+  });
+  const report = {
+    version: 3,
+    issues: [issue("overlap"), issue("small-text")],
+    visual: true as const,
+  };
+
+  it("hides only the muted rules' issues", () => {
+    expect(withoutMuted(report, ["overlap"])?.issues.map((i) => i.rule)).toEqual(["small-text"]);
+    expect(withoutMuted(report, [])).toBe(report);
+    expect(withoutMuted(null, ["overlap"])).toBeNull();
+  });
+
+  it("names every rule for people", () => {
+    expect(Object.keys(RULE_NAMES).sort()).toEqual(Object.keys(LINT_RULES).sort());
   });
 });

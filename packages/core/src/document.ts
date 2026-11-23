@@ -29,8 +29,11 @@ interface Stacks {
 
 export interface DeckDocumentOptions {
   context?: ApplyContext;
-  /** Max undo steps kept per origin (oldest are dropped). Default 200. Bounds memory. */
-  historyLimit?: number;
+  /**
+   * Max undo steps kept per origin (oldest are dropped). Default 200. Bounds memory. A
+   * function is read at each step, so a changed setting (D91) applies from the next one.
+   */
+  historyLimit?: number | (() => number);
 }
 
 export class DeckDocument {
@@ -38,13 +41,14 @@ export class DeckDocument {
   #version = 0;
   readonly #stacks = new Map<Origin, Stacks>();
   readonly #context: ApplyContext;
-  readonly #historyLimit: number;
+  readonly #historyLimit: () => number;
 
   /** `deck` must already be valid (from a builder, `validateDeck`, or `@veloce/format`). */
   constructor(deck: Deck, options: DeckDocumentOptions = {}) {
     this.#deck = deck;
     this.#context = options.context ?? {};
-    this.#historyLimit = options.historyLimit ?? 200;
+    const limit = options.historyLimit ?? 200;
+    this.#historyLimit = typeof limit === "function" ? limit : () => limit;
   }
 
   get deck(): Deck {
@@ -164,6 +168,7 @@ export class DeckDocument {
 
   #push(stack: HistoryEntry[], entry: HistoryEntry): void {
     stack.push(entry);
-    if (stack.length > this.#historyLimit) stack.splice(0, stack.length - this.#historyLimit);
+    const limit = Math.max(1, this.#historyLimit());
+    if (stack.length > limit) stack.splice(0, stack.length - limit);
   }
 }

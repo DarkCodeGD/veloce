@@ -33,8 +33,10 @@ export interface WorkspaceOptions {
   dir: string;
   /** Plugin validation for every transaction (`registry.applyContext()`). */
   context?: ApplyContext;
-  /** Pause after the last change before saving. Default 800 ms. */
+  /** Pause after the last change before saving. Default 800 ms. `configure` changes it. */
   autosaveDelayMs?: number;
+  /** Undo steps kept per origin in every open deck. Default 200. `configure` changes it. */
+  undoSteps?: number;
   /** Recorded in saved files' manifests. */
   generator?: { name: string; version: string };
   /**
@@ -74,10 +76,15 @@ export class Workspace {
   readonly #sweepTimer: ReturnType<typeof setInterval>;
   #active: string | null = null;
   #closed = false;
+  /** What `configure` can change while running (the app settings, D91). */
+  #autosaveDelayMs: number;
+  #undoSteps: number;
 
   private constructor(options: WorkspaceOptions) {
     this.dir = options.dir;
     this.#options = options;
+    this.#autosaveDelayMs = options.autosaveDelayMs ?? 800;
+    this.#undoSteps = options.undoSteps ?? 200;
     this.#sweepTimer = setInterval(() => {
       for (const open of this.#open.values()) open.sweepAssets();
     }, options.sweepIntervalMs ?? UPLOAD_GRACE_MS);
@@ -90,6 +97,15 @@ export class Workspace {
     await mkdir(options.dir, { recursive: true });
     await workspace.#scan();
     return workspace;
+  }
+
+  /**
+   * Changes the autosave pause and the undo depth while running (D91): the next save waits
+   * the new pause, and every open deck keeps the new number of undo steps from its next one.
+   */
+  configure(changes: { autosaveDelayMs?: number; undoSteps?: number }): void {
+    if (changes.autosaveDelayMs !== undefined) this.#autosaveDelayMs = changes.autosaveDelayMs;
+    if (changes.undoSteps !== undefined) this.#undoSteps = changes.undoSteps;
   }
 
   get activeDeckId(): string | null {
@@ -238,6 +254,7 @@ export class Workspace {
       ...(now && { now }),
       ...(optimizeImages !== undefined && { optimizeImages }),
       ...(optimizer && { optimizer }),
+      historyLimit: () => this.#undoSteps,
     });
     open.subscribe((change) => {
       this.#scheduleSave(open);
@@ -265,7 +282,7 @@ export class Workspace {
       setTimeout(() => {
         this.#saveTimers.delete(open.id);
         void this.#save(open);
-      }, this.#options.autosaveDelayMs ?? 800),
+      }, this.#autosaveDelayMs),
     );
   }
 

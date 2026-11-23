@@ -3988,6 +3988,120 @@ html.is-scrubbing * {
   text-align: center;
 }
 
+/* File → Preferences (D91): tabs over inspector-style sections; Keymap is a searchable
+   shortcut list. A fixed height, so switching tabs doesn't make the dialog jump. */
+.preferences-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.preferences-dialog .dialog-body {
+  gap: 8px;
+  height: min(600px, calc(100vh - 200px));
+  align-content: start;
+}
+
+.preferences-panel {
+  min-height: 0;
+}
+
+.preferences-panel .inspector-section:last-child {
+  border-bottom: 0;
+}
+
+/* The inspector's fields, with room for longer labels and controls kept compact. */
+.preferences-panel .field {
+  grid-template-columns: 160px minmax(0, 200px) 22px;
+}
+
+/* A folder path needs the whole width. */
+.preferences-panel .field:has(input[type="text"]) {
+  grid-template-columns: 160px minmax(0, 1fr) 22px;
+}
+
+/* One switch per lint rule, in two columns. */
+.lint-rules {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+}
+
+.lint-rules .field {
+  grid-template-columns: 1fr auto 0;
+}
+
+/* Where the settings live, at the start of the footer (Done stays on the right). */
+.preferences-file {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.keymap {
+  display: grid;
+  gap: 16px;
+  padding-top: 12px;
+}
+
+.keymap-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.keymap-query {
+  flex: 1;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.keymap-query:focus-visible {
+  outline: none;
+}
+
+.keymap-search:focus-within {
+  border-color: var(--accent);
+}
+
+.shortcut-empty {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/* A shell command to copy (Preferences → AI): monospace, wraps, Copy beside it. */
+.copy-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.copy-command code {
+  flex: 1;
+  min-width: 0;
+  padding-top: 5px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 .theme-styles-dialog {
   width: min(760px, calc(100vw - 32px));
 }

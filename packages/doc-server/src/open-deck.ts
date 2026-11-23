@@ -148,6 +148,8 @@ export interface OpenDeckOptions {
   optimizeImages?: boolean;
   /** What optimizes them (tests swap it). Default: a worker thread. */
   optimizer?: ImageOptimizer;
+  /** Undo steps kept per origin; a function follows a changed setting (D91). Default 200. */
+  historyLimit?: number | (() => number);
 }
 
 export class OpenDeck {
@@ -192,7 +194,10 @@ export class OpenDeck {
     this.id = options.deck.id;
     this.path = options.path;
     this.createdAt = options.createdAt ?? new Date();
-    this.#doc = new DeckDocument(options.deck, options.context ? { context: options.context } : {});
+    this.#doc = new DeckDocument(options.deck, {
+      ...(options.context && { context: options.context }),
+      ...(options.historyLimit !== undefined && { historyLimit: options.historyLimit }),
+    });
     this.#assets = new Map(options.assets);
     this.#now = options.now ?? Date.now;
     this.#optimizeImages = options.optimizeImages ?? true;

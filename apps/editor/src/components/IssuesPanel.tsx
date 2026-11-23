@@ -6,6 +6,7 @@
 import type { Deck, LintReport, LintSeverity } from "@veloce/core";
 import { CircleCheck, CircleX, Lightbulb, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
+import { openDialog } from "../dialogs.js";
 import { issueCounts, viewIssues } from "../model/lint-view.js";
 
 const ICONS: Record<LintSeverity, typeof CircleX> = {
@@ -24,6 +25,8 @@ interface Props {
   /** The deck's version: a report older than this is being re-checked. */
   version: number;
   lint: LintReport | null;
+  /** Lint is turned off in Preferences (D91). */
+  off?: boolean;
   currentSlideId: string;
   /** Go to a slide and select these layers on it (none: just the slide). */
   onReveal(slideId: string, nodeIds: string[]): void;
@@ -31,13 +34,23 @@ interface Props {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-export function IssuesPanel({ deck, version, lint, currentSlideId, onReveal }: Props) {
+export function IssuesPanel({ deck, version, lint, off, currentSlideId, onReveal }: Props) {
   const [showTips, setShowTips] = useState(false);
   const groups = useMemo(
     () => (lint ? viewIssues(deck, lint.issues, { showTips }) : []),
     [deck, lint, showTips],
   );
   const counts = useMemo(() => issueCounts(lint?.issues ?? []), [lint]);
+  if (off) {
+    return (
+      <div className="panel-empty">
+        <p>Checking for issues is off.</p>
+        <button type="button" className="button" onClick={() => openDialog("preferences")}>
+          Open Preferences
+        </button>
+      </div>
+    );
+  }
   if (!lint) return <p className="panel-empty">Checking the deck…</p>;
 
   const checking = lint.version < version;

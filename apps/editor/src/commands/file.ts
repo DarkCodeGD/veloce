@@ -1,5 +1,5 @@
 /**
- * The File and Help menus (D76–D78, D89): the app's dialogs.
+ * The File and Help menus (D76–D78, D89, D91): the app's dialogs.
  */
 import { openDialog } from "../dialogs.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
@@ -35,6 +35,16 @@ export function fileCommands(): EditorCommand[] {
       section: "settings",
       enabled: (c) => c.deck !== undefined,
       run: () => openDialog("theme-styles"),
+    },
+    {
+      id: "file.preferences",
+      label: "Preferences…",
+      shortcut: SHORTCUTS.preferences,
+      keywords: "settings options snapping nudge undo lint autosave folder port keymap",
+      group: "file",
+      menu: "file",
+      section: "app",
+      run: () => openDialog("preferences"),
     },
   ];
 }

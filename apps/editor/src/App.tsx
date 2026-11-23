@@ -28,6 +28,7 @@ import { Inspector } from "./components/Inspector.js";
 import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
+import { PreferencesDialog } from "./components/PreferencesDialog.js";
 import { ShortcutsDialog } from "./components/ShortcutsDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { Splitter } from "./components/Splitter.js";
@@ -42,11 +43,12 @@ import { closeDialog, openDialog, useOpenDialog } from "./dialogs.js";
 import { setCommandContext } from "./editor-commands.js";
 import { assetUrl, client } from "./editor-context.js";
 import { setPanelCollapsed, togglePanel, updatePanel, useLayout } from "./layout.js";
-import { layerSeverities, slideBadges } from "./model/lint-view.js";
+import { layerSeverities, slideBadges, withoutMuted } from "./model/lint-view.js";
 import { editableText, pickTarget, pruneSelection } from "./model/selection.js";
 import { indexSlide } from "./model/slide-index.js";
 import { type PanelId, type PanelLayout, panelLayout, panelSpec } from "./model/workspace.js";
 import { previewDeck, previewStore } from "./preview.js";
+import { useSettings } from "./settings.js";
 
 const ACTIVITY_MS = 6000;
 
@@ -88,7 +90,10 @@ export function App() {
   const [panel, setPanel] = useState<Panel>("slides");
   /** The open app dialog, if any (D76–D78). */
   const dialog = useOpenDialog();
-  const [follow, setFollow] = useState(true);
+  const prefs = useSettings();
+  const [follow, setFollow] = useState(prefs.ai.followAI);
+  // Follow AI starts as Preferences say (D91), once they arrive and whenever they change.
+  useEffect(() => setFollow(prefs.ai.followAI), [prefs.ai.followAI]);
   const [activityVisible, setActivityVisible] = useState(false);
   // The workspace's panels (D90): sizes and collapsed states, remembered across launches.
   const layout = useLayout();
@@ -156,7 +161,14 @@ export function App() {
     [current?.id],
   );
   // Lint (D73): badges on thumbnails, layers and the Issues tab.
-  const lintIssues = state.lint?.issues;
+  // What the editor shows of it: nothing when it's off in Preferences, never muted rules (D91).
+  const lintOn = prefs.editing.lint;
+  const mutedRules = prefs.editing.mutedRules;
+  const lint = useMemo(
+    () => (lintOn ? withoutMuted(state.lint, mutedRules) : null),
+    [lintOn, mutedRules, state.lint],
+  );
+  const lintIssues = lint?.issues;
   const badges = useMemo(() => slideBadges(lintIssues ?? []), [lintIssues]);
   const layerIssues = useMemo(
     () => layerSeverities(lintIssues ?? [], current?.id ?? ""),
@@ -286,7 +298,8 @@ export function App() {
                   <IssuesPanel
                     deck={deck}
                     version={state.version}
-                    lint={state.lint}
+                    lint={lint}
+                    off={!lintOn}
                     currentSlideId={current.id}
                     onReveal={reveal}
                   />
@@ -385,6 +398,7 @@ export function App() {
       {dialog === "deck-info" && deck && <DeckInfoDialog deck={deck} onClose={closeDialog} />}
       {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
       {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
+      {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
       <AddMenu />
       <Toasts />
       <Tooltips />

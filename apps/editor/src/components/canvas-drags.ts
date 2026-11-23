@@ -53,11 +53,15 @@ import {
 import { type SlideIndex, topmost } from "../model/slide-index.js";
 import { type Guide, guidesFor, snapAxis, snapMove } from "../model/snapping.js";
 import { type Measure, spacingAround } from "../model/spacing.js";
+import { settings } from "../settings.js";
 import { type CanvasSpace, subtree } from "./canvas-space.js";
 
 /** Snapping reach and the "beside a frame" edge band, in screen pixels (zoom-independent). */
 const SNAP_PX = 6;
 export const EDGE_BAND_PX = 12;
+
+/** A move snaps unless Alt is held or snapping is off in Preferences (D91). */
+const snaps = (mods: Modifiers) => !mods.alt && settings().editing.snapping;
 
 export interface Modifiers {
   /** Move: lock to one axis. Resize: keep the aspect ratio. Rotate: 15° steps. */
@@ -179,7 +183,7 @@ export function moveDrag(ctx: Context, ids: readonly string[], start: Point): Dr
       let d = constrain(sub(space.toSlide(pointer), p0), mods.shift);
       d = { x: Math.round(d.x), y: Math.round(d.y) };
       let guides: Guide[] = [];
-      if (targets.length > 0 && !mods.alt) {
+      if (targets.length > 0 && snaps(mods)) {
         const snap = snapMove(offset(bounds, d), targets, SNAP_PX / space.scale);
         d = add(d, { x: snap.dx, y: snap.dy });
         guides = snap.guides;
@@ -223,7 +227,7 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
       if (target.id === parent.id && !free && mods.mod && pull) {
         d = { x: Math.round(d.x), y: Math.round(d.y) };
         let guides: Guide[] = [];
-        if (pullTargets.length > 0 && !mods.alt) {
+        if (pullTargets.length > 0 && snaps(mods)) {
           const snap = snapMove(offset(rect, d), pullTargets, SNAP_PX / space.scale);
           d = add(d, { x: snap.dx, y: snap.dy });
           guides = snap.guides;
@@ -242,7 +246,7 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
       if (target.id === parent.id && free) {
         d = { x: Math.round(d.x), y: Math.round(d.y) };
         let guides: Guide[] = [];
-        if (targets.length > 0 && !mods.alt) {
+        if (targets.length > 0 && snaps(mods)) {
           const snap = snapMove(offset(rect, d), targets, SNAP_PX / space.scale);
           d = add(d, { x: snap.dx, y: snap.dy });
           guides = snap.guides;
@@ -356,7 +360,7 @@ export function resizeDrag(
 
       // Snap the dragged edge(s) (plain resizes of unrotated free layers only).
       const snapped = { x: false, y: false };
-      if (targets.length > 0 && !keepRatio && !mods.alt) {
+      if (targets.length > 0 && !keepRatio && !mods.alt && settings().editing.snapping) {
         const reach = SNAP_PX / space.scale;
         const lines = (axis: "x" | "y") =>
           targets.flatMap((t) => (axis === "x" ? [t.x, t.x + t.w] : [t.y, t.y + t.h]));

@@ -19,6 +19,7 @@ export * from "./measure.js";
 export * from "./ops/apply.js";
 export * from "./ops/schema.js";
 export * from "./schema/index.js";
+export * from "./settings.js";
 export * from "./suggest.js";
 export * from "./sync.js";
 export * from "./themes.js";

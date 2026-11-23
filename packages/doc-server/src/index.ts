@@ -12,5 +12,6 @@ export * from "./fs.js";
 export * from "./lint.js";
 export * from "./open-deck.js";
 export * from "./render.js";
+export * from "./settings-store.js";
 export * from "./sync-hub.js";
 export * from "./workspace.js";

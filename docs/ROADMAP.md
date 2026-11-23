@@ -28,9 +28,9 @@
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
 - **Last updated:** 2026-11-24
-- **Next:** the Preferences window (a user settings file owned by the server). The command
-  registry (D81, D89) is the future plugin API (D79): the palette reads it.
-- **State:** `pnpm check` is green (760 tests, including real-Chromium lint, preview and editor
+- **Next:** the command palette (Ctrl/Cmd+K). The command registry (D81, D89) is the
+  future plugin API (D79): the palette reads it.
+- **State:** `pnpm check` is green (780 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -46,7 +46,7 @@
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
-    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90).
+    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90); Preferences (D91).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -206,11 +206,10 @@ Animate and Present workspaces instead of being squeezed into today's screen.
 - [x] Workspaces: fixed presets of resizable, collapsible panels, sizes and the last
       workspace remembered. Design is the first (today's editor); the switcher appears with
       a second workspace (Animate and Present in Phase 4) (D90)
-- [ ] Preferences window, stored in a user settings file owned by the server (app settings,
-      not deck content, so not ops): Interface (UI scale, dark/light), Editing (undo steps,
-      snapping, nudge distance, lint on/off and which rules, D73), Files (decks folder, autosave interval), Keymap (every
-      shortcut, searchable; rebinding after 1.0), AI (MCP port, connect instructions, Follow
-      AI default). System settings (GPU, hardware acceleration) arrive with Phase 6
+- [x] Preferences (File → Preferences, Ctrl+,): a user settings file owned by the server,
+      live in every tab. Editing (snapping, nudge, undo steps, lint and its rules), Files
+      (decks folder, autosave), Keymap (searchable), AI (Follow AI, port, connect command).
+      Interface waits for Phase 6 (D91)
 - [ ] Command palette (Ctrl/Cmd+K): search every command, setting, slide and layer; shows
       shortcuts. The glue that keeps a big app easy to use
 - [ ] Snapshots: File → Save version (named), a version list, open read-only, restore (one
@@ -320,6 +319,8 @@ network or disk without permission, and disabling it removes every trace.
 - [ ] `veloce://` protocol handler
 - [ ] Native menus (macOS mirrors round 5's menu bar), recent files, window state, crash
       recovery from autosave
+- [ ] Preferences → Interface (D91 §2): UI scale through Electron's zoom factor (CSS zoom
+      misplaces popovers), and light/dark once there's a light token set
 - [ ] Preferences → System: GPU preference (high-performance / power saving; applied at
       launch, so it asks for a restart; on Linux the launcher sets the PRIME environment)
       and hardware acceleration on/off

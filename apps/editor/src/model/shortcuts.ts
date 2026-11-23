@@ -53,6 +53,8 @@ export const SHORTCUTS = {
   panelHistory: "Alt+3",
   panelIssues: "Alt+4",
   keyboardShortcuts: "Mod+/",
+  // VS Code's and Figma's key for settings.
+  preferences: "Mod+,",
   // Show/hide both side panels (Figma's Show/Hide UI).
   sidePanels: "Mod+\\",
   // Paragraph alignment while typing (Google Docs' keys), matched on the letter.

@@ -12,11 +12,13 @@ import {
   formatIssues,
   type Origin,
   type ServerMessage,
+  type SettingsReport,
   SYNC_PROTOCOL_VERSION,
   type TransactionResult,
   VeloceError,
 } from "@veloce/core";
 import type { DeckLinter } from "./lint.js";
+import type { SettingsStore } from "./settings-store.js";
 import type { Workspace } from "./workspace.js";
 
 export interface SyncConnection {
@@ -33,15 +35,23 @@ export interface ConnectOptions {
 export interface SyncHubOptions {
   /** Sends each client its open deck's lint, kept current (D73). Without it: no lint. */
   linter?: DeckLinter;
+  /** The app settings every client gets and can change (D91). Without it: no settings. */
+  settings?: {
+    store: SettingsStore;
+    /** What the server runs with now, where a changed setting waits for a restart. */
+    running(): SettingsReport["running"];
+  };
 }
 
 export class SyncHub {
   readonly #workspace: Workspace;
   readonly #linter: DeckLinter | undefined;
+  readonly #settings: SyncHubOptions["settings"];
 
   constructor(workspace: Workspace, options: SyncHubOptions = {}) {
     this.#workspace = workspace;
     this.#linter = options.linter;
+    this.#settings = options.settings;
   }
 
   connect(send: (message: ServerMessage) => void, options: ConnectOptions = {}): SyncConnection {
@@ -91,6 +101,20 @@ export class SyncHub {
       activeDeckId: workspace.activeDeckId,
     });
 
+    // The settings now, then after every change (from this tab or another one).
+    const settings = this.#settings;
+    const sendSettings = () => {
+      if (!settings) return;
+      safeSend({
+        type: "settings",
+        settings: settings.store.settings,
+        file: settings.store.file,
+        running: settings.running(),
+      });
+    };
+    sendSettings();
+    const stopSettings = settings?.store.subscribe(sendSettings);
+
     const respond = (requestId: string, result: TransactionResult | null, version: number) => {
       if (result === null) {
         safeSend({
@@ -124,6 +148,12 @@ export class SyncHub {
       }
       const message = parsed.data;
       try {
+        if (message.type === "settings.update") {
+          if (!settings) throw new VeloceError("INVALID", "This server keeps no settings");
+          settings.store.update(message.patch); // every client, this one too, gets `settings`
+          safeSend({ type: "result", requestId: message.requestId, ok: true, version: 0 });
+          return;
+        }
         if (message.type === "create") {
           // A new deck (File → New): it becomes the active deck, so this tab and every other
           // one switch to it through the `decks` event, as when an agent calls create_deck.
@@ -201,6 +231,7 @@ export class SyncHub {
       close() {
         closed = true;
         stopLint?.();
+        stopSettings?.();
         unsubscribe();
       },
     };

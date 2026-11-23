@@ -20,7 +20,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { MAX_ASSET_BYTES, type ServerMessage } from "@veloce/core";
-import { DeckLinter, type RenderService, SyncHub, type Workspace } from "@veloce/doc-server";
+import {
+  DeckLinter,
+  type RenderService,
+  SettingsStore,
+  SyncHub,
+  type Workspace,
+} from "@veloce/doc-server";
 import { VeloceMcp } from "@veloce/mcp";
 import type { PluginRegistry } from "@veloce/plugin-api";
 import { WebSocketServer } from "ws";
@@ -40,6 +46,11 @@ export interface VeloceServerOptions {
   render?: ((baseUrl: string) => RenderService) | null;
   /** Extra browser origins allowed to call the server (e.g. the Vite dev server). */
   allowedOrigins?: string[];
+  /**
+   * The app settings (D91), shared with every editor tab. The autosave pause and undo depth
+   * apply to the workspace live. Default: in memory only, from the defaults.
+   */
+  settings?: SettingsStore;
   log?: (message: string) => void;
 }
 
@@ -92,7 +103,24 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
     render: () => render,
     unavailable: () => "the server was started without a renderer",
   });
-  const hub = new SyncHub(options.workspace, { linter });
+  const settings = options.settings ?? (await SettingsStore.open(null));
+  // Settings the workspace uses while running: now, and after every change.
+  const tune = () =>
+    options.workspace.configure({
+      autosaveDelayMs: settings.settings.files.autosaveMs,
+      undoSteps: settings.settings.editing.undoSteps,
+    });
+  tune();
+  const stopTuning = settings.subscribe(tune);
+  /** The port actually bound (known once listening). */
+  let boundPort = 0;
+  const hub = new SyncHub(options.workspace, {
+    linter,
+    settings: {
+      store: settings,
+      running: () => ({ decksFolder: options.workspace.dir, port: boundPort }),
+    },
+  });
   let mcp: VeloceMcp | null = null;
   let allowedHosts = new Set<string>();
   let allowedOrigins = new Set<string>();
@@ -257,6 +285,7 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
   });
 
   const { port } = server.address() as AddressInfo;
+  boundPort = port;
   const names =
     host === "127.0.0.1" || host === "localhost" || host === "::1"
       ? ["127.0.0.1", "localhost", "[::1]"]
@@ -284,6 +313,7 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
     server,
     render,
     async close() {
+      stopTuning();
       for (const client of wss.clients) client.terminate();
       wss.close();
       linter.close();
@@ -292,6 +322,7 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await options.workspace.flush();
+      await settings.flush();
     },
   };
 }

@@ -22,6 +22,8 @@ import {
   type Origin,
   randomId,
   type ServerMessage,
+  type SettingsPatch,
+  type SettingsReport,
 } from "@veloce/core";
 
 /** A rejected write: the server's reason, ready to show to the user. */
@@ -56,6 +58,8 @@ export interface SyncState {
    * deck's while a re-check is running; null until the first check arrives.
    */
   lint: LintReport | null;
+  /** The app settings (D91), from the server; null until they arrive. */
+  settings: SettingsReport | null;
 }
 
 /** Matches the server's limit (doc-server HISTORY_LIMIT). */
@@ -71,6 +75,7 @@ const INITIAL: SyncState = {
   lastChange: null,
   history: [],
   lint: null,
+  settings: null,
 };
 
 export class SyncClient {
@@ -131,6 +136,11 @@ export class SyncClient {
    * Make a new deck (`theme`: a built-in theme ID). It becomes the active deck, so this tab
    * (and every other) switches to it, as when an agent calls create_deck.
    */
+  /** Change some app settings (D91); every tab gets the new ones. */
+  updateSettings(patch: SettingsPatch): Promise<void> {
+    return this.#request((requestId) => ({ type: "settings.update", requestId, patch }));
+  }
+
   createDeck(title: string, theme?: string): Promise<void> {
     return this.#request((requestId) => ({
       type: "create",
@@ -203,6 +213,11 @@ export class SyncClient {
         this.#set({ status: "online", decks: message.decks, activeDeckId: message.activeDeckId });
         const target = state.deckId ?? message.activeDeckId ?? message.decks[0]?.id;
         if (target) this.open(target);
+        return;
+      }
+      case "settings": {
+        const { settings, file, running } = message;
+        this.#set({ settings: { settings, file, running } });
         return;
       }
       case "decks":
