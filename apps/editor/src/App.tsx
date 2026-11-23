@@ -1,8 +1,8 @@
 import type { Slide } from "@veloce/core";
 import { History, Layers, ListChecks, PanelsTopLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { redo, revertAgentChanges, run, undo } from "./actions.js";
-import { alignSelection, distributeSelection } from "./align-actions.js";
+import { revertAgentChanges, run } from "./actions.js";
+import type { Panel } from "./commands/context.js";
 import { AddMenu } from "./components/AddMenu.js";
 import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
@@ -12,6 +12,7 @@ import { Inspector } from "./components/Inspector.js";
 import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
+import { ShortcutsDialog } from "./components/ShortcutsDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { ThemeStylesDialog } from "./components/ThemeStylesDialog.js";
 import { Toasts } from "./components/Toasts.js";
@@ -21,42 +22,14 @@ import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
 import { syncDeckFonts } from "./deck-fonts.js";
 import { closeDialog, openDialog, useOpenDialog } from "./dialogs.js";
-import { commandForKey, runCommand, setCommandContext } from "./editor-commands.js";
+import { setCommandContext } from "./editor-commands.js";
 import { assetUrl, client } from "./editor-context.js";
-import { groupSelection, ungroupSelection } from "./group-actions.js";
-import { deckKeysPassThrough, typing } from "./keyboard.js";
-import type { AlignEdge } from "./model/align.js";
-import {
-  deleteNodes,
-  deleteSlide,
-  duplicateNodes,
-  moveSlide,
-  reorderNode,
-} from "./model/commands.js";
 import { layerSeverities, slideBadges } from "./model/lint-view.js";
-import {
-  editableText,
-  pickTarget,
-  pruneSelection,
-  selectFirstChild,
-  selectParents,
-  selectSiblings,
-} from "./model/selection.js";
+import { editableText, pickTarget, pruneSelection } from "./model/selection.js";
 import { indexSlide } from "./model/slide-index.js";
 import { previewDeck, previewStore } from "./preview.js";
-import { setTool, toolStore } from "./tools.js";
 
 const ACTIVITY_MS = 6000;
-/** Alt + these keys align (Figma's layout), by physical key (`KeyboardEvent.code`). */
-const ALIGN_KEYS: Record<string, AlignEdge> = {
-  KeyA: "left",
-  KeyH: "center",
-  KeyD: "right",
-  KeyW: "top",
-  KeyV: "middle",
-  KeyS: "bottom",
-};
-type Panel = "slides" | "layers" | "history" | "issues";
 
 /** The left panel's tabs. Inactive ones show just their icon (the name is a tooltip). */
 const TABS: Array<{ id: Panel; label: string; icon: typeof History }> = [
@@ -95,16 +68,22 @@ export function App() {
   );
   const current: Slide | null = slides[index] ?? null;
   const slideIndex = current ? indexSlide(current) : null;
-  // What registry commands act on (D81). Set while rendering, so the tool bar rendered below
-  // already sees this deck and selection.
+  // What registry commands act on (D81, D89). Set while rendering, so the menu bar and tool
+  // bar rendered below already see this deck and selection.
   setCommandContext({
-    ...(deck && current && slideIndex && { deck, slideIndex }),
+    ...(deck && { deck }),
+    ...(deck && current && slideIndex && { slideIndex }),
     selection,
     select: setSelection,
     editText: (id) => {
       setSelection([id]);
       setEditing({ id, caret: "all" });
     },
+    goToSlide: setSlideId,
+    panel,
+    showPanel: setPanel,
+    follow,
+    setFollow,
   });
   useArrowNudge(slideIndex, selection);
   useClipboard(deck, slideIndex, selection, setSelection);
@@ -177,117 +156,6 @@ export function App() {
     return () => clearTimeout(timer);
   }, [lastChange, follow]);
 
-  const go = useCallback(
-    (delta: number) => {
-      const next = slides[Math.min(slides.length - 1, Math.max(0, index + delta))];
-      if (next) setSlideId(next.id);
-    },
-    [slides, index],
-  );
-
-  // ── Keyboard ────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.ctrlKey || e.metaKey;
-      const key = e.key.toLowerCase();
-      const history = mod && (key === "z" || key === "y");
-      if (typing(e.target) && !(history && deckKeysPassThrough(e.target))) return;
-      // A modal dialog owns the keyboard (Delete on its button must not delete layers).
-      if (e.target instanceof Element && e.target.closest("dialog[open]")) return;
-      const handled = () => e.preventDefault();
-      /** Claim the key press for the editor and run `action`. */
-      const act = (action: () => void) => {
-        handled();
-        action();
-      };
-
-      if (mod && key === "z") return act(e.shiftKey ? redo : undo);
-      if (mod && key === "y") return act(redo);
-      if (!current || !slideIndex) return;
-
-      // Tools and the Add menu (D81): registry commands, by their shortcuts. Esc leaves a
-      // tool before it changes the selection.
-      if (e.key === "Escape" && toolStore.get() !== "select") return act(() => setTool("select"));
-      const command = e.repeat ? undefined : commandForKey(e);
-      if (command) return act(() => runCommand(command.id));
-
-      if (mod && key === "d" && selection.length > 0) {
-        handled();
-        const command = duplicateNodes(slideIndex, selection);
-        void run(command).then((ok) => ok && setSelection(command?.select ?? []));
-        return;
-      }
-      if (mod && key === "g" && selection.length > 0) {
-        handled();
-        const action = e.shiftKey ? ungroupSelection : groupSelection;
-        void action(slideIndex, selection).then((ids) => ids && setSelection(ids));
-        return;
-      }
-      // Alignment: Alt+A/H/D (left, center, right), Alt+W/V/S (top, middle, bottom);
-      // Alt+Shift+H/V distribute.
-      if (e.altKey && !mod && selection.length > 0 && e.code in ALIGN_KEYS) {
-        handled();
-        if (e.shiftKey && (e.code === "KeyH" || e.code === "KeyV")) {
-          const axis = e.code === "KeyH" ? "horizontal" : "vertical";
-          void distributeSelection(slideIndex, selection, axis);
-        } else if (!e.shiftKey) {
-          void alignSelection(slideIndex, selection, ALIGN_KEYS[e.code] as AlignEdge);
-        }
-        return;
-      }
-      if (mod && key === "a") return act(() => setSelection(selectSiblings(slideIndex, selection)));
-      if (e.key === "Escape") return setSelection(selectParents(slideIndex, selection));
-      if (e.key === "Enter" && selection.length > 0) {
-        // A text layer: start typing, all text selected (Figma). A frame: go inside.
-        const only = selection.length === 1 ? selection[0] : undefined;
-        if (only && editableText(slideIndex, only)) {
-          return act(() => setEditing({ id: only, caret: "all" }));
-        }
-        return act(() => setSelection(selectFirstChild(slideIndex, selection)));
-      }
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        handled();
-        if (selection.length > 0) {
-          void run(deleteNodes(slideIndex, selection), { undoToast: true }).then(
-            (ok) => ok && setSelection([]),
-          );
-        } else if (document.activeElement?.closest(".rail") && slides.length > 1) {
-          const next = slides[index + 1] ?? slides[index - 1];
-          void run(deleteSlide(current), { undoToast: true }).then(
-            (ok) => ok && next && setSlideId(next.id),
-          );
-        }
-        return;
-      }
-      // Reorder without dragging (WCAG 2.5.7): a layer among its siblings, else the slide.
-      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        handled();
-        const delta = e.key === "ArrowUp" ? -1 : 1;
-        const only = selection.length === 1 ? selection[0] : undefined;
-        void run(
-          only ? reorderNode(slideIndex, only, delta) : moveSlide(slides, current.id, delta),
-        );
-        return;
-      }
-      if (selection.length === 0) {
-        const keys: Record<string, number> = {
-          ArrowDown: 1,
-          ArrowRight: 1,
-          PageDown: 1,
-          ArrowUp: -1,
-          ArrowLeft: -1,
-          PageUp: -1,
-        };
-        if (e.key in keys) return act(() => go(keys[e.key] ?? 0));
-        if (e.key === "Home") return go(-Infinity);
-        if (e.key === "End") return go(Infinity);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [current, slideIndex, selection, slides, index, go]);
-
   const recent = useMemo(
     () =>
       new Set(
@@ -320,9 +188,6 @@ export function App() {
         follow={follow}
         onFollowChange={setFollow}
         onOpenDeck={(id) => client.open(id)}
-        onNewDeck={() => openDialog("new-deck")}
-        onDeckInfo={() => openDialog("deck-info")}
-        onThemeStyles={() => openDialog("theme-styles")}
         position={current ? `${index + 1} / ${slides.length}` : null}
       />
       <div className="workspace">
@@ -418,6 +283,7 @@ export function App() {
       {dialog === "new-deck" && <NewDeckDialog onClose={closeDialog} />}
       {dialog === "deck-info" && deck && <DeckInfoDialog deck={deck} onClose={closeDialog} />}
       {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
+      {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
       <AddMenu />
       <Toasts />
       <Tooltips />

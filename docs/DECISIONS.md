@@ -2009,3 +2009,56 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
    trap (before, only a focused stop on the bar caught the key).
 5. **Contrast lint follows:** the gradient sampler reads a sized ellipse (`40% 50% at …`,
    verified against what Chromium reports); stops past 0–100% already parse.
+
+## D89 — Every shortcut is a command; the menu bar is a view of the registry
+
+**Status:** Accepted (2026-11-23). Completes D81 §5; round 5's menu bar.
+
+1. **No hard-coded editor keys left.** Undo/redo, the clipboard, duplicate, delete, select
+   all/parent/children, edit text, align, distribute, group, auto layout, layer and slide
+   order, slide navigation, zoom and the panels are registry commands. One dispatcher
+   (`installCommandKeys`) finds the command for a key press; App's 100-line handler and the
+   canvas's zoom keys are gone. Gestures stay where they are: arrow nudging (a live preview
+   committed on release), Space to pan, F2 in the Layers panel, text formatting inside the
+   text editor, and Delete on a selected gradient stop (D88 §4, which runs first). **Why:**
+   the command palette, Preferences → Keymap and plugin commands (D79 §4) need every
+   command in one list, with its key.
+2. **A command says when its keys apply, not just whether it can run.** New spec fields:
+   `moreKeys` (Ctrl+Y for Redo, PageDown for Next slide, never shown), `matchKey` (zoom's
+   "+" is matched by the character typed, per layout; the clipboard's keys return false
+   because the browser's copy/paste events carry them), `inFields` (`"always"` for zoom,
+   `"dropdown"` for undo, D73's pass-through), `repeat` (held keys repeat only where it
+   makes sense: undo, duplicate, slides, reorder; never Delete) and `keyWhen` (the arrows
+   change slides only with nothing selected; Delete removes the slide only from the slide
+   list). A key goes to the **first registered command that applies**, so one key can mean
+   several things by context: Esc leaves a tool, else selects the parent; Enter edits a text
+   layer, else goes into a frame; Delete removes layers, else the slide; Alt+↑/↓ moves a
+   layer, else the slide. A test lists the keys shared on purpose and fails on any other
+   clash. **Why VS Code's model (`when` on the key, separate from enablement):** the menu
+   must still run "Delete slide" when focus isn't in the slide list.
+3. **Zoom keys work in fields; the rest wait their turn.** The dispatcher listens twice: in
+   the capture phase for `inFields: "always"` commands (fields that stop their keys can't
+   swallow Ctrl + "+"), and in the bubble phase for everything else, so menus, the rename
+   field, the Add menu and the text editor handle their own keys first. A modal dialog owns
+   the keyboard. Commands reach the canvas camera through `camera-controls.ts`, registered
+   while the canvas is mounted.
+4. **Menu bar: File, Edit, View, Insert, Slide, Arrange, Help.** Each command names its menu
+   (`menu`) and group (`section`, a line between groups), so a plugin's command lands in its
+   menu without editor code. The roadmap listed six menus; **Slide** was added (new,
+   duplicate, delete, reorder) like Google Slides and Keynote, because slide commands in
+   Edit or Insert are hard to find. Menus are text only, a check column when an item can be
+   checked (panels are radio items, Follow AI a check box), shortcuts on the right. It
+   behaves like a desktop menu bar: ←/→ move between menus, open or closed, and while one
+   is open, pointing at another opens it. **Why:** this is what Figma, Google Slides and
+   every desktop app teach (familiar interactions).
+5. **Clipboard from the menu:** Cut and Copy run `execCommand`, which fires the same copy
+   event the keys do, so layers reach the system clipboard. Browsers never let a page read
+   the clipboard from a click, so Paste from the menu shows a toast naming Ctrl+V (Google
+   Docs does the same). The desktop app (Phase 6) can paste from the menu for real.
+6. **Narrow windows:** below 1600 px the undo/redo buttons go (the Edit menu and Ctrl+Z
+   remain); below 1280 px the menu bar folds into one ☰ menu with each menu's name as a
+   heading, scrolling if it's taller than the window. **Why:** at 1440 px (the common
+   laptop) the deck name was cut to three letters; tools stay centred (D81 §6).
+7. **Help → Keyboard shortcuts (Ctrl+/)** lists every command with a key, by menu, plus the
+   canvas gestures. It's a view of the registry, so plugin shortcuts appear there too, and
+   Preferences → Keymap grows from it.

@@ -183,10 +183,11 @@ describe.skipIf(problem !== null)("Phase 3: deck structure", { timeout: 60_000 }
     await thumb(0).click(); // the History tab replaces the rail
     await page.getByRole("tab", { name: "History" }).click();
     // The panel's styles don't leak into the top bar (it once stacked Undo/Redo vertically).
-    const bar = page.locator(".topbar");
-    const undoBox = await bar.getByRole("button", { name: "Undo", exact: true }).boundingBox();
-    const redoBox = await bar.getByRole("button", { name: "Redo", exact: true }).boundingBox();
-    expect(redoBox?.y).toBe(undoBox?.y);
+    // (Checked by style: at this window width the buttons give way to the menu bar, D89.)
+    const direction = await page
+      .locator(".topbar .history")
+      .evaluate((el) => getComputedStyle(el).flexDirection);
+    expect(direction).toBe("row");
     const authors = () => page.locator(".history-author-name").allTextContents();
     // The agent built the deck before this tab connected: it's in the history anyway.
     expect(await authors()).toContain("Claude Code");

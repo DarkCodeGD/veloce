@@ -6,13 +6,14 @@
  *
  * Narrow windows fold it into one menu, so the bar never wraps or pushes the AI controls off.
  */
-import { ChevronDown, ImagePlus, Plus } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { openAddMenu } from "../add-menu.js";
 import { commands, isCommandChecked, isCommandEnabled, runCommand } from "../editor-commands.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { shortcutAttrs } from "../platform.js";
 import { useTool } from "../tools.js";
+import { commandMenuItem } from "./command-menu.js";
 import { MenuButton } from "./MenuButton.js";
 
 /** The tool buttons, left to right; the two shapes share one slot. */
@@ -99,23 +100,9 @@ export function ToolBar() {
   );
 }
 
-/** A menu entry for a registry command. */
-function menuItem(id: string, then?: () => void) {
-  const command = commands.get(id);
-  const Icon = command?.icon ?? ImagePlus;
-  const isTool = id.startsWith("tool.");
-  return {
-    label: command?.label ?? id,
-    icon: <Icon size={14} />,
-    ...(command?.shortcut && { shortcut: command.shortcut }),
-    ...(isTool && { checked: isCommandChecked(id) }),
-    disabled: !isCommandEnabled(id),
-    onSelect: () => {
-      then?.();
-      runCommand(id);
-    },
-  };
-}
+/** A menu entry for a registry command, with its icon. */
+const menuItem = (id: string, then?: () => void) =>
+  commandMenuItem(id, { icon: true, ...(then && { then }) });
 
 /** One command as an icon button: pressed while it's the active tool. */
 function ToolButton({ id }: { id: string }) {

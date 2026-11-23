@@ -6,7 +6,8 @@
  * - Ctrl/⌘ + wheel, and trackpad pinch (Chromium sends it as Ctrl + wheel): zoom at the pointer.
  * - Wheel / two-finger scroll: pan. Shift + wheel pans sideways.
  * - Space + drag, or middle-button drag: pan.
- * - Mod+= / Mod+- zoom in/out, Shift+1 fit, Shift+0 100%, Shift+2 zoom to the selection.
+ * - Zoom commands for the registry (D89): Mod+= / Mod+- in/out, Shift+1 fit, Shift+0 100%,
+ *   Shift+2 the selection, and the View menu (camera-controls.ts).
  *
  * Wheel and drag updates are coalesced to one camera per animation frame: a trackpad fires
  * far more events than the screen shows, and each camera re-measures the overlay.
@@ -14,6 +15,7 @@
  */
 import type { SlideView } from "@veloce/renderer";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { setCameraControls } from "../camera-controls.js";
 import { typing } from "../keyboard.js";
 import {
   type Camera,
@@ -24,7 +26,6 @@ import {
   wheelPan,
   wheelZoomFactor,
   zoomAt,
-  zoomKeyDirection,
   zoomStep,
 } from "../model/camera.js";
 import type { Point, Rect } from "../model/geometry.js";
@@ -218,7 +219,13 @@ export function useCanvasCamera({
     return () => el.removeEventListener("wheel", onWheel);
   }, [wrapper, view, current, set]);
 
-  // ── Space (hand tool) while the pointer is over the canvas; zoom keys anywhere ──
+  // The zoom commands (View menu, Ctrl + "+"/"-", Shift + 0/1/2) live in the registry (D89).
+  useEffect(
+    () => setCameraControls({ zoomIn, zoomOut, zoomToFit, zoomTo100, zoomToSelection }),
+    [zoomIn, zoomOut, zoomToFit, zoomTo100, zoomToSelection],
+  );
+
+  // ── Space (hand tool) while the pointer is over the canvas ──────────────────────
   useEffect(() => {
     let over = false;
     const el = wrapper.current;
@@ -231,51 +238,28 @@ export function useCanvasCamera({
     el?.addEventListener("pointerenter", enter);
     el?.addEventListener("pointerleave", leave);
 
-    // Mod + "+"/"-" zoom the canvas even while typing (Figma does too): they type nothing, and
-    // the browser's page zoom is blocked app-wide (page-zoom.ts). In the capture phase, so
-    // fields that keep their keys from editor shortcuts (stopPropagation) can't swallow it.
-    const onZoomKey = (e: KeyboardEvent) => {
-      const zoom = zoomKeyDirection(e);
-      if (zoom === 0) return;
-      e.preventDefault();
-      if (zoom > 0) zoomIn();
-      else zoomOut();
-    };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (zoomKeyDirection(e) !== 0) return; // onZoomKey's
       if (typing(e.target)) return; // typing in a field or into a text layer
       if (e.code === "Space" && (over || latest.current.spaceHeld)) {
         e.preventDefault(); // no page scroll, no pressing a focused button
         if (!e.repeat) setSpaceHeld(true);
-        return;
-      }
-      const mod = e.ctrlKey || e.metaKey;
-      if (e.shiftKey && !mod && !e.altKey) {
-        // By physical key: Shift+1 types "!" (and other symbols on other layouts).
-        const action = { Digit1: zoomToFit, Digit0: zoomTo100, Digit2: zoomToSelection }[e.code];
-        if (action) {
-          e.preventDefault();
-          action();
-        }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === "Space") setSpaceHeld(false);
     };
     const onBlur = () => setSpaceHeld(false);
-    window.addEventListener("keydown", onZoomKey, true);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     return () => {
       el?.removeEventListener("pointerenter", enter);
       el?.removeEventListener("pointerleave", leave);
-      window.removeEventListener("keydown", onZoomKey, true);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [wrapper, zoomIn, zoomOut, zoomToFit, zoomTo100, zoomToSelection]);
+  }, [wrapper]);
 
   // ── Drag to pan: Space + left button, or the middle button ──────────────────────
   /** Starts a pan if this press is one; returns true when it took the press. */

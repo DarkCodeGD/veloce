@@ -1,16 +1,19 @@
 /**
- * A button that opens a menu of commands (the top bar's File menu, D76): the WAI-ARIA menu
- * button pattern. Arrows move between items, Home/End jump, Enter or a click runs one, Esc
- * or a click outside closes it, and focus goes back to the button.
+ * A button that opens a menu of commands (D76): the WAI-ARIA menu button pattern. Arrows
+ * move between items, Home/End jump, Enter or a click runs one, Esc or a click outside
+ * closes it, and focus goes back to the button.
  *
- * It's the seed of the app menu bar (File, Edit, View… with every command, roadmap round 5):
- * the bar will be a row of these.
+ * The menu bar (D89) is a row of these that it drives through `open`/`onOpenChange`:
+ * ←/→ go to the neighbouring menu, and while one is open, pointing at another opens it.
  */
+import { Check } from "lucide-react";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { shortcutKeys } from "../model/shortcuts.js";
 import { PLATFORM } from "../platform.js";
 
 export interface MenuItem {
+  /** Unique within the menu when labels repeat (a folded menu of menus); else the label. */
+  id?: string;
   label: string;
   icon?: ReactNode;
   disabled?: boolean;
@@ -18,6 +21,12 @@ export interface MenuItem {
   shortcut?: string;
   /** The current choice (the active tool): a check-mark item. */
   checked?: boolean;
+  /** `checked` is on/off on its own (Follow AI): a check box, not one choice of several. */
+  checkbox?: boolean;
+  /** A line above it: the start of another group. */
+  separator?: boolean;
+  /** A heading above it (a folded menu bar names each menu). */
+  heading?: string;
   onSelect(): void;
 }
 
@@ -27,6 +36,10 @@ export function MenuButton({
   className,
   trigger,
   tip,
+  open: openWanted,
+  onOpenChange,
+  onCross,
+  onHover,
 }: {
   label: string;
   items: readonly MenuItem[];
@@ -35,6 +48,14 @@ export function MenuButton({
   trigger?: ReactNode;
   /** A tooltip (icon-only buttons). */
   tip?: string;
+  /** Opened or closed from outside (the menu bar); it still opens and closes itself too. */
+  open?: boolean;
+  /** It opened or closed itself (a click, Esc, a click outside, a command run). */
+  onOpenChange?(open: boolean): void;
+  /** ← or → pressed, on the button or in the open menu: the menu bar moves to a neighbour. */
+  onCross?(direction: 1 | -1, open: boolean): void;
+  /** The pointer entered the button. */
+  onHover?(): void;
 }) {
   /** Where the open menu sits (under the button); null when closed. */
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
@@ -49,13 +70,27 @@ export function MenuButton({
     );
   const close = (refocus = true) => {
     setPlace(null);
+    onOpenChange?.(false);
     if (refocus) button.current?.focus();
   };
   // Measured before it opens, so the menu is visible (and focusable) on its first render.
-  const show = () => {
+  const measure = () => {
     const rect = button.current?.getBoundingClientRect();
     if (rect) setPlace({ left: rect.left, top: rect.bottom + 4 });
   };
+  const show = () => {
+    measure();
+    onOpenChange?.(true);
+  };
+
+  // Opened or closed by the menu bar: follow it, without reporting back. Before paint, so
+  // the switch (and focus moving into the new menu) is done before the next key arrives.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only the wish from outside drives this
+  useLayoutEffect(() => {
+    if (openWanted === undefined || openWanted === open) return;
+    if (openWanted) measure();
+    else setPlace(null);
+  }, [openWanted]);
 
   // Focus the first command once it's open.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when it opens; the helpers only read refs
@@ -75,6 +110,9 @@ export function MenuButton({
     return () => document.removeEventListener("pointerdown", outside, true);
   }, [open]);
 
+  // Icons, or check marks, line up in a column when any item has one.
+  const iconColumn = items.some((item) => item.icon !== undefined || item.checked !== undefined);
+
   const onMenuKey = (e: React.KeyboardEvent) => {
     e.stopPropagation(); // menu keys never reach the editor's shortcuts
     const list = enabled();
@@ -82,6 +120,8 @@ export function MenuButton({
     const focus = (i: number) => list[(i + list.length) % list.length]?.focus();
     if (e.key === "ArrowDown") focus(at + 1);
     else if (e.key === "ArrowUp") focus(at - 1);
+    else if (onCross && (e.key === "ArrowRight" || e.key === "ArrowLeft"))
+      onCross(e.key === "ArrowRight" ? 1 : -1, true);
     else if (e.key === "Home") focus(0);
     else if (e.key === "End") focus(list.length - 1);
     else if (e.key === "Escape") close();
@@ -102,10 +142,16 @@ export function MenuButton({
         data-tip={open ? undefined : tip}
         aria-controls={open ? menuId : undefined}
         onClick={() => (open ? close(false) : show())}
+        onPointerEnter={onHover}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && !open) {
             e.preventDefault();
+            e.stopPropagation(); // the arrows here aren't the editor's (next slide)
             show();
+          } else if (onCross && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+            e.preventDefault();
+            e.stopPropagation();
+            onCross(e.key === "ArrowRight" ? 1 : -1, open);
           }
         }}
       >
@@ -118,36 +164,73 @@ export function MenuButton({
           role="menu"
           aria-label={label}
           className="menu-popup"
-          style={{ left: place.left, top: place.top }}
+          // A long menu (folded menu bar, small window) scrolls instead of running off-screen.
+          style={{
+            left: place.left,
+            top: place.top,
+            maxHeight: window.innerHeight - place.top - 8,
+          }}
           onKeyDown={onMenuKey}
         >
           {items.map((item) => (
-            // biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-checked is only set on menuitemradio items (the role is chosen just above)
-            <button
-              key={item.label}
-              type="button"
-              role={item.checked === undefined ? "menuitem" : "menuitemradio"}
-              aria-checked={item.checked}
-              className="menu-item"
-              disabled={item.disabled}
-              onClick={() => {
+            <MenuRow
+              key={item.id ?? item.label}
+              item={item}
+              iconColumn={iconColumn}
+              onSelect={() => {
                 // Focus goes back to the button first, so whatever the command opens (a
                 // dialog) returns focus there when it closes.
                 close();
                 item.onSelect();
               }}
-            >
-              {item.icon && <span className="menu-icon">{item.icon}</span>}
-              {item.label}
-              {item.shortcut && (
-                <span className="menu-keys" aria-hidden="true">
-                  {shortcutKeys(item.shortcut, PLATFORM).join(PLATFORM === "mac" ? "" : "+")}
-                </span>
-              )}
-            </button>
+            />
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+/** One command in the menu, with the line or heading that starts its group. */
+function MenuRow({
+  item,
+  iconColumn,
+  onSelect,
+}: {
+  item: MenuItem;
+  iconColumn: boolean;
+  onSelect(): void;
+}) {
+  const role =
+    item.checked === undefined ? "menuitem" : item.checkbox ? "menuitemcheckbox" : "menuitemradio";
+  return (
+    <>
+      {item.heading !== undefined ? (
+        <div className="menu-heading" role="presentation">
+          {item.heading}
+        </div>
+      ) : (
+        item.separator && <hr className="menu-separator" />
+      )}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-checked is only set on checkable items (the role is chosen just above) */}
+      <button
+        type="button"
+        role={role}
+        aria-checked={item.checked}
+        className="menu-item"
+        disabled={item.disabled}
+        onClick={onSelect}
+      >
+        {iconColumn && (
+          <span className="menu-icon">{item.icon ?? (item.checked && <Check size={14} />)}</span>
+        )}
+        {item.label}
+        {item.shortcut && (
+          <span className="menu-keys" aria-hidden="true">
+            {shortcutKeys(item.shortcut, PLATFORM).join(PLATFORM === "mac" ? "" : "+")}
+          </span>
+        )}
+      </button>
     </>
   );
 }

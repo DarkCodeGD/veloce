@@ -386,11 +386,35 @@ textarea::placeholder {
   border-bottom: 1px solid var(--border);
 }
 
-/* The File menu (D76): the first of the app menu bar's menus. */
+/* The menu bar (D89): File, Edit, View… as quiet text buttons, the first flush with the edge. */
+.menubar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: -8px;
+}
+
+/* Narrow windows: one ☰ menu instead (D89), like the folded tool bar. */
+.menubar-folded.menu-button {
+  display: none;
+  width: 30px;
+  margin-left: -8px;
+  padding: 0;
+}
+
+@media (max-width: 1280px) {
+  .menubar {
+    display: none;
+  }
+  .menubar-folded.menu-button {
+    display: inline-grid;
+    place-items: center;
+  }
+}
+
 .menu-button {
   height: 28px;
-  margin-left: -8px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -408,7 +432,9 @@ textarea::placeholder {
   position: fixed;
   z-index: 20;
   display: grid;
-  min-width: 200px;
+  align-content: start;
+  min-width: 220px;
+  overflow-y: auto;
   padding: 4px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -444,7 +470,32 @@ textarea::placeholder {
 
 .menu-icon {
   display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 14px;
   color: var(--text-muted);
+}
+
+/* A line between a menu's groups, and the menu names in the folded menu bar. */
+.menu-separator {
+  width: 100%;
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: var(--border);
+}
+
+.menu-heading {
+  padding: 10px 8px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.menu-heading:first-child {
+  padding-top: 4px;
 }
 
 /* The deck leads the bar (no in-app logo: the app's name is in the window title). */
@@ -473,6 +524,7 @@ textarea::placeholder {
 .deck-position {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .history {
@@ -485,8 +537,16 @@ textarea::placeholder {
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
+}
+
+/* Laptop widths: the menu bar needs the room more than undo/redo buttons, which the Edit
+   menu and Ctrl+Z already give (D89). */
+@media (max-width: 1600px) {
+  .topbar .history {
+    display: none;
+  }
 }
 
 /* The tool bar (D62, D81), in the bar's centre column. */
@@ -3780,6 +3840,63 @@ html.is-scrubbing * {
 
 /* Theme styles dialog (D78): tabs over a list + editor (text styles, shadows) or rows with a
    visual (spacing, radius). */
+
+/* Help → Keyboard shortcuts (D89): two columns of menus, keys as chips. */
+.shortcuts-dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.shortcut-sections {
+  columns: 2 280px;
+  column-gap: 32px;
+}
+
+.shortcut-section {
+  break-inside: avoid;
+  margin-bottom: 20px;
+}
+
+.shortcut-section h3 {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shortcut-section dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 26px;
+}
+
+.shortcut-row dt {
+  min-width: 0;
+}
+
+.shortcut-row dd {
+  display: flex;
+  flex: none;
+  gap: 3px;
+  margin: 0;
+}
+
+.shortcut-row kbd {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--hover);
+  text-align: center;
+}
 
 .theme-styles-dialog {
   width: min(760px, calc(100vw - 32px));

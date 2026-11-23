@@ -27,10 +27,10 @@
 ## Current status
 
 - **Active phase:** Phase 3: Manual editor, round 5 (app shell)
-- **Last updated:** 2026-11-20
-- **Next:** move the remaining commands into the registry, with the menu bar. The command registry
-  (D81) is the future plugin API (D79): the menu bar and palette read it.
-- **State:** `pnpm check` is green (735 tests, including real-Chromium lint, preview and editor
+- **Last updated:** 2026-11-23
+- **Next:** workspaces (a switcher with fixed presets of resizable, collapsible panels; Design
+  first). The command registry (D81, D89) is the future plugin API (D79): the palette reads it.
+- **State:** `pnpm check` is green (749 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -46,7 +46,7 @@
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
-    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88).
+    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -199,11 +199,10 @@ Animate and Present workspaces instead of being squeezed into today's screen.
       freely, sized, Delete removes a stop (D88)
 - [x] Command registry (D79 §4): tools and the Add menu's entries register in one place the
       tool bar, Add menu and keyboard read (D81)
-- [ ] Move the remaining commands (undo, duplicate, align, group, zoom…) into the registry,
-      with the menu bar
-- [ ] Top bar: app menu bar (File, Edit, View, Insert, Arrange, Help) with every command
-      and its shortcut, a row of `MenuButton`s (the File menu is the first, D76); the deck switcher, Follow AI / Live and Present stay in the bar on
-      every workspace (AI activity is never hidden in one workspace)
+- [x] Every remaining shortcut is a registry command, found by one key dispatcher (D89)
+- [x] Menu bar: File, Edit, View, Insert, Slide, Arrange, Help, every command with its
+      shortcut; folds to ☰ in narrow windows; Help → Keyboard shortcuts (D89). The deck
+      switcher, Follow AI / Live (and Present, Phase 4) stay in the bar on every workspace
 - [ ] Workspaces: a switcher with fixed presets of resizable, collapsible panels. Design is
       the first (today's editor); a workspace appears only once its phase ships (Animate
       and Present in Phase 4). Panel sizes and the last workspace are remembered

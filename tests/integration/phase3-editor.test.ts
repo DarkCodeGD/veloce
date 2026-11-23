@@ -362,23 +362,24 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
   });
 
   it("tooltips show after a short delay on hover, at once on keyboard focus, with shortcuts", async () => {
-    const undo = page.getByRole("button", { name: "Undo" });
+    // The tool bar's buttons (always shown; undo/redo give way to the menu bar on laptops, D89).
+    const select = page.getByRole("button", { name: "Select", exact: true });
     const tooltip = page.locator(".tooltip");
-    await undo.hover();
+    await select.hover();
     await page.waitForTimeout(150);
     expect(await tooltip.count()).toBe(0); // not instantly: no flicker while moving around
     await expect(tooltip).toBeVisibleSoon();
-    expect(await tooltip.locator("span").first().textContent()).toBe("Undo");
-    expect(await tooltip.locator("kbd").allTextContents()).toEqual(["Ctrl", "Z"]);
-    expect(await undo.getAttribute("aria-keyshortcuts")).toBe("Control+Z");
+    expect(await tooltip.locator("span").first().textContent()).toBe("Select");
+    expect(await tooltip.locator("kbd").allTextContents()).toEqual(["V"]);
+    expect(await select.getAttribute("aria-keyshortcuts")).toBe("V");
 
     await page.mouse.move(700, 450);
     await expect.poll(() => tooltip.count()).toBe(0);
 
     await page.waitForTimeout(500); // let the "warm" window pass
-    await page.getByRole("button", { name: "Redo" }).focus();
+    await page.getByRole("button", { name: "Frame", exact: true }).focus();
     await page.keyboard.press("Shift+Tab"); // keyboard focus → :focus-visible
-    await expect.poll(() => tooltip.locator("span").first().textContent()).toBe("Undo");
+    await expect.poll(() => tooltip.locator("span").first().textContent()).toBe("Select");
     await page.keyboard.press("Escape");
     await expect.poll(() => tooltip.count()).toBe(0);
   });

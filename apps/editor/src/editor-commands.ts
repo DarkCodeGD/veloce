@@ -1,42 +1,38 @@
 /**
- * The app's command registry (D79 §4, D81) and the built-in commands in it: the canvas tools
- * and everything the Add menu offers. The tool bar, the Add menu and the keyboard read this
- * one list; the menu bar and command palette (roadmap round 5) will too, and plugins will
- * register here the same way.
+ * The app's command registry (D79 §4, D81, D89) and the built-in commands in it. The menu
+ * bar, the tool bar, the Add menu and the keyboard read this one list; the command palette
+ * will too, and plugins will register here the same way.
  *
  * Commands get the editor's state as a context that App keeps current (`setCommandContext`),
  * so a command never reaches into a component.
  */
-import {
-  Circle,
-  Frame,
-  GalleryVerticalEnd,
-  Hand,
-  ImagePlus,
-  type LucideIcon,
-  MousePointer2,
-  Plus,
-  Puzzle,
-  Square,
-  Type,
-} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useSyncExternalStore } from "react";
-import { canvasCentre, openAddMenu, pointerOverCanvas } from "./add-menu.js";
-import { autoLayoutSelection } from "./group-actions.js";
-import { addLayer, elementInfos, type InsertContext } from "./insert-actions.js";
-import { CommandRegistry, type RunOptions } from "./model/command-registry.js";
-import { insertables } from "./model/insert.js";
-import { SHORTCUTS } from "./model/shortcuts.js";
+import { arrangeCommands } from "./commands/arrange.js";
+import type { CommandContext } from "./commands/context.js";
+import { editCommands } from "./commands/edit.js";
+import { fileCommands, helpCommands } from "./commands/file.js";
+import { slideCommands } from "./commands/slide.js";
+import { addCommands, toolCommands } from "./commands/tools.js";
+import { viewCommands } from "./commands/view.js";
+import { deckKeysPassThrough, typing } from "./keyboard.js";
+import { CommandRegistry, type KeyTarget, type RunOptions } from "./model/command-registry.js";
 import { PLATFORM } from "./platform.js";
-import { setTool, type Tool, toolStore } from "./tools.js";
 
-/** The editor's state as commands see it: no deck or slide when none is open. */
-export type CommandContext = Omit<InsertContext, "deck" | "slideIndex"> &
-  Partial<Pick<InsertContext, "deck" | "slideIndex">>;
+export type { CommandContext } from "./commands/context.js";
 
 export const commands = new CommandRegistry<CommandContext, LucideIcon>();
 
-let context: CommandContext = { selection: [], select() {}, editText() {} };
+let context: CommandContext = {
+  selection: [],
+  select() {},
+  editText() {},
+  goToSlide() {},
+  panel: "slides",
+  showPanel() {},
+  follow: true,
+  setFollow() {},
+};
 export const setCommandContext = (next: CommandContext) => {
   context = next;
 };
@@ -44,94 +40,81 @@ export const setCommandContext = (next: CommandContext) => {
 export const runCommand = (id: string, options?: RunOptions) => commands.run(id, context, options);
 export const isCommandEnabled = (id: string) => commands.isEnabled(id, context);
 export const isCommandChecked = (id: string) => commands.get(id)?.checked?.(context) ?? false;
-/** The command bound to a key press, if any (and enabled). */
-export const commandForKey = (e: KeyboardEvent) => commands.forKey(e, PLATFORM, context);
 
-/** One menu's commands, re-rendering when commands come or go. */
+/** One list's commands ("add"), re-rendering when commands come or go. */
 export function useCommands(group: string) {
   useSyncExternalStore(commands.subscribe, commands.version);
   return commands.list(group);
 }
 
-/** A slide is open: there's somewhere to add to. */
-const onSlide = (c: CommandContext): c is InsertContext =>
-  c.deck !== undefined && c.slideIndex !== undefined;
-
-const TOOLS: ReadonlyArray<{ tool: Tool; label: string; icon: LucideIcon; shortcut: string }> = [
-  { tool: "select", label: "Select", icon: MousePointer2, shortcut: SHORTCUTS.toolSelect },
-  { tool: "frame", label: "Frame", icon: Frame, shortcut: SHORTCUTS.toolFrame },
-  { tool: "rect", label: "Rectangle", icon: Square, shortcut: SHORTCUTS.toolRect },
-  { tool: "ellipse", label: "Ellipse", icon: Circle, shortcut: SHORTCUTS.toolEllipse },
-  { tool: "text", label: "Text", icon: Type, shortcut: SHORTCUTS.toolText },
-  { tool: "hand", label: "Hand", icon: Hand, shortcut: SHORTCUTS.toolHand },
-];
-
-const ADD_ICONS: Record<string, LucideIcon> = {
-  text: Type,
-  frame: Frame,
-  rect: Square,
-  ellipse: Circle,
-  image: ImagePlus,
-};
+/** The menu bar's menus, left to right (D89). Commands name theirs in `menu`. */
+export const MENU_BAR = [
+  { id: "file", label: "File" },
+  { id: "edit", label: "Edit" },
+  { id: "view", label: "View" },
+  { id: "insert", label: "Insert" },
+  { id: "slide", label: "Slide" },
+  { id: "arrange", label: "Arrange" },
+  { id: "help", label: "Help" },
+] as const;
 
 let registered = false;
 
-/** Registers the built-ins once (main.tsx, before the first render). */
+/**
+ * Registers the built-ins once (main.tsx, before the first render). Order matters where
+ * commands share a key: the first that applies wins (Esc leaves a tool before it selects
+ * the parent; Delete removes layers before it removes the slide).
+ */
 export function registerBuiltinCommands(): void {
   if (registered) return;
   registered = true;
-  for (const { tool, label, icon, shortcut } of TOOLS) {
-    commands.register({
-      id: `tool.${tool}`,
-      label,
-      icon,
-      shortcut,
-      group: "tools",
-      enabled: (c) => tool === "select" || onSlide(c),
-      checked: () => toolStore.get() === tool,
-      run: () => setTool(tool),
-    });
+  for (const list of [
+    toolCommands(),
+    fileCommands(),
+    editCommands(),
+    viewCommands(),
+    addCommands(),
+    slideCommands(),
+    arrangeCommands(),
+    helpCommands(),
+  ]) {
+    for (const command of list) commands.register(command);
   }
-  for (const item of insertables(elementInfos())) {
-    commands.register({
-      id: `add.${item.id}`,
-      label: item.label,
-      icon: ADD_ICONS[item.id] ?? Puzzle,
-      group: "add",
-      section: item.group,
-      keywords: item.keywords,
-      enabled: onSlide,
-      run: (c, { at }) => {
-        if (onSlide(c)) void addLayer(c, item, at ?? null);
-      },
-    });
-  }
-  commands.register({
-    id: "layer.autoLayout",
-    label: "Add auto layout",
-    icon: GalleryVerticalEnd,
-    shortcut: SHORTCUTS.autoLayout,
-    group: "layer",
-    keywords: "stack flow arrange",
-    enabled: (c) => onSlide(c) && c.selection.length > 0,
-    run: (c) => {
-      if (!onSlide(c)) return;
-      void autoLayoutSelection(c.slideIndex, c.selection).then((ids) => ids && c.select(ids));
-    },
-  });
-  commands.register({
-    id: "add.menu",
-    label: "Add…",
-    icon: Plus,
-    shortcut: SHORTCUTS.addMenu,
-    group: "app",
-    enabled: onSlide,
-    // At the pointer when it's over the canvas (the layer goes there); else from the canvas's
-    // centre, adding where a paste would.
-    run: (_c, { at }) => {
-      const point = at ?? pointerOverCanvas();
-      const origin = point ?? canvasCentre();
-      openAddMenu({ left: origin.x, top: origin.y, at: point });
-    },
-  });
+}
+
+/** Where focus is, for the keys: the editor, a dropdown (no text of its own), or a field. */
+function keyTarget(target: EventTarget | null): KeyTarget {
+  if (!typing(target)) return "editor";
+  return deckKeysPassThrough(target) ? "dropdown" : "field";
+}
+
+/**
+ * The editor's keyboard (D89): every shortcut is a registry command, found by its key.
+ *
+ * - Capture phase, for the few that work in any field (zoom): fields that keep their keys
+ *   from the editor (`stopPropagation`) can't swallow them.
+ * - Bubble phase, for the rest: a menu, the layer rename field or the text editor handle
+ *   their own keys first and stop them.
+ *
+ * A modal dialog owns the keyboard (Delete on its button must not delete layers). Installed
+ * once (main.tsx); returns a remover for tests.
+ */
+export function installCommandKeys(target: Window = window): () => void {
+  const runFor = (e: KeyboardEvent, where: KeyTarget, phase: "capture" | "bubble") => {
+    const command = commands.forKey(e, PLATFORM, context, where);
+    if (!command || (command.inFields === "always") !== (phase === "capture")) return;
+    e.preventDefault();
+    commands.run(command.id, context);
+  };
+  const onCapture = (e: KeyboardEvent) => runFor(e, "field", "capture");
+  const onBubble = (e: KeyboardEvent) => {
+    if (e.target instanceof Element && e.target.closest("dialog[open]")) return;
+    runFor(e, keyTarget(e.target), "bubble");
+  };
+  target.addEventListener("keydown", onCapture, true);
+  target.addEventListener("keydown", onBubble);
+  return () => {
+    target.removeEventListener("keydown", onCapture, true);
+    target.removeEventListener("keydown", onBubble);
+  };
 }

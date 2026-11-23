@@ -8,6 +8,11 @@ export type Platform = "mac" | "other";
 export const SHORTCUTS = {
   undo: "Mod+Z",
   redo: "Mod+Shift+Z",
+  redoAlt: "Mod+Y",
+  // The browser delivers these as clipboard events (useClipboard); listed for the menus.
+  cut: "Mod+X",
+  copy: "Mod+C",
+  paste: "Mod+V",
   duplicate: "Mod+D",
   group: "Mod+G",
   ungroup: "Mod+Shift+G",
@@ -23,7 +28,11 @@ export const SHORTCUTS = {
   distributeHorizontal: "Alt+Shift+H",
   distributeVertical: "Alt+Shift+V",
   delete: "Delete",
+  backspace: "Backspace",
   selectSiblings: "Mod+A",
+  selectParent: "Escape",
+  // A text layer starts typing; a frame selects its first child.
+  enter: "Enter",
   rename: "F2",
   moveUp: "Alt+ArrowUp",
   moveDown: "Alt+ArrowDown",
@@ -33,6 +42,17 @@ export const SHORTCUTS = {
   zoomToFit: "Shift+1",
   zoomTo100: "Shift+0",
   zoomToSelection: "Shift+2",
+  // Slides, with nothing selected (the arrows nudge a selection).
+  previousSlide: "ArrowUp",
+  nextSlide: "ArrowDown",
+  firstSlide: "Home",
+  lastSlide: "End",
+  // The left panel's tabs (Figma's Alt+digit).
+  panelSlides: "Alt+1",
+  panelLayers: "Alt+2",
+  panelHistory: "Alt+3",
+  panelIssues: "Alt+4",
+  keyboardShortcuts: "Mod+/",
   // Paragraph alignment while typing (Google Docs' keys), matched on the letter.
   textAlignLeft: "Mod+Shift+L",
   textAlignCenter: "Mod+Shift+E",
@@ -55,6 +75,9 @@ const MAC: Record<string, string> = {
   Shift: "⇧",
   Alt: "⌥",
   Delete: "⌫",
+  Backspace: "⌫",
+  Escape: "Esc",
+  Enter: "↩",
   ArrowUp: "↑",
   ArrowDown: "↓",
   ArrowLeft: "←",
@@ -63,6 +86,7 @@ const MAC: Record<string, string> = {
 const OTHER: Record<string, string> = {
   Mod: "Ctrl",
   Delete: "Del",
+  Escape: "Esc",
   ArrowUp: "↑",
   ArrowDown: "↓",
   ArrowLeft: "←",
