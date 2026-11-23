@@ -30,7 +30,7 @@
 - **Last updated:** 2026-11-24
 - **Next:** the Preferences window (a user settings file owned by the server). The command
   registry (D81, D89) is the future plugin API (D79): the palette reads it.
-- **State:** `pnpm check` is green (759 tests, including real-Chromium lint, preview and editor
+- **State:** `pnpm check` is green (760 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,

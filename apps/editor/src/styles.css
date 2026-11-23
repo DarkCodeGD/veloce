@@ -834,14 +834,22 @@ textarea::placeholder {
 .splitter::before {
   content: "";
   position: absolute;
-  inset: -4px;
+}
+
+/* Wider only across the edge: reaching past its ends would stretch the page (scrolling). */
+.splitter.is-x::before {
+  inset: 0 -4px;
+}
+
+.splitter.is-y::before {
+  inset: -4px 0;
 }
 
 /* The edge lights up once the pointer rests on it (VS Code's sash), and while focused. */
 .splitter::after {
   content: "";
   position: absolute;
-  inset: -1px;
+  inset: 0 -1px;
   background: transparent;
   transition: background var(--fast) 0s;
 }
@@ -984,6 +992,8 @@ html[data-resizing="y"] * {
 }
 
 .tab-panel {
+  /* A scroll area holds its own absolutely placed content (see .inspector). */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -2209,6 +2219,9 @@ html[data-resizing="y"] * {
 }
 
 .inspector {
+  /* Without this, absolutely placed content (a screen-reader-only legend) is placed against
+     the page instead and escapes the scrolling: the whole page could scroll. */
+  position: relative;
   flex: 1;
   min-width: 0;
   overflow-y: auto;

@@ -129,6 +129,23 @@ describe.skipIf(problem !== null)("Phase 3: workspace panels", { timeout: 60_000
     );
   });
 
+  it("never scrolls the page itself: everything scrolls inside its panel", async () => {
+    const overflow = () =>
+      page.evaluate(() => {
+        const root = document.documentElement;
+        return [root.scrollHeight - innerHeight, root.scrollWidth - innerWidth];
+      });
+    try {
+      // A short window: the inspector's content runs far below it, and must stay inside.
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await expect.poll(overflow).toEqual([0, 0]);
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await expect.poll(overflow).toEqual([0, 0]);
+    } finally {
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+  });
+
   it("collapses speaker notes from their header, giving the canvas the room", async () => {
     const header = page.getByRole("button", { name: "Speaker notes" });
     const notes = page.getByRole("textbox", { name: "Speaker notes" });
