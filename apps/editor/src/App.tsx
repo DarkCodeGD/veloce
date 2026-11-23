@@ -39,6 +39,7 @@ import { Tooltips } from "./components/Tooltips.js";
 import { TopBar } from "./components/TopBar.js";
 import { useArrowNudge } from "./components/useArrowNudge.js";
 import { useClipboard } from "./components/useClipboard.js";
+import { SaveVersionDialog, VersionsDialog } from "./components/VersionsDialog.js";
 import { syncDeckFonts } from "./deck-fonts.js";
 import { closeDialog, openDialog, useOpenDialog } from "./dialogs.js";
 import { setCommandContext } from "./editor-commands.js";
@@ -402,6 +403,8 @@ export function App() {
       {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
       {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
       {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
+      {dialog === "save-version" && deck && <SaveVersionDialog onClose={closeDialog} />}
+      {dialog === "versions" && deck && <VersionsDialog deckId={deck.id} onClose={closeDialog} />}
       <CommandPalette deck={deck ?? undefined} />
       <AddMenu />
       <Toasts />

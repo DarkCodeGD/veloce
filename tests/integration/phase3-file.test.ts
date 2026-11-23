@@ -55,7 +55,7 @@ describe.skipIf(problem !== null)("Phase 3: File menu", { timeout: 60_000 }, () 
     const focused = () => page.evaluate(() => document.activeElement?.textContent);
     await expect.poll(focused).toBe("New deck…");
     await page.keyboard.press("ArrowDown");
-    await expect.poll(focused).toBe("Deck info…");
+    await expect.poll(focused).toBe("Save version…");
     await page.keyboard.press("Escape");
     expect(await page.getByRole("menu").count()).toBe(0);
     await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe("File");

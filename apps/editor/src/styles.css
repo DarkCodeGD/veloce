@@ -4433,3 +4433,112 @@ html.is-scrubbing * {
   padding: 14px 10px;
   color: var(--text-muted);
 }
+
+/* Versions (D93): the list beside a read-only preview of the picked version's slides. */
+.versions-dialog {
+  width: min(880px, calc(100vw - 32px));
+}
+
+.save-version-dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.versions-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  height: min(480px, calc(100vh - 220px));
+  min-height: 0;
+}
+
+.versions-list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.versions-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.versions-item:hover {
+  background: var(--hover);
+}
+
+.versions-item[aria-selected="true"] {
+  background: var(--accent-soft);
+}
+
+.versions-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.versions-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.versions-preview {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.versions-preview-head {
+  display: grid;
+  gap: 2px;
+}
+
+.versions-preview-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.versions-slides {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-content: start;
+  gap: 14px 12px;
+  margin: 0;
+  padding: 0 4px 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.versions-slide {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+/* Delete sits apart, on the left of the footer. */
+.versions-delete {
+  margin-right: auto;
+}
+
+.versions-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.versions-empty p {
+  margin: 0;
+  max-width: 360px;
+}
+
+.versions-empty p:first-of-type {
+  color: var(--text);
+  font-size: 15px;
+}

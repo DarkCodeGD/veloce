@@ -24,6 +24,7 @@ import {
   type ServerMessage,
   type SettingsPatch,
   type SettingsReport,
+  type VersionInfo,
 } from "@veloce/core";
 
 /** A rejected write: the server's reason, ready to show to the user. */
@@ -60,6 +61,8 @@ export interface SyncState {
   lint: LintReport | null;
   /** The app settings (D91), from the server; null until they arrive. */
   settings: SettingsReport | null;
+  /** The open deck's saved versions (D93), newest first. */
+  versions: VersionInfo[];
 }
 
 /** Matches the server's limit (doc-server HISTORY_LIMIT). */
@@ -76,6 +79,7 @@ const INITIAL: SyncState = {
   history: [],
   lint: null,
   settings: null,
+  versions: [],
 };
 
 export class SyncClient {
@@ -86,7 +90,11 @@ export class SyncClient {
   #retry = 0;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
   #disposed = false;
-  readonly #pending = new Map<string, { resolve(): void; reject(error: SyncError): void }>();
+  /** Requests waiting for their answer: a `result`, or a `version` for `version.open`. */
+  readonly #pending = new Map<
+    string,
+    { resolve(value: unknown): void; reject(error: SyncError): void }
+  >();
 
   constructor(url: string) {
     this.#url = url;
@@ -132,15 +140,62 @@ export class SyncClient {
     return this.#request((requestId) => ({ type: "revert", requestId, deckId, versions }));
   }
 
-  /**
-   * Make a new deck (`theme`: a built-in theme ID). It becomes the active deck, so this tab
-   * (and every other) switches to it, as when an agent calls create_deck.
-   */
   /** Change some app settings (D91); every tab gets the new ones. */
   updateSettings(patch: SettingsPatch): Promise<void> {
     return this.#request((requestId) => ({ type: "settings.update", requestId, patch }));
   }
 
+  // ── Versions (D93): saved in the deck's file; every tab of the deck gets the new list ──
+
+  saveVersion(name: string): Promise<void> {
+    return this.#onDeck((deckId) => (requestId) => ({
+      type: "version.save",
+      requestId,
+      deckId,
+      name,
+    }));
+  }
+
+  deleteVersion(versionId: string): Promise<void> {
+    return this.#onDeck((deckId) => (requestId) => ({
+      type: "version.delete",
+      requestId,
+      deckId,
+      versionId,
+    }));
+  }
+
+  /** Turns the deck back into a version, as a change of your own (undo brings it back). */
+  restoreVersion(versionId: string): Promise<void> {
+    return this.#onDeck((deckId) => (requestId) => ({
+      type: "version.restore",
+      requestId,
+      deckId,
+      versionId,
+    }));
+  }
+
+  /** A version's deck, to look at (never to edit). */
+  openVersion(versionId: string): Promise<Deck> {
+    return this.#onDeck<Deck>((deckId) => (requestId) => ({
+      type: "version.open",
+      requestId,
+      deckId,
+      versionId,
+    }));
+  }
+
+  /** A request about the open deck; rejects when none is open. */
+  #onDeck<T = void>(build: (deckId: string) => (requestId: string) => unknown): Promise<T> {
+    const deckId = this.#state.deckId;
+    if (!deckId) return Promise.reject(new SyncError({ message: "No deck is open" }));
+    return this.#request<T>(build(deckId));
+  }
+
+  /**
+   * Make a new deck (`theme`: a built-in theme ID). It becomes the active deck, so this tab
+   * (and every other) switches to it, as when an agent calls create_deck.
+   */
   createDeck(title: string, theme?: string): Promise<void> {
     return this.#request((requestId) => ({
       type: "create",
@@ -162,13 +217,13 @@ export class SyncClient {
     }
   }
 
-  #request(build: (requestId: string) => unknown): Promise<void> {
+  #request<T = void>(build: (requestId: string) => unknown): Promise<T> {
     if (this.#socket?.readyState !== WebSocket.OPEN) {
       return Promise.reject(new SyncError({ message: "Not connected to the Veloce server" }));
     }
     const requestId = randomId(16);
-    return new Promise<void>((resolve, reject) => {
-      this.#pending.set(requestId, { resolve, reject });
+    return new Promise<T>((resolve, reject) => {
+      this.#pending.set(requestId, { resolve: resolve as (value: unknown) => void, reject });
       this.#send(build(requestId));
     });
   }
@@ -232,8 +287,8 @@ export class SyncClient {
           deck: message.deck,
           version: message.version,
           history: message.history ?? [], // older servers don't send it
-          // Another deck's issues don't apply; a resync of this one keeps them until re-checked.
-          ...(message.deckId !== state.deckId && { lint: null }),
+          // Another deck's issues and versions don't apply; a resync of this one keeps them.
+          ...(message.deckId !== state.deckId && { lint: null, versions: [] }),
         });
         return;
       case "lint": {
@@ -274,8 +329,17 @@ export class SyncClient {
       case "result": {
         const pending = this.#pending.get(message.requestId);
         this.#pending.delete(message.requestId);
-        if (message.ok) pending?.resolve();
+        if (message.ok) pending?.resolve(undefined);
         else pending?.reject(new SyncError(message.error));
+        return;
+      }
+      case "versions":
+        if (message.deckId === state.deckId) this.#set({ versions: message.versions });
+        return;
+      case "version": {
+        const pending = this.#pending.get(message.requestId);
+        this.#pending.delete(message.requestId);
+        pending?.resolve(message.deck);
         return;
       }
       case "error":

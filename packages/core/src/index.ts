@@ -27,3 +27,4 @@ export * from "./tokens.js";
 export * from "./transaction.js";
 export * from "./tree.js";
 export * from "./validate.js";
+export * from "./versions.js";

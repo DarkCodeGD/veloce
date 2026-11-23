@@ -7,17 +7,25 @@ import {
   type AssetInfo,
   type Deck,
   DeckDocument,
+  type DeckVersion,
   type HistoryEntry,
   isAgentOrigin,
+  MAX_VERSIONS,
   type Node,
+  newVersionId,
   type Op,
   type Origin,
   type RevertMarks,
+  restoreOps,
   type Slide,
   sha256Hex,
   TextContentSchema,
   type TransactionResult,
   toPlainText,
+  VeloceError,
+  type VersionInfo,
+  VersionNameSchema,
+  versionInfo,
   walkNodes,
 } from "@veloce/core";
 import type { DeckBundle } from "@veloce/format";
@@ -150,6 +158,8 @@ export interface OpenDeckOptions {
   optimizer?: ImageOptimizer;
   /** Undo steps kept per origin; a function follows a changed setting (D91). Default 200. */
   historyLimit?: number | (() => number);
+  /** Versions saved in the file (D93), oldest first. Their assets must be in `assets`. */
+  versions?: readonly DeckVersion[];
 }
 
 export class OpenDeck {
@@ -189,6 +199,11 @@ export class OpenDeck {
   #emitted: Deck;
   /** Recent changes for the history panel, oldest first (this session only, not saved). */
   readonly #history: Recorded[] = [];
+  /**
+   * Saved versions (D93), oldest first. Each holds the deck object as it was: decks are
+   * immutable and share untouched slides, so a version costs only what changed since.
+   */
+  readonly #versions: DeckVersion[];
 
   constructor(options: OpenDeckOptions) {
     this.id = options.deck.id;
@@ -203,6 +218,71 @@ export class OpenDeck {
     this.#optimizeImages = options.optimizeImages ?? true;
     this.#optimizer = options.optimizer ?? optimizeInWorker;
     this.#emitted = this.#doc.deck;
+    this.#versions = [...(options.versions ?? [])];
+  }
+
+  // ── Versions (D93) ──
+
+  /** The saved versions, newest first. */
+  savedVersions(): VersionInfo[] {
+    return this.#versions.map(versionInfo).reverse();
+  }
+
+  savedVersion(id: string): DeckVersion | undefined {
+    return this.#versions.find((v) => v.id === id);
+  }
+
+  /**
+   * Saves the deck as it is now under a name. Not an op: nothing on the slides changes, so
+   * there's nothing to undo (Delete version takes it away).
+   */
+  saveVersion(name: string): VersionInfo {
+    const parsed = VersionNameSchema.safeParse(name);
+    if (!parsed.success) {
+      throw new VeloceError("INVALID", "A version needs a name of 1 to 100 characters");
+    }
+    if (this.#versions.length >= MAX_VERSIONS) {
+      throw new VeloceError("CONFLICT", `This deck already has ${MAX_VERSIONS} versions`, {
+        hint: "Delete an old version first (File → Versions).",
+      });
+    }
+    const version: DeckVersion = {
+      id: newVersionId(),
+      name: parsed.data,
+      savedAt: new Date(this.#now()).toISOString(),
+      deck: this.deck,
+    };
+    this.#versions.push(version);
+    return versionInfo(version);
+  }
+
+  deleteVersion(id: string): void {
+    const at = this.#versions.findIndex((v) => v.id === id);
+    if (at < 0) throw this.#noVersion(id);
+    this.#versions.splice(at, 1);
+  }
+
+  /**
+   * Turns the deck back into a saved version, as one change by `origin`: its undo brings
+   * back what was there. The version itself stays.
+   */
+  restoreVersion(id: string, origin: Origin): TransactionResult {
+    const version = this.savedVersion(id);
+    if (!version) throw this.#noVersion(id);
+    const ops = restoreOps(this.deck, version.deck);
+    if (ops.length === 0) {
+      return {
+        ok: false,
+        error: { code: "CONFLICT", message: `The deck already matches "${version.name}"` },
+      };
+    }
+    return this.apply({ origin, label: clip(`Restore "${version.name}"`), ops });
+  }
+
+  #noVersion(id: string): VeloceError {
+    return new VeloceError("NOT_FOUND", `No version ${id} in this deck`, {
+      hint: "It may have been deleted in another tab. Open File → Versions again.",
+    });
   }
 
   /** The origin that last changed this slide since the deck was opened (undefined: nobody). */
@@ -399,6 +479,8 @@ export class OpenDeck {
   sweepAssets(): string[] {
     const keep = this.#doc.restorableAssetIds();
     for (const id of Object.keys(this.deck.assets)) keep.add(id);
+    // A restore adds back what a version used (D93).
+    for (const { deck } of this.#versions) for (const id of Object.keys(deck.assets)) keep.add(id);
     // A revert may add back what a recent change removed.
     for (const { inverse } of this.#history) {
       for (const op of inverse) if (op.op === "asset.add") keep.add(op.id);
@@ -427,15 +509,29 @@ export class OpenDeck {
     return this.#assets.get(id);
   }
 
-  /** Everything needed to save the deck (only the assets it currently uses). */
+  /**
+   * What an asset is, if the deck or one of its versions registers it: a version's images
+   * are served too, so it can be looked at (D93).
+   */
+  assetInfo(id: string): AssetInfo | undefined {
+    if (Object.hasOwn(this.deck.assets, id)) return this.deck.assets[id];
+    for (const { deck } of this.#versions) {
+      if (Object.hasOwn(deck.assets, id)) return deck.assets[id];
+    }
+    return undefined;
+  }
+
+  /** Everything needed to save the deck: its versions, and only the assets these use. */
   bundle(): DeckBundle {
     const deck = this.deck;
     const assets = new Map<string, Uint8Array>();
-    for (const id of Object.keys(deck.assets)) {
-      const bytes = this.#assets.get(id);
-      if (bytes) assets.set(id, bytes);
+    for (const d of [deck, ...this.#versions.map((v) => v.deck)]) {
+      for (const id of Object.keys(d.assets)) {
+        const bytes = this.#assets.get(id);
+        if (bytes) assets.set(id, bytes);
+      }
     }
-    return { deck, assets };
+    return { deck, assets, versions: [...this.#versions] };
   }
 
   subscribe(listener: (change: DeckChange) => void): () => void {

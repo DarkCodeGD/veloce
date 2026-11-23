@@ -2166,3 +2166,41 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
    first result wrong for numbers and setting names, which the test caught.
 5. **With nothing typed:** the last 5 commands run (this browser, like the Add menu's
    recent list; storage is optional), then every command.
+
+## D93 — Versions: named copies of the deck, kept inside its file
+
+**Status:** Accepted (2026-11-24). Round 5's "snapshots" (the sync protocol's `snapshot`
+message is something else, so code and UI say "versions").
+
+1. **Inside the `.veloce` file:** `versions/<id>.json`, each `{ name, savedAt, deck }` with
+   the whole deck. Asset files are shared with the deck by content hash, so a version
+   costs its JSON (a 6-slide deck: ~4 KB zipped). A format addition: an older reader skips
+   the folder as unknown files, and no Veloce has shipped without it. **Why not beside the
+   file:** a copied, mailed or moved deck would lose its safety net, and the format
+   promises one self-contained file.
+2. **Untrusted like the rest of the file, never fatal:** each version is migrated and
+   validated like the deck, its assets hashed (each file once), and a version that isn't
+   JSON, is too new, is invalid or misses an asset is skipped with a warning while the
+   deck opens. Writing refuses bad version IDs and bytes nobody registers. At most 100
+   versions per deck. **Why:** a damaged version must never cost you the deck.
+3. **Saving and deleting aren't ops:** they change no slide, so there's nothing to undo,
+   and they're the user's file management, not edits. The file is written at once (not
+   after the autosave pause), and every tab of the deck gets the new list. Delete asks
+   twice ("Delete … for good") because it can't be undone.
+4. **Restore is one ordinary transaction** (`restoreOps`): remove every slide, drop the
+   assets the version didn't have, add the ones it had, insert its slides, and set its
+   theme and meta if they differ, as the client's origin. So Ctrl+Z (or the toast's Undo)
+   brings back what was there, including an agent's rewrite, and agents hear about it like
+   any change (D71 §5). Not the stage: no op changes it. **Why remove-and-insert every
+   slide:** plain and always correct; the history holds a big step only as long as it
+   holds any.
+5. **Read-only preview** in File → Versions: the version's slides drawn by the same
+   renderer from the deck the server sends (`version.open`), so nothing in it can be
+   edited. The server keeps every version's asset bytes (the sweep, D65) and serves them
+   (`assetInfo` checks the versions too), so a version's images show and come back on
+   restore.
+6. **Kept out for now:** agents saving versions (an MCP tool, or a version made
+   automatically before an agent's first change of a session), renaming, and comparing
+   versions. **Privacy:** a shared file carries its versions, old content included.
+   Delete version clears them; Phase 7 adds "Save a copy without versions", and exports
+   never include them.

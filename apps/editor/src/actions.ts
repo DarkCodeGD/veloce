@@ -75,3 +75,43 @@ export async function createDeck(title: string, theme?: string): Promise<boolean
     return false;
   }
 }
+
+// ── Versions (D93) ──
+
+/** File → Save version: true when it's saved (in the file, by then). */
+export async function saveVersion(name: string): Promise<boolean> {
+  try {
+    await client.saveVersion(name);
+    showToast({ message: `Saved version "${name.trim()}"`, tone: "info" });
+    return true;
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+}
+
+/** Turns the deck back into a version; the toast's Undo (like Ctrl+Z) brings it back. */
+export async function restoreVersion(id: string, name: string): Promise<boolean> {
+  try {
+    await client.restoreVersion(id);
+    showToast(
+      { message: `Restored "${name}"`, tone: "info", action: { label: "Undo", run: undo } },
+      8000,
+    );
+    return true;
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+}
+
+/** Deletes a version for good (it's not an edit: no undo). */
+export async function deleteVersion(id: string): Promise<boolean> {
+  try {
+    await client.deleteVersion(id);
+    return true;
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+}

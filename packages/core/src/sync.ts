@@ -19,6 +19,7 @@ import type { Deck } from "./schema/deck.js";
 import { IdSchema } from "./schema/primitives.js";
 import { type Settings, SettingsPatchSchema } from "./settings.js";
 import { applyTransaction, type Origin } from "./transaction.js";
+import { VERSION_ID_PATTERN, type VersionInfo, VersionNameSchema } from "./versions.js";
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -70,6 +71,35 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     title: z.string().trim().min(1).max(300),
     theme: z.string().min(1).max(64).optional(),
   }),
+  /**
+   * Versions (D93). Saving or deleting one sends every tab of that deck the new `versions`;
+   * restoring is a change of the client's own (undo brings the deck back); `version.open`
+   * replies with `version` (the saved deck, to look at).
+   */
+  z.strictObject({
+    type: z.literal("version.save"),
+    requestId: RequestIdSchema,
+    deckId: IdSchema,
+    name: VersionNameSchema,
+  }),
+  z.strictObject({
+    type: z.literal("version.open"),
+    requestId: RequestIdSchema,
+    deckId: IdSchema,
+    versionId: z.string().regex(VERSION_ID_PATTERN),
+  }),
+  z.strictObject({
+    type: z.literal("version.restore"),
+    requestId: RequestIdSchema,
+    deckId: IdSchema,
+    versionId: z.string().regex(VERSION_ID_PATTERN),
+  }),
+  z.strictObject({
+    type: z.literal("version.delete"),
+    requestId: RequestIdSchema,
+    deckId: IdSchema,
+    versionId: z.string().regex(VERSION_ID_PATTERN),
+  }),
   /** Change some app settings (D91). Every tab, this one too, gets the new `settings`. */
   z.strictObject({
     type: z.literal("settings.update"),
@@ -114,6 +144,10 @@ export type ServerMessage =
    * `version` is the deck version it describes (older than the replica's while re-checking).
    */
   | ({ type: "lint"; deckId: string } & LintReport)
+  /** The open deck's versions (D93), newest first: after its snapshot and on every change. */
+  | { type: "versions"; deckId: string; versions: VersionInfo[] }
+  /** One saved version's deck (the answer to `version.open`), to look at, never to edit. */
+  | { type: "version"; requestId: string; deckId: string; versionId: string; deck: Deck }
   /** The app settings (D91), on connecting and whenever they change. */
   | ({ type: "settings" } & SettingsReport)
   | { type: "result"; requestId: string; ok: true; version: number }

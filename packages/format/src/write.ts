@@ -2,9 +2,19 @@
  * Writing .veloce files.
  *
  * Invariant: we never write a file we couldn't read back. The deck is validated, and asset
- * bytes must match the deck's registry exactly (each asset's SHA-256 is re-checked).
+ * bytes must match what the deck and its versions register exactly (each asset's SHA-256 is
+ * re-checked). Versions were valid decks when they were saved and never change, so they
+ * aren't validated again on every save (a reader skips a bad one, never fails on it).
  */
-import { ID_PATTERN, sha256Hex, validateDeck } from "@veloce/core";
+import {
+  type AssetInfo,
+  type Deck,
+  ID_PATTERN,
+  MAX_VERSIONS,
+  sha256Hex,
+  VERSION_ID_PATTERN,
+  validateDeck,
+} from "@veloce/core";
 import { strToU8, type Zippable, zipSync } from "fflate";
 import type { DeckBundle } from "./bundle.js";
 import { FORMAT_ID, PATHS } from "./constants.js";
@@ -65,8 +75,9 @@ export async function writeVeloce(
     files[PATHS.plugins] = entry(strToU8(JSON.stringify(bundle.plugins, null, 2)), COMPRESS);
   }
   if (bundle.preview) files[PATHS.preview] = entry(bundle.preview, STORE);
+  const registered = registeredAssets(bundle);
   for (const [id, bytes] of bundle.assets) {
-    const ext = extensionFor(deck.assets[id]?.mime ?? "");
+    const ext = extensionFor(registered.get(id)?.mime ?? "");
     files[`${PATHS.assetsDir}${id}.${ext}`] = entry(bytes, isPrecompressed(ext) ? STORE : COMPRESS);
   }
   for (const [nodeId, png] of bundle.fallbacks ?? []) {
@@ -75,11 +86,36 @@ export async function writeVeloce(
     }
     files[`${PATHS.fallbacksDir}${nodeId}.png`] = entry(png, STORE);
   }
+  const versions = bundle.versions ?? [];
+  if (versions.length > MAX_VERSIONS) {
+    throw new FormatError("INCONSISTENT", `A deck keeps at most ${MAX_VERSIONS} versions`);
+  }
+  for (const version of versions) {
+    if (!VERSION_ID_PATTERN.test(version.id)) {
+      throw new FormatError("INCONSISTENT", `Version ID "${version.id}" isn't valid`);
+    }
+    const { name, savedAt, deck: saved } = version;
+    files[`${PATHS.versionsDir}${version.id}.json`] = entry(
+      strToU8(JSON.stringify({ name, savedAt, deck: saved })),
+      COMPRESS,
+    );
+  }
   return zipSync(files);
 }
 
-async function assertAssetsMatch({ deck, assets }: DeckBundle): Promise<void> {
-  for (const [id, info] of Object.entries(deck.assets)) {
+/** Every asset the deck or one of its versions registers, with its info. */
+function registeredAssets({ deck, versions }: DeckBundle): Map<string, AssetInfo> {
+  const all = new Map<string, AssetInfo>();
+  for (const d of [deck, ...(versions ?? []).map((v) => v.deck)] as Deck[]) {
+    for (const [id, info] of Object.entries(d.assets)) if (!all.has(id)) all.set(id, info);
+  }
+  return all;
+}
+
+async function assertAssetsMatch(bundle: DeckBundle): Promise<void> {
+  const { assets } = bundle;
+  const registered = registeredAssets(bundle);
+  for (const [id, info] of registered) {
     const bytes = assets.get(id);
     const label = info.name ? `"${info.name}" (${id})` : id;
     if (!bytes) throw new FormatError("INCONSISTENT", `No bytes provided for asset ${label}`);
@@ -88,7 +124,7 @@ async function assertAssetsMatch({ deck, assets }: DeckBundle): Promise<void> {
     }
   }
   for (const id of assets.keys()) {
-    if (!Object.hasOwn(deck.assets, id)) {
+    if (!registered.has(id)) {
       throw new FormatError(
         "INCONSISTENT",
         `Bytes were provided for asset ${id}, which isn't registered in the deck (add it with asset.add)`,

@@ -26,11 +26,10 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor, round 5 (app shell)
+- **Active phase:** Phase 3: Manual editor, round 6 (reuse)
 - **Last updated:** 2026-11-24
-- **Next:** snapshots (File → Save version, a version list, restore), the last item of
-  round 5.
-- **State:** `pnpm check` is green (793 tests, including real-Chromium lint, preview and editor
+- **Next:** round 6, components (copy on insert). Round 5 (app shell) is done.
+- **State:** `pnpm check` is green (807 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 14 tools.
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
@@ -46,7 +45,7 @@
     and tightened (D71, D72); lint in the editor (D73); frame border and shadow (D74); per-side padding (D75); deck info and
     new deck from a File menu (D76, D77); theme styles (D78); shape outline (D80); the tool bar
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
-    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90); Preferences (D91); the command palette (D92).
+    done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90); Preferences (D91); the command palette (D92); versions (D93).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -212,8 +211,8 @@ Animate and Present workspaces instead of being squeezed into today's screen.
       Interface waits for Phase 6 (D91)
 - [x] Command palette (Ctrl/Cmd+K, View): every command with its keys, the settings, the
       slides and layers in one search, best match first, recent commands on top (D92)
-- [ ] Snapshots: File → Save version (named), a version list, open read-only, restore (one
-      transaction, undoable). A safety net when an agent rewrites a deck
+- [x] Versions: File → Save version (named), File → Versions (list, read-only preview,
+      restore as one undoable change, delete). Kept inside the `.veloce` file (D93)
 
 **Round 6: reuse (components and slide layouts)**
 
@@ -337,6 +336,8 @@ network or disk without permission, and disabling it removes every trace.
 - [ ] PNG/JPEG per slide
 - [ ] Standalone HTML: self-contained animated deck playable in any browser
 - [ ] MP4: frame-by-frame render through the seekable clock + ffmpeg
+- [ ] "Save a copy without versions" (and export never includes them): a file sent to
+      someone shouldn't carry the old versions inside it (D93 §6)
 
 **Done when:** a deck can be shared with someone who doesn't have Veloce: as a PDF, images,
 a self-contained HTML file that plays the animations, or a video.

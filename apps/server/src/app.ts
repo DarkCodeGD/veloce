@@ -174,7 +174,7 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
   async function serveAsset(res: ServerResponse, deckId: string, assetId: string): Promise<void> {
     if (!options.workspace.has(deckId)) return sendText(res, 404, "No such deck");
     const deck = await options.workspace.get(deckId);
-    const info = deck.deck.assets[assetId];
+    const info = deck.assetInfo(assetId); // the deck's, or a saved version's (D93)
     const bytes = deck.assetBytes(assetId);
     if (!info || !bytes) return sendText(res, 404, "No such asset");
     res.writeHead(200, {

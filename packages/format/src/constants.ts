@@ -16,6 +16,8 @@ export const PATHS = {
   preview: "preview.png",
   assetsDir: "assets/",
   fallbacksDir: "fallbacks/",
+  /** Saved versions (D93): `versions/<id>.json`, each a whole deck. Assets live in `assets/`. */
+  versionsDir: "versions/",
 } as const;
 
 /** Safety limits for reading untrusted files. All sizes are uncompressed bytes. */

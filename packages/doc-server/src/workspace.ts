@@ -20,9 +20,11 @@ import {
   DEFAULT_THEME,
   type Deck,
   type DeckListing,
+  type DeckVersion,
   notFoundHint,
   type Theme,
   VeloceError,
+  type VersionInfo,
 } from "@veloce/core";
 import { FILE_EXTENSION, inspectVeloce, readVeloce, writeVeloce } from "@veloce/format";
 import { atomicWriteFile, slugify } from "./fs.js";
@@ -55,7 +57,9 @@ export interface WorkspaceOptions {
 
 export type WorkspaceEvent =
   | { type: "decks"; decks: DeckListing[]; activeDeckId: string | null }
-  | { type: "change"; change: DeckChange };
+  | { type: "change"; change: DeckChange }
+  /** A deck's saved versions changed (D93): one saved or deleted. Newest first. */
+  | { type: "versions"; deckId: string; versions: VersionInfo[] };
 
 interface FileEntry {
   file: string;
@@ -164,6 +168,35 @@ export class Workspace {
     return open;
   }
 
+  /**
+   * Saves a deck as it is now under a name (D93), and writes the file at once: a safety net
+   * shouldn't wait for the autosave pause.
+   */
+  async saveVersion(deckId: string, name: string): Promise<VersionInfo> {
+    const open = await this.get(deckId);
+    const info = open.saveVersion(name);
+    await this.#versionsChanged(open);
+    return info;
+  }
+
+  async deleteVersion(deckId: string, versionId: string): Promise<void> {
+    const open = await this.get(deckId);
+    open.deleteVersion(versionId);
+    await this.#versionsChanged(open);
+  }
+
+  async #versionsChanged(open: OpenDeck): Promise<void> {
+    clearTimeout(this.#saveTimers.get(open.id)); // this save covers pending edits too
+    this.#saveTimers.delete(open.id);
+    const event: WorkspaceEvent = {
+      type: "versions",
+      deckId: open.id,
+      versions: open.savedVersions(),
+    };
+    for (const listener of this.#listeners) listener(event);
+    await this.#save(open);
+  }
+
   /** Mark a deck as the one being worked on (editors follow it; agents default to it). */
   setActive(deckId: string): void {
     if (!this.#files.has(deckId)) throw new VeloceError("NOT_FOUND", `No deck with ID "${deckId}"`);
@@ -212,7 +245,7 @@ export class Workspace {
           const result = await readVeloce(bytes, this.#readOptions());
           const copy: Deck = { ...result.deck, id: createId("dk") };
           id = copy.id;
-          this.#adopt(copy, path, result.assets, new Date(manifest.createdAt));
+          this.#adopt(copy, path, result.assets, new Date(manifest.createdAt), result.versions);
           this.#log(`${file} is a copy of another deck; gave it a new ID`);
         }
         this.#files.set(id, { file, title: manifest.title, slideCount, modifiedAt: info.mtime });
@@ -235,7 +268,13 @@ export class Workspace {
         `${entry.file} changed on disk (it now holds another deck)`,
       );
     }
-    return this.#adopt(result.deck, path, result.assets, new Date(result.manifest.createdAt));
+    return this.#adopt(
+      result.deck,
+      path,
+      result.assets,
+      new Date(result.manifest.createdAt),
+      result.versions,
+    );
   }
 
   #adopt(
@@ -243,6 +282,7 @@ export class Workspace {
     path: string,
     assets: ReadonlyMap<string, Uint8Array>,
     createdAt: Date,
+    versions: readonly DeckVersion[] = [],
   ): OpenDeck {
     const { context, now, optimizeImages, optimizer } = this.#options;
     const open = new OpenDeck({
@@ -255,6 +295,7 @@ export class Workspace {
       ...(optimizeImages !== undefined && { optimizeImages }),
       ...(optimizer && { optimizer }),
       historyLimit: () => this.#undoSteps,
+      versions,
     });
     open.subscribe((change) => {
       this.#scheduleSave(open);

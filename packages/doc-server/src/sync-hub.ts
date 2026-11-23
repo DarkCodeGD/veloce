@@ -69,6 +69,8 @@ export class SyncHub {
     const unsubscribe = workspace.subscribe((event) => {
       if (event.type === "decks") {
         safeSend({ type: "decks", decks: event.decks, activeDeckId: event.activeDeckId });
+      } else if (event.type === "versions") {
+        if (event.deckId === deckId) safeSend(event);
       } else if (event.change.deckId === deckId) {
         const {
           deckId: id,
@@ -189,6 +191,7 @@ export class SyncHub {
               deck: deck.deck,
               history: deck.history,
             });
+            safeSend({ type: "versions", deckId: deck.id, versions: deck.savedVersions() });
             stopLint?.();
             stopLint = linter?.watch(deck, (report) =>
               safeSend({ type: "lint", deckId: deck.id, ...report }),
@@ -196,6 +199,36 @@ export class SyncHub {
             return;
           case "transaction": {
             const result = deck.apply({ origin, label: message.label, ops: message.ops });
+            respond(message.requestId, result, deck.version);
+            return;
+          }
+          // Versions (D93): saving and deleting answer once the file is written.
+          case "version.save":
+          case "version.delete": {
+            if (message.type === "version.save") await workspace.saveVersion(deck.id, message.name);
+            else await workspace.deleteVersion(deck.id, message.versionId);
+            safeSend({
+              type: "result",
+              requestId: message.requestId,
+              ok: true,
+              version: deck.version,
+            });
+            return;
+          }
+          case "version.open": {
+            const version = deck.savedVersion(message.versionId);
+            if (!version) throw new VeloceError("NOT_FOUND", "That version was deleted");
+            safeSend({
+              type: "version",
+              requestId: message.requestId,
+              deckId: deck.id,
+              versionId: version.id,
+              deck: version.deck,
+            });
+            return;
+          }
+          case "version.restore": {
+            const result = deck.restoreVersion(message.versionId, origin);
             respond(message.requestId, result, deck.version);
             return;
           }

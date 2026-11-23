@@ -1,5 +1,5 @@
 /**
- * The File and Help menus (D76–D78, D89, D91): the app's dialogs.
+ * The File and Help menus (D76–D78, D89, D91, D93): the app's dialogs.
  */
 import { openDialog, openPreferences } from "../dialogs.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
@@ -15,6 +15,27 @@ export function fileCommands(): EditorCommand[] {
       menu: "file",
       section: "deck",
       run: () => openDialog("new-deck"),
+    },
+    // Versions (D93). No keys: Ctrl+Alt+S is a letter on AltGr keyboards (ś in Polish).
+    {
+      id: "file.saveVersion",
+      label: "Save version…",
+      keywords: "snapshot checkpoint backup history",
+      group: "file",
+      menu: "file",
+      section: "versions",
+      enabled: (c) => c.deck !== undefined,
+      run: () => openDialog("save-version"),
+    },
+    {
+      id: "file.versions",
+      label: "Versions…",
+      keywords: "snapshot history restore backup saved",
+      group: "file",
+      menu: "file",
+      section: "versions",
+      enabled: (c) => c.deck !== undefined,
+      run: () => openDialog("versions"),
     },
     {
       id: "file.deckInfo",
