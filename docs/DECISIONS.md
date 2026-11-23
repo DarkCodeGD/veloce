@@ -2062,3 +2062,7 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
 7. **Help → Keyboard shortcuts (Ctrl+/)** lists every command with a key, by menu, plus the
    canvas gestures. It's a view of the registry, so plugin shortcuts appear there too, and
    Preferences → Keymap grows from it.
+8. **No zoom pill on the canvas** (it was D60's): View holds zoom in/out, fit, 100% and
+   selection, each with its key, so the floating pill only covered the slide's corner.
+   **Trade-off:** the zoom percentage is no longer shown anywhere; if it's missed, it goes in
+   the top bar (Figma's spot), not back on the canvas.

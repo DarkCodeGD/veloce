@@ -119,7 +119,7 @@ export function useCanvasCamera({
 
   /**
    * Show `next` from the next frame on (kept partly on screen), or fit with "fit". Ignored
-   * while a drag runs, whichever input asked (wheel, keys, the zoom pill): the drag measured
+   * while a drag runs, whichever input asked (wheel, keys, the View menu): the drag measured
    * the slide where it is, so the camera must hold still under it.
    */
   const set = useCallback(
@@ -141,7 +141,7 @@ export function useCanvasCamera({
     return size ? { x: size.w / 2, y: size.h / 2 } : { x: 0, y: 0 };
   }, [viewportSize]);
 
-  // ── Commands (the zoom control and the keys) ────────────────────────────────────
+  // ── Commands (the View menu and the keys) ────────────────────────────────────────
   const zoomBy = useCallback(
     (dir: 1 | -1) => {
       const cam = current();

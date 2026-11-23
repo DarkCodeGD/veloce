@@ -64,7 +64,6 @@ import {
 import { useCanvasCamera } from "./useCanvasCamera.js";
 import { DRAG_THRESHOLD, useCanvasGestures } from "./useCanvasGestures.js";
 import { useFileDrop } from "./useFileDrop.js";
-import { ZoomControl } from "./ZoomControl.js";
 
 interface Props {
   /** What to show: the document, with any live preview applied. */
@@ -98,8 +97,6 @@ interface StageFrame {
   x: number;
   y: number;
   scale: number;
-  /** True while the slide fits the canvas (no zoom or pan applied). */
-  fitted: boolean;
 }
 
 export function EditorCanvas({
@@ -128,7 +125,7 @@ export function EditorCanvas({
     hover: OverlayBox | null;
     selected: OverlayBox[];
     stage: StageFrame;
-  }>({ hover: null, selected: [], stage: { x: 0, y: 0, scale: 1, fitted: true } });
+  }>({ hover: null, selected: [], stage: { x: 0, y: 0, scale: 1 } });
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -177,7 +174,6 @@ export function EditorCanvas({
         x: stageRect.left - origin.left,
         y: stageRect.top - origin.top,
         scale,
-        fitted: v.fitted,
       },
     });
   }, [hover, selection, shownIndex]);
@@ -668,14 +664,6 @@ export function EditorCanvas({
           onExit={() => onEditText(null)}
         />
       )}
-      <ZoomControl
-        scale={stage.scale}
-        fitted={stage.fitted}
-        onZoomIn={camera.zoomIn}
-        onZoomOut={camera.zoomOut}
-        onZoomTo100={camera.zoomTo100}
-        onZoomToFit={camera.zoomToFit}
-      />
       {dropping && (
         <div className="drop-overlay" aria-hidden="true">
           <span>Drop images or fonts</span>

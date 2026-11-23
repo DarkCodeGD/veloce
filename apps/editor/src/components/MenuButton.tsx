@@ -92,10 +92,12 @@ export function MenuButton({
     else setPlace(null);
   }, [openWanted]);
 
-  // Focus the first command once it's open.
+  // Focus the first command once it's open, or the menu itself when none can run (Arrange
+  // with nothing selected): focus must stay inside, or ←/→ and Esc would fall through to
+  // the editor (next slide) instead of moving along the menu bar.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when it opens; the helpers only read refs
   useLayoutEffect(() => {
-    if (open) enabled()[0]?.focus();
+    if (open) (enabled()[0] ?? menu.current)?.focus();
   }, [open]);
 
   // A click anywhere else closes it (without stealing focus from what was clicked).
@@ -164,6 +166,8 @@ export function MenuButton({
           role="menu"
           aria-label={label}
           className="menu-popup"
+          // Focusable itself, for a menu whose every command is disabled.
+          tabIndex={-1}
           // A long menu (folded menu bar, small window) scrolls instead of running off-screen.
           style={{
             left: place.left,

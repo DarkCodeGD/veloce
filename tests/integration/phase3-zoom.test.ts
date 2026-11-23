@@ -1,6 +1,6 @@
 /**
  * Phase 3, round 4 acceptance (canvas zoom and pan, D60): Ctrl/⌘ + wheel zooms at the
- * pointer, the wheel and Space + drag pan, Shift+0/1/2 and the zoom pill jump to 100%, fit
+ * pointer, the wheel and Space + drag pan, Shift+0/1/2 and the View menu jump to 100%, fit
  * and the selection, and moving, resizing, outlines and typing stay exact at any zoom. Zoom
  * is view state: none of it sends a transaction. Real Chromium against the real server.
  */
@@ -58,8 +58,11 @@ async function box(id: string) {
   if (!b) throw new Error(`${id} not on the canvas`);
   return b;
 }
-const label = () => page.locator(".zoom-value").textContent();
-const fitButton = () => page.getByRole("button", { name: "Zoom to fit" });
+/** Run a View menu command (the menu bar is where zoom lives, D89 §8). */
+async function fromView(command: string) {
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: command, exact: true }).click();
+}
 
 async function select(name: string) {
   await page.getByRole("tab", { name: "Layers" }).click();
@@ -82,7 +85,6 @@ async function settled() {
 
 async function fitSlide() {
   await page.keyboard.press("Shift+Digit1");
-  await expect.poll(() => fitButton().getAttribute("aria-pressed")).toBe("true");
   await settled();
 }
 
@@ -130,8 +132,6 @@ describe.skipIf(problem !== null)("Phase 3: canvas zoom and pan", { timeout: 60_
     // The slide point under the pointer didn't move.
     expect(Math.abs(after.x + slidePoint.x * s - at.x)).toBeLessThan(1.5);
     expect(Math.abs(after.y + slidePoint.y * s - at.y)).toBeLessThan(1.5);
-    expect(await label()).toBe(`${Math.round(s * 100)}%`);
-    expect(await fitButton().getAttribute("aria-pressed")).toBe("false");
     expect(h.userTransactions()).toBe(sent);
   });
 
@@ -139,7 +139,6 @@ describe.skipIf(problem !== null)("Phase 3: canvas zoom and pan", { timeout: 60_
     await page.keyboard.press("Shift+Digit0");
     await settled();
     expect(await scale()).toBeCloseTo(1, 2);
-    expect(await label()).toBe("100%");
     await fitSlide();
     expect(await scale()).toBeCloseTo(fitScale, 3);
   });
@@ -266,21 +265,21 @@ describe.skipIf(problem !== null)("Phase 3: canvas zoom and pan", { timeout: 60_
     await expect.poll(() => JSON.stringify(h.stored("sticker").props?.content)).not.toContain("ok");
   });
 
-  it("steps with Ctrl+= / Ctrl+- and the zoom pill", async () => {
+  it("steps with Ctrl+= / Ctrl+- and the View menu", async () => {
     await page.keyboard.press("Control+Equal");
     await settled();
     const zoomedIn = await scale();
     expect(zoomedIn).toBeGreaterThan(fitScale);
-    await page.getByRole("button", { name: "Zoom out" }).click();
+    await fromView("Zoom out");
     await settled();
     expect(await scale()).toBeLessThan(zoomedIn);
-    await page.getByRole("button", { name: /zoom to 100%/ }).click();
+    await fromView("Zoom to 100%");
     await settled();
     expect(await scale()).toBeCloseTo(1, 2);
-    await page.getByRole("button", { name: "Zoom in" }).click();
+    await fromView("Zoom in");
     await settled();
     expect(await scale()).toBeCloseTo(1.5, 2);
-    await fitButton().click();
+    await fromView("Zoom to fit");
     await settled();
     expect(await scale()).toBeCloseTo(fitScale, 3);
   });

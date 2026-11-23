@@ -146,6 +146,3 @@ export function zoomKeyDirection(e: {
   if (e.key === "-" || e.key === "_" || e.code === "NumpadSubtract") return -1;
   return 0;
 }
-
-/** "75%" for the zoom control. */
-export const zoomLabel = (scale: number) => `${Math.round(scale * 100)}%`;

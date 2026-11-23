@@ -93,6 +93,19 @@ describe.skipIf(problem !== null)("Phase 3: menu bar", { timeout: 60_000 }, () =
     expect(await page.getByRole("menu").count()).toBe(0);
   });
 
+  it("crosses a menu whose every command is disabled (focus stays in it)", async () => {
+    await page.locator(".stage-area").click({ position: { x: 5, y: 5 } }); // nothing to arrange
+    await bar("Arrange").click();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.role)).toBe("menu");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => bar("Help").getAttribute("aria-expanded")).toBe("true");
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => bar("Arrange").getAttribute("aria-expanded")).toBe("true");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    await expect.poll(focused).toBe("Help");
+  });
+
   it("runs commands as the user's transactions, and their shortcuts too", async () => {
     await selectTitle();
     const before = h.userTransactions();

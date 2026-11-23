@@ -9,7 +9,6 @@ import {
   ZOOM_MIN,
   zoomAt,
   zoomKeyDirection,
-  zoomLabel,
   zoomStep,
 } from "./camera.js";
 
@@ -103,10 +102,5 @@ describe("canvas camera", () => {
       zoomKeyDirection({ key: "=", code: "Equal", ctrlKey: false, metaKey: false, altKey: false }),
     ).toBe(0);
     expect(press("´", "Equal")).toBe(0); // German dead key on the US "=" position
-  });
-
-  it("labels the zoom as a percentage", () => {
-    expect(zoomLabel(0.4708)).toBe("47%");
-    expect(zoomLabel(1)).toBe("100%");
   });
 });
