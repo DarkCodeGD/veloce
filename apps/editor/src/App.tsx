@@ -1,6 +1,22 @@
 import type { Slide } from "@veloce/core";
-import { History, Layers, ListChecks, PanelsTopLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  ChevronRight,
+  History,
+  Layers,
+  ListChecks,
+  PanelLeftOpen,
+  PanelRightOpen,
+  PanelsTopLeft,
+} from "lucide-react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { revertAgentChanges, run } from "./actions.js";
 import type { Panel } from "./commands/context.js";
 import { AddMenu } from "./components/AddMenu.js";
@@ -14,6 +30,7 @@ import { LayersPanel } from "./components/LayersPanel.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { ShortcutsDialog } from "./components/ShortcutsDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
+import { Splitter } from "./components/Splitter.js";
 import { ThemeStylesDialog } from "./components/ThemeStylesDialog.js";
 import { Toasts } from "./components/Toasts.js";
 import { Tooltips } from "./components/Tooltips.js";
@@ -24,9 +41,11 @@ import { syncDeckFonts } from "./deck-fonts.js";
 import { closeDialog, openDialog, useOpenDialog } from "./dialogs.js";
 import { setCommandContext } from "./editor-commands.js";
 import { assetUrl, client } from "./editor-context.js";
+import { setPanelCollapsed, togglePanel, updatePanel, useLayout } from "./layout.js";
 import { layerSeverities, slideBadges } from "./model/lint-view.js";
 import { editableText, pickTarget, pruneSelection } from "./model/selection.js";
 import { indexSlide } from "./model/slide-index.js";
+import { type PanelId, type PanelLayout, panelLayout, panelSpec } from "./model/workspace.js";
 import { previewDeck, previewStore } from "./preview.js";
 
 const ACTIVITY_MS = 6000;
@@ -38,6 +57,16 @@ const TABS: Array<{ id: Panel; label: string; icon: typeof History }> = [
   { id: "history", label: "History", icon: History },
   { id: "issues", label: "Issues", icon: ListChecks },
 ];
+
+/** A resizable panel's size and window cap, as the CSS reads them (`--panel-size`). */
+function panelStyle(workspace: string, id: PanelId, layout: PanelLayout): CSSProperties {
+  const size = panelSpec(workspace, id)?.size;
+  if (!size) return {};
+  return {
+    "--panel-size": `${layout.size}px`,
+    "--panel-cap": `${size.maxShare * 100}${size.axis === "x" ? "vw" : "vh"}`,
+  } as CSSProperties;
+}
 
 export function App() {
   const state = useSyncExternalStore(client.subscribe, client.getState);
@@ -61,6 +90,13 @@ export function App() {
   const dialog = useOpenDialog();
   const [follow, setFollow] = useState(true);
   const [activityVisible, setActivityVisible] = useState(false);
+  // The workspace's panels (D90): sizes and collapsed states, remembered across launches.
+  const layout = useLayout();
+  const left = panelLayout(layout, "left");
+  const inspector = panelLayout(layout, "inspector");
+  const notes = panelLayout(layout, "notes");
+  const leftRef = useRef<HTMLDivElement>(null);
+  const inspectorRef = useRef<HTMLDivElement>(null);
 
   const index = Math.max(
     0,
@@ -81,7 +117,11 @@ export function App() {
     },
     goToSlide: setSlideId,
     panel,
-    showPanel: setPanel,
+    // A tab asked for (View, Alt+digit) opens the left panel if it's collapsed.
+    showPanel: (next) => {
+      setPanel(next);
+      setPanelCollapsed("left", false);
+    },
     follow,
     setFollow,
   });
@@ -190,10 +230,16 @@ export function App() {
         onOpenDeck={(id) => client.open(id)}
         position={current ? `${index + 1} / ${slides.length}` : null}
       />
-      <div className="workspace">
+      <div className="workspace" data-workspace={layout.workspace}>
         {deck && deckId && current && slideIndex ? (
           <>
-            <div className="left-panel">
+            <div
+              ref={leftRef}
+              id="left-panel"
+              className="left-panel"
+              style={panelStyle(layout.workspace, "left", left)}
+              data-collapsed={left.collapsed || undefined}
+            >
               <div className="tabs" role="tablist" aria-label="Left panel">
                 {TABS.map(({ id, label, icon: Icon }) => (
                   <button
@@ -255,7 +301,38 @@ export function App() {
                 )}
               </div>
             </div>
+            <PanelSplitter
+              workspace={layout.workspace}
+              id="left"
+              layout={left}
+              grow={1}
+              panel={leftRef}
+            />
             <main className="stage-area">
+              {left.collapsed && (
+                <button
+                  type="button"
+                  className="icon-button panel-reveal is-left"
+                  aria-label="Show left panel"
+                  data-tip="Show left panel"
+                  aria-controls="left-panel"
+                  onClick={() => setPanelCollapsed("left", false)}
+                >
+                  <PanelLeftOpen size={16} aria-hidden />
+                </button>
+              )}
+              {inspector.collapsed && (
+                <button
+                  type="button"
+                  className="icon-button panel-reveal is-right"
+                  aria-label="Show inspector"
+                  data-tip="Show inspector"
+                  aria-controls="inspector-panel"
+                  onClick={() => setPanelCollapsed("inspector", false)}
+                >
+                  <PanelRightOpen size={16} aria-hidden />
+                </button>
+              )}
               <EditorCanvas
                 deck={canvasDeck ?? deck}
                 deckId={deckId}
@@ -268,9 +345,33 @@ export function App() {
                 editing={editing}
                 onEditText={setEditing}
               />
-              <NotesEditor slide={current} />
+              <NotesEditor
+                slide={current}
+                collapsed={notes.collapsed}
+                onToggle={() => togglePanel("notes")}
+              />
             </main>
-            <Inspector deck={deck} slide={current} selection={selection} onSelect={setSelection} />
+            <PanelSplitter
+              workspace={layout.workspace}
+              id="inspector"
+              layout={inspector}
+              grow={-1}
+              panel={inspectorRef}
+            />
+            <div
+              ref={inspectorRef}
+              id="inspector-panel"
+              className="inspector-panel"
+              style={panelStyle(layout.workspace, "inspector", inspector)}
+              data-collapsed={inspector.collapsed || undefined}
+            >
+              <Inspector
+                deck={deck}
+                slide={current}
+                selection={selection}
+                onSelect={setSelection}
+              />
+            </div>
           </>
         ) : (
           <EmptyState
@@ -291,20 +392,66 @@ export function App() {
   );
 }
 
-/** Speaker notes, editable in place; saved when the field loses focus. */
-function NotesEditor({ slide }: { slide: Slide }) {
+/** The splitter on a resizable panel's edge, if the workspace's panel resizes. */
+function PanelSplitter({
+  workspace,
+  id,
+  ...rest
+}: {
+  workspace: string;
+  id: PanelId;
+  layout: PanelLayout;
+  grow: 1 | -1;
+  panel: React.RefObject<HTMLElement | null>;
+}) {
+  const spec = panelSpec(workspace, id);
+  if (!spec?.size) return null;
+  return (
+    <Splitter
+      label={spec.label}
+      spec={spec.size}
+      panelId={`${id}-panel`}
+      onChange={(patch) => updatePanel(id, patch)}
+      {...rest}
+    />
+  );
+}
+
+/**
+ * Speaker notes, editable in place; saved when the field loses focus. Its header collapses
+ * it to give the canvas the room (D90), like PowerPoint's Notes button.
+ */
+function NotesEditor({
+  slide,
+  collapsed,
+  onToggle,
+}: {
+  slide: Slide;
+  collapsed: boolean;
+  onToggle(): void;
+}) {
   const [draft, setDraft] = useState(slide.notes ?? "");
   const [editing, setEditing] = useState(false);
   useEffect(() => {
     if (!editing) setDraft(slide.notes ?? "");
   }, [slide.notes, editing]);
   return (
-    <div className="notes">
-      <label className="notes-label" htmlFor="notes">
+    <div className="notes" data-collapsed={collapsed || undefined}>
+      <button
+        type="button"
+        className="notes-label"
+        aria-expanded={!collapsed}
+        aria-controls="notes"
+        data-tip={collapsed ? "Show speaker notes" : "Hide speaker notes"}
+        onClick={onToggle}
+      >
+        <ChevronRight size={12} className="notes-chevron" aria-hidden />
         Speaker notes
-      </label>
+      </button>
       <textarea
         id="notes"
+        aria-label="Speaker notes"
+        hidden={collapsed}
         rows={2}
         value={draft}
         placeholder="Add notes for this slide…"

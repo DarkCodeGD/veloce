@@ -2066,3 +2066,35 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
    selection, each with its key, so the floating pill only covered the slide's corner.
    **Trade-off:** the zoom percentage is no longer shown anywhere; if it's missed, it goes in
    the top bar (Figma's spot), not back on the canvas.
+
+## D90 — Workspace panels resize and collapse; the switcher waits for a second workspace
+
+**Status:** Accepted (2026-11-24). Implements D53 §1–3.
+
+1. **A workspace is a preset of panels** (`model/workspace.ts`, pure): each panel has a
+   label and, if its edge resizes it, a size range and the most of the window it may take
+   (left panel 180–400 px, at most 20 % of the width; inspector 260–480 px, at most 26 %).
+   Design is the only one; Phase 4 adds Animate and Present as more presets. **Why:** D53
+   keeps workspaces as views over the same deck, so a preset is all a workspace needs.
+2. **No switcher until there's a second workspace.** **Why:** a switcher with one choice is
+   an empty control, and D53 §3 already rules out empty tabs. The layout is already stored
+   per workspace, so Phase 4 only adds presets and the switcher.
+3. **Side panels resize by their edge, VS Code's sash:** drag to resize; drag past half the
+   minimum to collapse (the size is kept for reopening) and back out to reopen; double-click
+   for the preset size. The edge lights up after a short rest. It's the WAI-ARIA window
+   splitter, so the keyboard works too: arrows resize (Shift: ×4), Home/End go to the
+   smallest/largest, Enter collapses or reopens. Its keys never reach the editor's own (the
+   arrows change slides there).
+4. **Collapsed side panels come back** from a button in their corner of the canvas, from
+   View → Left panel / Inspector (check boxes), or Ctrl+\ for both (Figma's Show/Hide UI).
+   Alt+1–4 or View → a tab opens the left panel on that tab.
+5. **Speaker notes only collapse,** from their header (PowerPoint's Notes button) or View.
+   **Why:** they already grow with their text, so a height to drag would fight that.
+6. **During a drag the panel is sized directly in the DOM** (`--panel-size`), and the layout
+   is saved once, on release. **Why:** the layout re-renders the whole editor, and doing that
+   on every pointer move is wasted work.
+7. **The layout is stored per browser profile (localStorage), not in the settings file.**
+   **Why:** it's how this window was left, like VS Code's layout, not a preference (D53 §5).
+   A stored layout is parsed defensively (unknown workspaces or panels and broken values are
+   dropped, sizes clamped), so another version's layout can't break the app. Trade-off: the
+   web editor on another port or machine starts from the presets.

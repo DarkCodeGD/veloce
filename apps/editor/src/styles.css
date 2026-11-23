@@ -20,8 +20,6 @@
   --measure: #f24822;
   --radius: 10px;
   --radius-sm: 6px;
-  --left-width: 248px;
-  --inspector-width: 300px;
   --topbar-height: 52px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --fast: 120ms;
@@ -804,11 +802,103 @@ textarea::placeholder {
   min-height: 0;
 }
 
+/* ── Workspace panels (D90) ──────────────────────────────────────────────── */
+
+/* A collapsed panel is gone; its splitter stays on the window's edge to drag it back. */
+.left-panel[data-collapsed],
+.inspector-panel[data-collapsed] {
+  display: none;
+}
+
+/* One pixel over the panel's own border (the -1px margin takes no room from the layout);
+   the hit area reaches 4px either side. */
+.splitter {
+  position: relative;
+  z-index: 5;
+  flex: none;
+  touch-action: none;
+}
+
+.splitter.is-x {
+  width: 1px;
+  margin-right: -1px;
+  cursor: col-resize;
+}
+
+.splitter.is-y {
+  height: 1px;
+  margin-bottom: -1px;
+  cursor: row-resize;
+}
+
+.splitter::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
+/* The edge lights up once the pointer rests on it (VS Code's sash), and while focused. */
+.splitter::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background: transparent;
+  transition: background var(--fast) 0s;
+}
+
+.splitter:hover::after {
+  background: var(--accent);
+  transition-delay: 0.15s;
+}
+
+.splitter:focus-visible {
+  outline: none;
+}
+
+.splitter:focus-visible::after,
+html[data-resizing] .splitter:active::after {
+  background: var(--accent);
+}
+
+/* While dragging, the resize cursor everywhere and no text selection. */
+html[data-resizing="x"],
+html[data-resizing="x"] * {
+  /* biome-ignore lint/complexity/noImportantStyles: a drag's cursor must beat every hover cursor it passes */
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+html[data-resizing="y"],
+html[data-resizing="y"] * {
+  /* biome-ignore lint/complexity/noImportantStyles: a drag's cursor must beat every hover cursor it passes */
+  cursor: row-resize !important;
+  user-select: none;
+}
+
+/* Brings a collapsed side panel back, in the canvas corner on its side. */
+.panel-reveal {
+  position: absolute;
+  top: 12px;
+  z-index: 4;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-raised);
+}
+
+.panel-reveal.is-left {
+  left: 12px;
+}
+
+.panel-reveal.is-right {
+  right: 12px;
+}
+
 .left-panel {
   flex: none;
   display: flex;
   flex-direction: column;
-  width: var(--left-width);
+  /* Sized by its splitter (D90), never more than its share of the window. */
+  width: var(--panel-size);
+  max-width: var(--panel-cap);
   min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
@@ -2074,12 +2164,33 @@ textarea::placeholder {
   margin: 0 48px 16px;
 }
 
+/* The notes' header collapses them (D90): a chevron that turns, like a disclosure. */
 .notes-label {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transition: color var(--fast);
+}
+
+.notes-label:hover {
+  color: var(--text);
+}
+
+.notes-chevron {
+  transition: transform var(--fast) var(--ease);
+}
+
+.notes-label[aria-expanded="true"] .notes-chevron {
+  transform: rotate(90deg);
 }
 
 .notes textarea {
@@ -2089,9 +2200,17 @@ textarea::placeholder {
 
 /* Inspector */
 
-.inspector {
+.inspector-panel {
   flex: none;
-  width: var(--inspector-width);
+  display: flex;
+  width: var(--panel-size);
+  max-width: var(--panel-cap);
+  min-height: 0;
+}
+
+.inspector {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
   background: var(--panel);
@@ -3270,10 +3389,6 @@ html.is-scrubbing * {
 }
 
 @media (max-width: 1100px) {
-  :root {
-    --left-width: 200px;
-    --inspector-width: 260px;
-  }
   .follow,
   .activity-label {
     display: none;

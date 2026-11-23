@@ -1,10 +1,12 @@
 /**
- * The View menu (D89): canvas zoom (view state, never ops), the left panel's tabs, and
- * Follow AI.
+ * The View menu (D89, D90): canvas zoom (view state, never ops), the left panel's tabs, the
+ * workspace's panels shown or collapsed, and Follow AI.
  */
 import { type CameraControls, cameraControls } from "../camera-controls.js";
+import { panel as layoutPanel, setPanelCollapsed, togglePanel } from "../layout.js";
 import { zoomKeyDirection } from "../model/camera.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
+import type { PanelId } from "../model/workspace.js";
 import type { EditorCommand, Panel } from "./context.js";
 
 const zoom = (
@@ -44,6 +46,22 @@ const PANELS: ReadonlyArray<{ panel: Panel; label: string; shortcut: string }> =
   { panel: "issues", label: "Issues", shortcut: SHORTCUTS.panelIssues },
 ];
 
+/** Shows or collapses one of the workspace's panels (a check box in View). */
+const showPanel = (panel: PanelId, label: string): EditorCommand => ({
+  id: `view.show.${panel}`,
+  label,
+  keywords: "panel show hide collapse",
+  group: "view",
+  menu: "view",
+  section: "layout",
+  enabled: (c) => c.slideIndex !== undefined,
+  checked: () => !layoutPanel(panel).collapsed,
+  toggle: true,
+  run: () => togglePanel(panel),
+});
+
+const SIDE_PANELS: readonly PanelId[] = ["left", "inspector"];
+
 export function viewCommands(): EditorCommand[] {
   return [
     zoom("view.zoomIn", "Zoom in", SHORTCUTS.zoomIn, "zoomIn", zoomKeys(1)),
@@ -61,10 +79,29 @@ export function viewCommands(): EditorCommand[] {
         menu: "view",
         section: "panels",
         enabled: (c) => c.slideIndex !== undefined,
-        checked: (c) => c.panel === panel,
+        // The tab on show: none while the left panel is collapsed.
+        checked: (c) => c.panel === panel && !layoutPanel("left").collapsed,
         run: (c) => c.showPanel(panel),
       }),
     ),
+    showPanel("left", "Left panel"),
+    showPanel("inspector", "Inspector"),
+    showPanel("notes", "Speaker notes"),
+    {
+      // Figma's Ctrl+\: all the room to the slide, and back.
+      id: "view.sidePanels",
+      label: "Show/hide side panels",
+      shortcut: SHORTCUTS.sidePanels,
+      keywords: "panel show hide collapse focus ui",
+      group: "view",
+      menu: "view",
+      section: "layout",
+      enabled: (c) => c.slideIndex !== undefined,
+      run: () => {
+        const open = SIDE_PANELS.some((id) => !layoutPanel(id).collapsed);
+        for (const id of SIDE_PANELS) setPanelCollapsed(id, open);
+      },
+    },
     {
       id: "view.followAI",
       label: "Follow AI",

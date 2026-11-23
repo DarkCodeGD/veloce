@@ -385,7 +385,7 @@ describe.skipIf(problem !== null)("Phase 3: editor controls", { timeout: 60_000 
   });
 
   it("speaker notes grow with their text instead of showing a resize grip", async () => {
-    const notes = page.getByLabel("Speaker notes");
+    const notes = page.getByRole("textbox", { name: "Speaker notes" });
     const height = async () => (await notes.boundingBox())?.height ?? 0;
     const empty = await height();
     await notes.fill("One\nTwo\nThree\nFour\nFive");
