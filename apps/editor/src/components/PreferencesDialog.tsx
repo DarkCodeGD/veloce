@@ -16,14 +16,14 @@ import {
 } from "@veloce/core";
 import { Check, Copy, Search } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
+import { initialPreferencesTab, type PreferencesTab } from "../dialogs.js";
 import { RULE_NAMES } from "../model/lint-view.js";
 import { changeSettings, useSettings, useSettingsReport } from "../settings.js";
 import { Dialog } from "./Dialog.js";
 import { NumberField, Section, TextField, ToggleField } from "./fields.js";
 import { ShortcutList } from "./ShortcutsDialog.js";
 
-type Tab = "editing" | "files" | "keymap" | "ai";
-const TABS: ReadonlyArray<readonly [Tab, string]> = [
+const TABS: ReadonlyArray<readonly [PreferencesTab, string]> = [
   ["editing", "Editing"],
   ["files", "Files"],
   ["keymap", "Keymap"],
@@ -44,7 +44,7 @@ const numberCommit =
   };
 
 export function PreferencesDialog({ onClose }: { onClose(): void }) {
-  const [tab, setTab] = useState<Tab>("editing");
+  const [tab, setTab] = useState<PreferencesTab>(initialPreferencesTab);
   const ids = useId();
   const report = useSettingsReport();
   return (
@@ -227,11 +227,11 @@ function KeymapTab() {
   const [query, setQuery] = useState("");
   return (
     <div className="keymap">
-      <div className="keymap-search">
+      <div className="search-field">
         <Search size={14} aria-hidden />
         <input
           type="search"
-          className="keymap-query"
+          className="search-field-input"
           aria-label="Search shortcuts"
           placeholder="Search shortcuts"
           value={query}

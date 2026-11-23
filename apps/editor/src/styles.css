@@ -4048,33 +4048,6 @@ html.is-scrubbing * {
   padding-top: 12px;
 }
 
-.keymap-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text-muted);
-}
-
-.keymap-query {
-  flex: 1;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  background: none;
-}
-
-.keymap-query:focus-visible {
-  outline: none;
-}
-
-.keymap-search:focus-within {
-  border-color: var(--accent);
-}
-
 .shortcut-empty {
   margin: 0;
   color: var(--text-muted);
@@ -4306,4 +4279,157 @@ html.is-scrubbing * {
 
 .theme-styles-open {
   justify-self: start;
+}
+
+/* A search field: a magnifier and a borderless input inside one box (Preferences → Keymap,
+   the command palette). type="search", so the text-field rule doesn't restyle the input. */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.search-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft); /* every field's focus ring, on the box */
+}
+
+.search-field-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+}
+
+.search-field-input:focus-visible {
+  outline: none;
+  box-shadow: none; /* the box shows focus */
+}
+
+/* The command palette (D92): a search box over everything, near the top of the window
+   (VS Code, Linear), above a dimmed app. */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.palette {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(620px, 100%);
+  max-height: min(520px, 76vh);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--panel-raised);
+  box-shadow:
+    0 24px 64px rgb(0 0 0 / 0.55),
+    0 2px 8px rgb(0 0 0 / 0.3);
+  overflow: hidden;
+}
+
+.palette-search {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.palette .search-field-input {
+  height: 36px;
+  font-size: 14px;
+}
+
+.palette-list {
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.palette-section {
+  padding: 10px 10px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  cursor: default;
+}
+
+.palette-item.is-active {
+  background: var(--hover);
+}
+
+.palette-item.is-disabled {
+  opacity: 0.45;
+}
+
+.palette-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  color: var(--text-muted);
+}
+
+.palette-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-detail {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.palette-check {
+  flex: none;
+  margin-left: auto;
+  color: var(--accent);
+}
+
+.palette-keys {
+  display: flex;
+  flex: none;
+  gap: 3px;
+  margin-left: auto;
+}
+
+/* A checked command with keys: the check sits just before them. */
+.palette-check + .palette-keys {
+  margin-left: 0;
+}
+
+.palette-keys kbd {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--hover);
+  text-align: center;
+}
+
+.palette-empty {
+  padding: 14px 10px;
+  color: var(--text-muted);
 }

@@ -28,6 +28,7 @@ let context: CommandContext = {
   select() {},
   editText() {},
   goToSlide() {},
+  reveal() {},
   panel: "slides",
   showPanel() {},
   follow: true,
@@ -36,6 +37,9 @@ let context: CommandContext = {
 export const setCommandContext = (next: CommandContext) => {
   context = next;
 };
+
+/** The editor as commands see it, right now (the command palette acts through it, D92). */
+export const commandContext = (): CommandContext => context;
 
 export const runCommand = (id: string, options?: RunOptions) => commands.run(id, context, options);
 export const isCommandEnabled = (id: string) => commands.isEnabled(id, context);

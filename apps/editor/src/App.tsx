@@ -20,6 +20,7 @@ import {
 import { revertAgentChanges, run } from "./actions.js";
 import type { Panel } from "./commands/context.js";
 import { AddMenu } from "./components/AddMenu.js";
+import { CommandPalette } from "./components/CommandPalette.js";
 import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
@@ -121,6 +122,8 @@ export function App() {
       setEditing({ id, caret: "all" });
     },
     goToSlide: setSlideId,
+    // Declared below; it's only called later, once it exists.
+    reveal: (slideId, ids) => reveal(slideId, ids),
     panel,
     // A tab asked for (View, Alt+digit) opens the left panel if it's collapsed.
     showPanel: (next) => {
@@ -399,6 +402,7 @@ export function App() {
       {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
       {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}
       {dialog === "preferences" && <PreferencesDialog onClose={closeDialog} />}
+      <CommandPalette deck={deck ?? undefined} />
       <AddMenu />
       <Toasts />
       <Tooltips />

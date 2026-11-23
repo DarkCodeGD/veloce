@@ -1,7 +1,7 @@
 /**
  * The File and Help menus (D76–D78, D89, D91): the app's dialogs.
  */
-import { openDialog } from "../dialogs.js";
+import { openDialog, openPreferences } from "../dialogs.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import type { EditorCommand } from "./context.js";
 
@@ -44,7 +44,7 @@ export function fileCommands(): EditorCommand[] {
       group: "file",
       menu: "file",
       section: "app",
-      run: () => openDialog("preferences"),
+      run: () => openPreferences(),
     },
   ];
 }

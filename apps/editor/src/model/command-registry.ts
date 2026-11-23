@@ -60,6 +60,8 @@ export interface CommandSpec<C, I = unknown> {
   section?: string;
   /** More words a search matches. */
   keywords?: string;
+  /** `false`: the command palette doesn't list it (key-only plumbing, the palette itself). */
+  palette?: false;
   enabled?(context: C): boolean;
   /** Shown as the current choice: the active tool, the open panel. */
   checked?(context: C): boolean;

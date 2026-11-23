@@ -10,27 +10,11 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type AddMenuState, addMenuStore, closeAddMenu } from "../add-menu.js";
 import { runCommand, useCommands } from "../editor-commands.js";
-import { menuSections, rememberRecent } from "../model/insert.js";
+import { menuSections } from "../model/insert.js";
 import { placePopover } from "../model/popover.js";
+import { loadRecent, noteRecent } from "../recent.js";
 
 const RECENT_KEY = "veloce.add-menu.recent";
-
-/** The last few used (per viewer, this browser). Storage can be missing: never required. */
-function loadRecent(): string[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
-function saveRecent(ids: string[]): void {
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(ids));
-  } catch {
-    // Private window or blocked storage: the menu just doesn't remember.
-  }
-}
 
 export function AddMenu() {
   const state = addMenuStore.use();
@@ -47,7 +31,10 @@ function AddMenuPopup({ state }: { state: AddMenuState }) {
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
 
-  const sections = useMemo(() => menuSections(commands, query, loadRecent()), [commands, query]);
+  const sections = useMemo(
+    () => menuSections(commands, query, loadRecent(RECENT_KEY)),
+    [commands, query],
+  );
   const rows = sections.flatMap((s) => s.items.map((item) => ({ section: s.title, item })));
   const current = Math.min(active, rows.length - 1);
   const rowId = (i: number) => `${listId}-${i}`;
@@ -84,7 +71,7 @@ function AddMenuPopup({ state }: { state: AddMenuState }) {
   }, []);
 
   const choose = (id: string) => {
-    saveRecent(rememberRecent(loadRecent(), id));
+    noteRecent(RECENT_KEY, id);
     close();
     runCommand(id, { at: state.at ?? undefined });
   };

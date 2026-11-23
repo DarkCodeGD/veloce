@@ -60,6 +60,7 @@ export function toolCommands(): EditorCommand[] {
       label: "Back to Select",
       shortcut: SHORTCUTS.selectParent,
       group: "tools",
+      palette: false, // "Select" is listed; this is Esc's job
       keyWhen: () => toolStore.get() !== "select",
       run: () => setTool("select"),
     },

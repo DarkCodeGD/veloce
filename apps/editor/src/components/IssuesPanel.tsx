@@ -6,7 +6,7 @@
 import type { Deck, LintReport, LintSeverity } from "@veloce/core";
 import { CircleCheck, CircleX, Lightbulb, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
-import { openDialog } from "../dialogs.js";
+import { openPreferences } from "../dialogs.js";
 import { issueCounts, viewIssues } from "../model/lint-view.js";
 
 const ICONS: Record<LintSeverity, typeof CircleX> = {
@@ -45,7 +45,7 @@ export function IssuesPanel({ deck, version, lint, off, currentSlideId, onReveal
     return (
       <div className="panel-empty">
         <p>Checking for issues is off.</p>
-        <button type="button" className="button" onClick={() => openDialog("preferences")}>
+        <button type="button" className="button" onClick={() => openPreferences("editing")}>
           Open Preferences
         </button>
       </div>

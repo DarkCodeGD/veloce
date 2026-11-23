@@ -22,6 +22,8 @@ export interface CommandContext {
   /** Start typing into a text layer, all of its text selected. */
   editText(id: string): void;
   goToSlide(id: string): void;
+  /** Go to a slide and select layers on it (a slide change alone clears the selection). */
+  reveal(slideId: string, ids: string[]): void;
   panel: Panel;
   showPanel(panel: Panel): void;
   /** Follow AI: jump to the slide an agent is working on. */

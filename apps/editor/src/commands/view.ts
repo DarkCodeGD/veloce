@@ -1,8 +1,9 @@
 /**
- * The View menu (D89, D90): canvas zoom (view state, never ops), the left panel's tabs, the
- * workspace's panels shown or collapsed, and Follow AI.
+ * The View menu (D89, D90, D92): the command palette, canvas zoom (view state, never ops),
+ * the left panel's tabs, the workspace's panels shown or collapsed, and Follow AI.
  */
 import { type CameraControls, cameraControls } from "../camera-controls.js";
+import { openPalette } from "../command-palette.js";
 import { panel as layoutPanel, setPanelCollapsed, togglePanel } from "../layout.js";
 import { zoomKeyDirection } from "../model/camera.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
@@ -64,6 +65,18 @@ const SIDE_PANELS: readonly PanelId[] = ["left", "inspector"];
 
 export function viewCommands(): EditorCommand[] {
   return [
+    {
+      id: "view.palette",
+      label: "Command palette…",
+      shortcut: SHORTCUTS.palette,
+      moreKeys: [SHORTCUTS.paletteAlt],
+      keywords: "search find run action quick open",
+      group: "view",
+      menu: "view",
+      section: "palette",
+      palette: false, // it's already open
+      run: openPalette,
+    },
     zoom("view.zoomIn", "Zoom in", SHORTCUTS.zoomIn, "zoomIn", zoomKeys(1)),
     zoom("view.zoomOut", "Zoom out", SHORTCUTS.zoomOut, "zoomOut", zoomKeys(-1)),
     zoom("view.zoomToFit", "Zoom to fit", SHORTCUTS.zoomToFit, "zoomToFit"),

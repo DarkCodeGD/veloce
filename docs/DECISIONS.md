@@ -2137,3 +2137,32 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
    the top bar switch when the setting arrives or changes.
 7. **Keymap is the shortcut list with a search** (by name, keys or keywords), the same view
    of the registry as Help → Keyboard shortcuts (D89). Rebinding waits for after 1.0.
+
+## D92 — The command palette: one search over commands, settings, slides and layers
+
+**Status:** Accepted (2026-11-24). Implements D53's palette; reads the registry (D81, D89).
+
+1. **Ctrl/Cmd+K** opens it (Figma, Linear, Slack, Notion), and so does **View → Command
+   palette…**. Ctrl/Cmd+Shift+P works too, unlisted, for VS Code hands. A search box near
+   the top of a dimmed window; arrows, Enter, Esc; a press outside closes it; focus goes
+   back where it was. **Why:** one place to reach everything is what keeps a big app easy
+   to learn, and it's the one most tools agree on.
+2. **It lists the registry**, so every menu command, tool and Add menu layer is in it with
+   its keys, and a plugin's commands will be too with no extra code (D79). A command can
+   opt out (`palette: false`): key-only plumbing (Esc's "Back to Select") and the palette
+   itself. **Commands that can't run now stay listed, dimmed and last**, and Enter leaves
+   them alone. **Why:** hiding them makes "Align left" look missing when nothing's selected
+   (JetBrains' Find Action does the same).
+3. **Settings:** on/off ones (Snapping, Check slides, Follow AI at start) flip in place with
+   a check mark; the rest open Preferences on their tab. **Slides** (by number, name or first
+   text) go to that slide; **layers** of every slide go to the slide and select the layer.
+4. **Ranking:** every word typed must start a word of the name, its context (menu, slide)
+   or its keywords. The best matches lead, whatever their kind: a label that starts with
+   the query, then whole words, then word starts, then context or keywords. Sections
+   (Commands, Settings, Slides, Layers) follow their best match. So "1" puts Slide 1 before
+   Zoom to 100%, and "snapping" puts the setting before Preferences…. Words are letters
+   and digits of any script ("Café", "日本"). Each kind shows its best few (layers 12), so
+   a deck with thousands of layers stays instant. **Why:** a fixed kind order made the
+   first result wrong for numbers and setting names, which the test caught.
+5. **With nothing typed:** the last 5 commands run (this browser, like the Add menu's
+   recent list; storage is optional), then every command.

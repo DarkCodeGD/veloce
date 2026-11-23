@@ -55,6 +55,9 @@ export const SHORTCUTS = {
   keyboardShortcuts: "Mod+/",
   // VS Code's and Figma's key for settings.
   preferences: "Mod+,",
+  // The command palette (D92): Ctrl/Cmd+K (Figma, Linear, Slack); VS Code's key works too.
+  palette: "Mod+K",
+  paletteAlt: "Mod+Shift+P",
   // Show/hide both side panels (Figma's Show/Hide UI).
   sidePanels: "Mod+\\",
   // Paragraph alignment while typing (Google Docs' keys), matched on the letter.

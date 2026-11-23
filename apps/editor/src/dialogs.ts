@@ -18,6 +18,19 @@ const set = (next: DialogId | null) => {
 };
 
 export const openDialog = (id: DialogId) => set(id);
+
+/** Preferences' tabs (D91). */
+export type PreferencesTab = "editing" | "files" | "keymap" | "ai";
+let preferencesTab: PreferencesTab = "editing";
+
+/** Opens Preferences on a tab (the command palette's settings, D92). */
+export function openPreferences(tab: PreferencesTab = "editing"): void {
+  preferencesTab = tab;
+  set("preferences");
+}
+
+/** The tab Preferences opens on. */
+export const initialPreferencesTab = (): PreferencesTab => preferencesTab;
 export const closeDialog = () => set(null);
 
 /** The open dialog, re-rendering when it changes. */
