@@ -32,6 +32,8 @@
   done (D94, D95).
 - **State:** `pnpm check` is green (852 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
+- **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
+  true when the architecture changes. User guide and references come in Phase 9 (D96).
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
     MCP and a view-only editor. The first real Claude Code runs' issues are fixed (D37, D38).
@@ -378,6 +380,12 @@ the skill makes a great one; someone with only an API key can do the same inside
 - [ ] Trademark check for "Veloce", dependency license audit
 - [ ] `.veloce` format spec and stability promise (what 1.x will always open), plus fuzz tests
       for the reader: files from the internet are untrusted
+- [ ] User guide on the docs site (with Phase 8's plugin docs): getting started, connecting
+      an agent, each workspace, components and layouts, presenting, exporting. Written once
+      the UI has settled (after Phases 4–6) (D96)
+- [ ] Generated reference pages on the docs site: keyboard shortcuts from the command
+      registry, element props from their schemas, MCP tools, lint rules, so they can't drift
+      from the app (D96)
 - [ ] UI strings kept in one place so translating the app later is a data change (the
       translations themselves come after 1.0)
 

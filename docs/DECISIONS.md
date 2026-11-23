@@ -2293,3 +2293,24 @@ message is something else, so code and UI say "versions").
    (`aria-hidden`), so a card's name is its accessible name.
 7. **Kept out for now:** applying a layout to an existing slide, editing a layout in place,
    per-theme layout variants beyond tokens, and layouts shared between decks (After 1.0).
+
+## D96 — Documentation: a map now, user docs before 1.0, generated wherever possible
+
+**Status:** Accepted (2026-11-24).
+
+1. **Now:** a README that gets someone running (quick start, connecting Claude Code, what
+   works) and [ARCHITECTURE.md](ARCHITECTURE.md), a one-page map of the packages, how a
+   change flows and where to start reading, linking here for the why. **Why now:** the
+   architecture is settled and the project is big (8 packages, 95 decisions); a map pays
+   off at once for every session and contributor, and it barely goes stale. CLAUDE.md
+   asks that a change that makes it wrong updates it in the same change.
+2. **Before 1.0, not after:** the user guide, plugin developer docs (Phase 8) and the
+   `.veloce` format spec (Phase 9). **Why:** 1.0 is the public launch: it promises
+   third-party plugins and a stable file format, and an app people install needs a guide.
+   **Why not now:** half the UI (Animate, Present, desktop, export) doesn't exist yet, so
+   walkthroughs and screenshots written today would be rewritten before launch.
+3. **Generated, not written, wherever the app already knows the answer:** keyboard
+   shortcuts from the command registry, element props from their Zod schemas, MCP tools from
+   their definitions, lint rules from `LINT_RULES`, as the agent docs already are (D13).
+   **Why:** hand-written references drift; generated ones can't.
+4. **After 1.0:** tutorials, videos and translated docs.

@@ -8,7 +8,8 @@ dependency licenses matter (check a library's license before adding it).
 ## Start of every session
 
 1. Read [docs/ROADMAP.md](docs/ROADMAP.md) → "Current status" and the active phase.
-2. Skim [docs/DECISIONS.md](docs/DECISIONS.md) before proposing architecture changes. Don't re-argue
+2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the map (packages, data flow, where to start
+   reading). Skim [docs/DECISIONS.md](docs/DECISIONS.md) before proposing architecture changes. Don't re-argue
    a decision without new information; if one changes, add a new entry and mark the old one Superseded.
 3. Continue with the first unchecked item in the active phase unless the user asks for something else.
 
@@ -16,6 +17,8 @@ dependency licenses matter (check a library's license before adding it).
 
 - Tick completed checkboxes in ROADMAP.md and update "Current status" (active phase, date, notes).
 - Record any new architectural decision in DECISIONS.md with its **why**.
+- If a change makes [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) wrong (a new package, a new
+  data flow, a moved responsibility), update it in the same change.
 
 ## Golden rules
 
