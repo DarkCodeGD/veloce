@@ -440,11 +440,29 @@ user moves one into a phase.
 - A user component library shared between decks (`~/.config/veloce/library/`)
 - Linked components: a main component with instances and overrides (an override model,
   invertible ops across instances, detach). Also makes deck-wide slide-layout edits possible
+- From the 2026-11-24 parity check (Google Slides, PowerPoint, Keynote, Pitch, Figma
+  Slides):
+  - Slide size: 4:3, 16:10, custom, portrait and square when creating a deck (`stage` is
+    already in the schema, today always 1920×1080); resizing an existing deck later, as
+    an op that lets auto-layout reflow
+  - Links to slides: a `slide:<id>` link (still right after reordering) on text and on any
+    layer, followed in presenter mode and the HTML export (agenda and "back to menu" slides)
+  - Copy and paste slides between decks, like Google's Import slides and PowerPoint's Reuse
+    slides (the clipboard already carries images between decks)
+  - More shape types: triangle, polygon, star, chevron and block arrows, as built-in shapes
+    with a few settings (no user-supplied path data)
+  - Flip horizontal and vertical (fits with Phase 4's transform on top of the rest position)
+  - Superscript, subscript and highlight color in text
+  - Format painter: copy one layer's style onto others
+  - Rulers and guides you place yourself (snapping covers most of the need)
+  - Comments pinned to layers, which agents can read and act on
 
 **Presenting**
 
 - Phone as a remote (scan a QR code: advance slides, read notes)
 - Pen/ink annotations while presenting; rehearsal with per-slide timings
+- Presenter extras: black or white screen (B/W keys), type a number to jump to a slide,
+  Present from the current slide, skip hidden slides
 - Recording a talk with a webcam bubble, exported as video
 - Audio: background music, per-slide narration, auto-advance (kiosk loops)
 
@@ -467,6 +485,12 @@ user moves one into a phase.
 - PPTX import (shapes, text, images, basic layout; best-effort animations) and PPTX export
   (static, with fallbacks for plugin elements)
 - Handouts and notes pages as PDF; accessible (tagged) PDF
+
+**Desktop**
+
+- Spell-check suggestions in Electron: a right-click menu with the suggestions (Electron
+  shows none without one) and the dictionary language set from the deck's language (D76).
+  Small; worth pulling into Phase 6
 
 ---
 
