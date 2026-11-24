@@ -1,6 +1,7 @@
 /**
  * The File and Help menus (D76–D78, D89, D91, D93): the app's dialogs.
  */
+import { trashDeck } from "../actions.js";
 import { openDialog, openPreferences } from "../dialogs.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import type { EditorCommand } from "./context.js";
@@ -15,6 +16,15 @@ export function fileCommands(): EditorCommand[] {
       menu: "file",
       section: "deck",
       run: () => openDialog("new-deck"),
+    },
+    {
+      id: "file.manageDecks",
+      label: "Manage decks…",
+      keywords: "open switch delete remove trash decks presentations files",
+      group: "file",
+      menu: "file",
+      section: "deck",
+      run: () => openDialog("decks"),
     },
     // Versions (D93). No keys: Ctrl+Alt+S is a letter on AltGr keyboards (ś in Polish).
     {
@@ -56,6 +66,17 @@ export function fileCommands(): EditorCommand[] {
       section: "settings",
       enabled: (c) => c.deck !== undefined,
       run: () => openDialog("theme-styles"),
+    },
+    // Destructive but undoable: the Undo toast, not an "are you sure?" (D99).
+    {
+      id: "file.trashDeck",
+      label: "Move deck to trash",
+      keywords: "delete remove deck presentation file",
+      group: "file",
+      menu: "file",
+      section: "trash",
+      enabled: (c) => c.deck !== undefined,
+      run: () => void trashDeck(),
     },
     {
       id: "file.preferences",

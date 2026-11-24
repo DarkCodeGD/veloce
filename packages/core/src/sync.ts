@@ -72,6 +72,12 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     theme: z.string().min(1).max(64).optional(),
   }),
   /**
+   * Move a deck to the trash, or bring one back from it this session (D99). Every tab gets
+   * the new `decks`; tabs on a deleted active deck follow the new active one.
+   */
+  z.strictObject({ type: z.literal("delete"), requestId: RequestIdSchema, deckId: IdSchema }),
+  z.strictObject({ type: z.literal("restore"), requestId: RequestIdSchema, deckId: IdSchema }),
+  /**
    * Versions (D93). Saving or deleting one sends every tab of that deck the new `versions`;
    * restoring is a change of the client's own (undo brings the deck back); `version.open`
    * replies with `version` (the saved deck, to look at).

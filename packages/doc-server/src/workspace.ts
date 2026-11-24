@@ -10,8 +10,11 @@
  *
  * Decks are identified by their deck ID. If a folder holds two files with the same ID (a copied
  * file), the copy gets a fresh ID when it's opened so the two never get mixed up.
+ *
+ * Deleting a deck moves its file to `.trash/` in the folder (D99), named `<ms>-<file>`; it
+ * can be restored this session, and trashed files over 30 days old are removed on open.
  */
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   type ApplyContext,
@@ -61,6 +64,12 @@ export type WorkspaceEvent =
   /** A deck's saved versions changed (D93): one saved or deleted. Newest first. */
   | { type: "versions"; deckId: string; versions: VersionInfo[] };
 
+/** Where deleted decks go, inside the workspace folder (D99). */
+export const TRASH_DIR = ".trash";
+/** Trashed decks older than this are removed when the workspace opens. */
+export const TRASH_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+const TRASHED_NAME = /^(\d+)-(.+)$/;
+
 interface FileEntry {
   file: string;
   title: string;
@@ -80,6 +89,11 @@ export class Workspace {
   readonly #sweepTimer: ReturnType<typeof setInterval>;
   #active: string | null = null;
   #closed = false;
+  /** Decks deleted this session → their file in the trash and their name before (D99). */
+  readonly #trashed = new Map<
+    string,
+    { trashFile: string; file: string; title: string; wasActive: boolean }
+  >();
   /** What `configure` can change while running (the app settings, D91). */
   #autosaveDelayMs: number;
   #undoSteps: number;
@@ -99,6 +113,7 @@ export class Workspace {
   static async open(options: WorkspaceOptions): Promise<Workspace> {
     const workspace = new Workspace(options);
     await mkdir(options.dir, { recursive: true });
+    await workspace.#emptyOldTrash();
     await workspace.#scan();
     return workspace;
   }
@@ -195,6 +210,72 @@ export class Workspace {
     };
     for (const listener of this.#listeners) listener(event);
     await this.#save(open);
+  }
+
+  /**
+   * Moves a deck to the trash (D99): its pending edits are saved first, so a restore brings
+   * back exactly what was there. If it was the active deck, the most recent other one is.
+   */
+  async delete(deckId: string): Promise<{ title: string }> {
+    const entry = this.#files.get(deckId);
+    if (!entry) {
+      throw new VeloceError("NOT_FOUND", `No deck with ID "${deckId}"`, {
+        hint: notFoundHint(deckId, [...this.#files.keys()], "deck"),
+      });
+    }
+    await this.#loading.get(deckId)?.catch(() => undefined);
+    const open = this.#open.get(deckId);
+    clearTimeout(this.#saveTimers.get(deckId));
+    this.#saveTimers.delete(deckId);
+    if (open) await this.#save(open);
+    else await this.#saving.get(deckId);
+    const title = open?.deck.meta.title ?? entry.title;
+    // Gone from the workspace before the file moves: nothing can schedule a save of it now.
+    this.#open.delete(deckId);
+    this.#files.delete(deckId);
+    const trashFile = `${this.#now()}-${entry.file}`;
+    await mkdir(join(this.dir, TRASH_DIR), { recursive: true });
+    try {
+      await rename(join(this.dir, entry.file), join(this.dir, TRASH_DIR, trashFile));
+    } catch (error) {
+      this.#files.set(deckId, entry); // still where it was: keep listing it
+      if (open) this.#open.set(deckId, open);
+      throw error;
+    }
+    const wasActive = this.#active === deckId;
+    this.#trashed.set(deckId, { trashFile, file: entry.file, title, wasActive });
+    if (wasActive) this.#active = this.list()[0]?.id ?? null;
+    this.#emitDecks();
+    return { title };
+  }
+
+  /** True if this deck was moved to the trash this session (and not restored). */
+  trashed(deckId: string): boolean {
+    return this.#trashed.has(deckId);
+  }
+
+  /**
+   * Brings back a deck deleted this session, under its old file name if it's free. It's the
+   * active deck again if it was when deleted (or if there's none): Undo after trashing
+   * another deck from Manage decks doesn't move anyone's view.
+   */
+  async restore(deckId: string): Promise<void> {
+    const trashed = this.#trashed.get(deckId);
+    if (!trashed) {
+      throw new VeloceError("NOT_FOUND", `Deck "${deckId}" isn't in the trash`);
+    }
+    const existing = new Set(await readdir(this.dir));
+    const file = existing.has(trashed.file)
+      ? await this.#freeFileName(trashed.file.slice(0, -FILE_EXTENSION.length))
+      : trashed.file;
+    const path = join(this.dir, file);
+    await rename(join(this.dir, TRASH_DIR, trashed.trashFile), path);
+    this.#trashed.delete(deckId);
+    const [bytes, info] = await Promise.all([readFile(path), stat(path)]);
+    const { manifest, slideCount } = inspectVeloce(bytes);
+    this.#files.set(deckId, { file, title: manifest.title, slideCount, modifiedAt: info.mtime });
+    if (trashed.wasActive || this.#active === null) this.#active = deckId;
+    this.#emitDecks();
   }
 
   /** Mark a deck as the one being worked on (editors follow it; agents default to it). */
@@ -331,6 +412,8 @@ export class Workspace {
   #save(open: OpenDeck): Promise<void> {
     const previous = this.#saving.get(open.id) ?? Promise.resolve();
     const next = previous.then(async () => {
+      // Deleted (D99): writing now would put the file back.
+      if (this.#open.get(open.id) !== open) return;
       try {
         const bytes = await writeVeloce(open.bundle(), {
           createdAt: open.createdAt,
@@ -352,6 +435,27 @@ export class Workspace {
       if (this.#saving.get(open.id) === next) this.#saving.delete(open.id);
     });
     return next;
+  }
+
+  /** Removes trashed decks older than TRASH_KEEP_MS (by the time in their name). */
+  async #emptyOldTrash(): Promise<void> {
+    const trash = join(this.dir, TRASH_DIR);
+    let names: string[];
+    try {
+      names = await readdir(trash);
+    } catch {
+      return; // no trash yet
+    }
+    for (const name of names) {
+      const at = Number(TRASHED_NAME.exec(name)?.[1]);
+      if (!at || this.#now() - at < TRASH_KEEP_MS) continue;
+      await rm(join(trash, name), { force: true });
+      this.#log(`Emptied ${name} from the trash (deleted over 30 days ago)`);
+    }
+  }
+
+  #now(): number {
+    return (this.#options.now ?? Date.now)();
   }
 
   async #freeFileName(slug: string): Promise<string> {

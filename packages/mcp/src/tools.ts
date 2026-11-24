@@ -201,9 +201,11 @@ async function currentDeck(ctx: ToolContext): Promise<OpenDeck> {
   if (pinned && !ctx.workspace.has(pinned)) {
     throw new VeloceError(
       "NOT_FOUND",
-      `Your current deck (${pinned}) isn't in the workspace anymore`,
+      ctx.workspace.trashed(pinned)
+        ? `The user moved your current deck (${pinned}) to the trash: that's their decision, don't recreate it`
+        : `Your current deck (${pinned}) isn't in the workspace anymore`,
       {
-        hint: "list_decks, then open_deck the one to work on (or create_deck).",
+        hint: "list_decks, then open_deck the one to work on (or create_deck if the user asks for a new one).",
       },
     );
   }

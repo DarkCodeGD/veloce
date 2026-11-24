@@ -2,7 +2,8 @@
  * Phase 3 acceptance (round 5 parity, D76 and D77): the File menu. Deck info edits the deck's
  * title, description, authors and language as one undoable step (the op agents use), and says
  * what to fix in place; New deck makes a deck with a theme and the editor switches to it, as
- * an agent's create_deck does. Driven in real Chromium against the real server.
+ * an agent's create_deck does; Move deck to trash takes one away, undoably (D99). Driven in
+ * real Chromium against the real server.
  */
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { DeckMeta } from "@veloce/core";
@@ -55,7 +56,7 @@ describe.skipIf(problem !== null)("Phase 3: File menu", { timeout: 60_000 }, () 
     const focused = () => page.evaluate(() => document.activeElement?.textContent);
     await expect.poll(focused).toBe("New deck…");
     await page.keyboard.press("ArrowDown");
-    await expect.poll(focused).toBe("Save version…");
+    await expect.poll(focused).toBe("Manage decks…");
     await page.keyboard.press("Escape");
     expect(await page.getByRole("menu").count()).toBe(0);
     await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe("File");
@@ -168,6 +169,80 @@ describe.skipIf(problem !== null)("Phase 3: File menu", { timeout: 60_000 }, () 
     await page.getByRole("button", { name: "New slide" }).click();
     await expect.poll(() => page.locator(".thumb").count()).toBe(1);
     expect((await h.workspace.get(created?.id ?? "")).deck.slides).toHaveLength(1);
+  });
+
+  it("moves a deck to the trash, Undo brings it back, and the last one leaves an empty editor (D99)", async () => {
+    const trash = async () => {
+      await page.getByRole("button", { name: "File", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Move deck to trash" }).click();
+    };
+    const review = h.workspace.activeDeckId ?? "";
+    await trash();
+    await expect.poll(() => h.workspace.list().map((d) => d.id)).toEqual([firstId]);
+    await expect.poll(() => page.title()).toBe("Series A – Veloce"); // on to the other deck
+    const toast = page.locator(".toast").last();
+    await expect.poll(() => toast.textContent()).toContain('Moved "Q3 review" to the trash');
+    await toast.getByRole("button", { name: "Undo" }).click();
+    await expect.poll(() => h.workspace.activeDeckId).toBe(review);
+    await expect.poll(() => page.title()).toBe("Q3 review – Veloce");
+
+    // Both gone: the editor has no deck to show, and File → New still works from there.
+    await trash();
+    await expect.poll(() => page.title()).toBe("Series A – Veloce");
+    await trash();
+    await expect.poll(() => h.workspace.list()).toEqual([]);
+    await expect.poll(() => page.title()).toBe("Veloce");
+    await page.getByRole("button", { name: "File", exact: true }).click();
+    expect(await page.getByRole("menuitem", { name: "Move deck to trash" }).isDisabled()).toBe(
+      true,
+    );
+    await page.getByRole("menuitem", { name: "New deck…" }).click();
+    await dialog().getByRole("button", { name: "Create" }).click();
+    await expect.poll(() => h.workspace.list().length).toBe(1);
+    await expect.poll(() => page.getByText("This deck is empty").count()).toBe(1);
+  });
+
+  it("Manage decks lists every deck to open or trash, several in a row (D99)", async () => {
+    await page.getByRole("button", { name: "File", exact: true }).click();
+    await page.getByRole("menuitem", { name: "New deck…" }).click();
+    await dialog().getByLabel("Title").fill("Alpha");
+    await dialog().getByRole("button", { name: "Create" }).click();
+    await expect.poll(() => h.workspace.list().length).toBe(2);
+    await expect.poll(() => page.title()).toBe("Alpha – Veloce");
+
+    await openFile("Manage decks…");
+    const rows = () => dialog().locator(".decks-item");
+    await expect.poll(() => rows().count()).toBe(2);
+    expect(
+      await dialog().locator(".decks-item[aria-current='true'] .decks-name").textContent(),
+    ).toBe("Alpha");
+    // Search narrows the list; Enter opens the only match.
+    await dialog().getByRole("searchbox", { name: "Search decks" }).fill("untitled");
+    await expect.poll(() => rows().count()).toBe(1);
+    await page.keyboard.press("Enter");
+    await expect.poll(() => dialog().count()).toBe(0);
+    await expect.poll(() => page.title()).toBe("Untitled deck – Veloce");
+
+    // Trash a deck that isn't open: the view stays put, and Undo doesn't move it either.
+    await openFile("Manage decks…");
+    await dialog().getByRole("button", { name: "Move “Alpha” to trash" }).click();
+    await expect.poll(() => rows().count()).toBe(1);
+    expect(await page.title()).toBe("Untitled deck – Veloce");
+    // Undo is in the dialog: the toast behind a modal dialog can't be clicked.
+    await dialog().getByRole("status").getByRole("button", { name: "Undo" }).click();
+    await expect.poll(() => rows().count()).toBe(2);
+    expect(await dialog().getByRole("status").count()).toBe(0);
+    expect(await page.title()).toBe("Untitled deck – Veloce");
+
+    // Trash both, one after the other, without leaving the dialog: it shows the empty state.
+    await dialog().getByRole("button", { name: "Move “Alpha” to trash" }).click();
+    await expect.poll(() => rows().count()).toBe(1);
+    await dialog().getByRole("button", { name: "Move “Untitled deck” to trash" }).click();
+    await expect.poll(() => dialog().getByText("No decks yet.").count()).toBe(1);
+    await expect.poll(() => h.workspace.list()).toEqual([]);
+    await expect.poll(() => page.title()).toBe("Veloce");
+    await dialog().getByRole("button", { name: "Done" }).click();
+    await expect.poll(() => dialog().count()).toBe(0);
   });
 
   it("logged no errors in the page", () => {

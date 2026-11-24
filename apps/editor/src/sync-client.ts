@@ -205,6 +205,16 @@ export class SyncClient {
     }));
   }
 
+  /** Move a deck to the trash (D99). Every tab on it moves to the active deck. */
+  deleteDeck(deckId: string): Promise<void> {
+    return this.#request((requestId) => ({ type: "delete", requestId, deckId }));
+  }
+
+  /** Bring a deck deleted this session back from the trash; it becomes the active deck. */
+  restoreDeck(deckId: string): Promise<void> {
+    return this.#request((requestId) => ({ type: "restore", requestId, deckId }));
+  }
+
   async #history(type: "undo" | "redo"): Promise<boolean> {
     const deckId = this.#state.deckId;
     if (!deckId) return false;
@@ -280,6 +290,18 @@ export class SyncClient {
         // Follow the active deck (e.g. an agent just created or opened one).
         if (message.activeDeckId && message.activeDeckId !== state.deckId)
           this.open(message.activeDeckId);
+        else if (state.deckId && !message.decks.some((d) => d.id === state.deckId)) {
+          // The open deck was deleted and none is left to show (D99).
+          this.#set({
+            deckId: null,
+            deck: null,
+            version: 0,
+            lastChange: null,
+            history: [],
+            lint: null,
+            versions: [],
+          });
+        }
         return;
       case "snapshot":
         this.#set({

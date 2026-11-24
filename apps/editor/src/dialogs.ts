@@ -8,6 +8,7 @@ import { useSyncExternalStore } from "react";
 
 export type DialogId =
   | "new-deck"
+  | "decks"
   | "deck-info"
   | "theme-styles"
   | "shortcuts"

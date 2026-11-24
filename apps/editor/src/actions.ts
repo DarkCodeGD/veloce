@@ -76,6 +76,44 @@ export async function createDeck(title: string, theme?: string): Promise<boolean
   }
 }
 
+/**
+ * Move a deck to the trash (D99): the open one by default (File → Move deck to trash), or
+ * any from Manage decks. Trashing the open deck moves every tab on to the most recent other
+ * one; the toast's Undo brings it back (and back on screen, if it was).
+ */
+export async function trashDeck(target?: { id: string; title: string }): Promise<boolean> {
+  const state = client.getState();
+  const deckId = target?.id ?? state.deckId;
+  if (!deckId) return false;
+  const title = target?.title ?? state.deck?.meta.title ?? "the deck";
+  try {
+    await client.deleteDeck(deckId);
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+  showToast(
+    {
+      message: `Moved "${title}" to the trash`,
+      tone: "info",
+      action: { label: "Undo", run: () => void restoreDeck(deckId) },
+    },
+    8000,
+  );
+  return true;
+}
+
+/** Undo of a trashed deck (D99): back from the trash, and on screen if it was before. */
+export async function restoreDeck(deckId: string): Promise<boolean> {
+  try {
+    await client.restoreDeck(deckId);
+    return true;
+  } catch (error) {
+    reportError(error);
+    return false;
+  }
+}
+
 // ── Versions (D93) ──
 
 /** File → Save version: true when it's saved (in the file, by then). */

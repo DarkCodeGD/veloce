@@ -85,7 +85,8 @@ version and validated. A broken version is skipped, never fatal.
 
 - **Workspace** (`workspace.ts`): the decks folder. Lists decks cheaply, opens them on
   demand, autosaves after a short pause (atomically), and sweeps asset bytes nothing can use
-  (D65). One deck is "active": what the user sees and agents work on by default.
+  (D65). One deck is "active": what the user sees and agents work on by default. Deleting
+  a deck moves its file to `.trash/` in the folder (D99).
 - **OpenDeck** (`open-deck.ts`): one live deck: a `DeckDocument` plus asset bytes, a version
   number and change events. Images are optimized on import (`packages/images`, D67).
 - **Sync hub** (`sync-hub.ts`) speaks the protocol in `core/src/sync.ts` over `/ws`: a client

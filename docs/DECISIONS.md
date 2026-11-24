@@ -2419,3 +2419,30 @@ bold headings.
    `Footer: none.` when there's none, so a removed footer isn't mistaken for a hidden line.
    The summary's `[no section: slides 1–3]` says how far the slides before the first section
    run, and the sections docs say how to rename one.
+
+## D99 — Deleting decks: to a trash folder, with Undo
+
+There was no way to remove a deck. File → **Move deck to trash** (also in the command
+palette) takes the open deck away; a toast offers **Undo**, as for other destructive edits
+(no "are you sure?").
+
+1. **A trash, not a delete:** the file moves to `.trash/` in the decks folder, named
+   `<ms>-<file>`, like Google Slides' trash or the OS trash. Undo (sync `restore`) moves it back
+   this session, under its old name if it's free, and makes it the active deck. Trashed
+   files over 30 days old are removed when the workspace opens; the trash isn't scanned
+   as decks. **Why our own folder, not the OS trash:** Node has no trash API without a
+   dependency, the server may run headless, and it keeps Undo exact. Electron can switch to
+   `shell.trashItem` later.
+2. **Safe against late saves:** pending edits are saved before the file moves, so a restore
+   brings back exactly what was there; after that, a save of the removed deck does nothing
+   (a stale `OpenDeck` someone still holds can't write the file back).
+3. **Every tab follows:** deleting the active deck makes the most recent other one active
+   and every tab switches to it; with none left, tabs show no deck and File → New works.
+4. **Manage decks** (File → Manage decks…): every deck, most recently edited first, with
+   search, to open one or trash several in a row. Its Undo is a bar inside the dialog,
+   because a modal `<dialog>` makes the page behind it, toasts included, inert. Restoring
+   makes the deck active only if it was active when trashed, so undoing the trash of some
+   other deck doesn't move anyone's view.
+5. **Not for agents:** MCP has no delete tool: removing a whole deck is the user's call. An
+   agent whose current deck was trashed is told the user moved it to the trash and not to
+   recreate it.

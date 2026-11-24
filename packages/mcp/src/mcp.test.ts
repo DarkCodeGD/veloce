@@ -1183,3 +1183,17 @@ describe("sections, footer and fields (D97)", () => {
     expect(INSTRUCTIONS).toContain('get_docs("sections")');
   });
 });
+
+describe("decks the user deletes (D99)", () => {
+  it("tells an agent its deck went to the trash, and not to recreate it", async () => {
+    await connect();
+    await call("create_deck", { title: "Doomed" });
+    await workspace.delete(workspace.activeDeckId as string);
+    const after = await call("get_deck_summary");
+    expect(after.isError).toBe(true);
+    expect(after.text).toMatch(
+      /The user moved your current deck \(\w+\) to the trash: that's their decision/,
+    );
+    expect(after.text).toMatch(/How to fix: list_decks, then open_deck/);
+  });
+});

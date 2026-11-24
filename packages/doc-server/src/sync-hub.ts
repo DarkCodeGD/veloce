@@ -177,6 +177,14 @@ export class SyncHub {
             });
           return;
         }
+        if (message.type === "delete" || message.type === "restore") {
+          // Before workspace.get: a trashed deck can't be loaded, and deleting needn't load one.
+          if (message.type === "delete") await workspace.delete(message.deckId);
+          else await workspace.restore(message.deckId);
+          if (!closed)
+            safeSend({ type: "result", requestId: message.requestId, ok: true, version: 0 });
+          return;
+        }
         const deck = await workspace.get(message.deckId);
         if (closed) return;
         switch (message.type) {

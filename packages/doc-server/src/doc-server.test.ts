@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
@@ -11,6 +11,7 @@ import {
   type ServerMessage,
   type SlideMeasurement,
 } from "@veloce/core";
+import { readVeloce } from "@veloce/format";
 import { optimizeInWorker, stopOptimizer } from "@veloce/images";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { atomicWriteFile, slugify } from "./fs.js";
@@ -18,7 +19,7 @@ import { DeckLinter, lintWithRender } from "./lint.js";
 import { HISTORY_LIMIT, UPLOAD_GRACE_MS } from "./open-deck.js";
 import { CachedRenderService, type RenderService } from "./render.js";
 import { SyncHub } from "./sync-hub.js";
-import { Workspace } from "./workspace.js";
+import { TRASH_DIR, TRASH_KEEP_MS, Workspace } from "./workspace.js";
 
 let dir: string;
 const logs: string[] = [];
@@ -382,6 +383,121 @@ describe("Workspace", () => {
     expect(logs.some((l) => l.startsWith("Skipped broken.veloce"))).toBe(true);
     await expect(again.get("nope")).rejects.toThrow(/No deck with ID "nope"/);
     await again.close();
+  });
+});
+
+describe("Deleting decks (D99)", () => {
+  const addSlide = (deck: Awaited<ReturnType<Workspace["create"]>>, id: string) =>
+    deck.apply({
+      origin: "user",
+      label: "Add",
+      ops: [{ op: "slide.insert", slide: createSlide({ id, rootId: `${id}-r` }) }],
+    });
+
+  it("moves it to the trash with its last edits, and restores it from there", async () => {
+    // A long autosave pause: the edit below is still pending when the deck is deleted.
+    const ws = await Workspace.open({ dir, context, autosaveDelayMs: 60_000, now: () => 1_000 });
+    const keep = await ws.create({ title: "Keep" });
+    const gone = await ws.create({ title: "Gone" });
+    expect(addSlide(gone, "s1").ok).toBe(true);
+    expect(ws.activeDeckId).toBe(gone.id);
+
+    expect(await ws.delete(gone.id)).toEqual({ title: "Gone" });
+    expect((await readdir(dir)).sort()).toEqual([TRASH_DIR, "keep.veloce"]);
+    expect(await readdir(join(dir, TRASH_DIR))).toEqual(["1000-gone.veloce"]);
+    const trashed = await readVeloce(await readFile(join(dir, TRASH_DIR, "1000-gone.veloce")));
+    expect(trashed.deck.slides).toHaveLength(1); // the pending edit was saved first
+    expect(ws.list().map((d) => d.id)).toEqual([keep.id]);
+    expect(ws.activeDeckId).toBe(keep.id);
+    expect(ws.trashed(gone.id)).toBe(true);
+    await expect(ws.get(gone.id)).rejects.toThrow(/No deck/);
+
+    // Someone still holding the old deck changes it: nothing writes the file back.
+    expect(addSlide(gone, "s2").ok).toBe(true);
+    await ws.flush();
+    expect(await readdir(dir)).not.toContain("gone.veloce");
+
+    await ws.restore(gone.id);
+    expect(ws.activeDeckId).toBe(gone.id);
+    expect(await readdir(join(dir, TRASH_DIR))).toEqual([]);
+    expect((await ws.get(gone.id)).deck.slides.map((s) => s.id)).toEqual(["s1"]);
+    expect(ws.trashed(gone.id)).toBe(false);
+    await expect(ws.restore(gone.id)).rejects.toThrow(/isn't in the trash/);
+    await ws.close();
+  });
+
+  it("restores under a new name when the old one is taken, and leaves no deck active at the end", async () => {
+    const ws = await open();
+    const first = await ws.create({ title: "Plan" });
+    await ws.delete(first.id);
+    expect(ws.activeDeckId).toBeNull();
+    const second = await ws.create({ title: "Plan" }); // takes plan.veloce
+    await ws.restore(first.id);
+    expect(ws.list().find((d) => d.id === first.id)?.file).toBe("plan-2.veloce");
+    expect(ws.list().find((d) => d.id === second.id)?.file).toBe("plan.veloce");
+    await ws.close();
+  });
+
+  it("restores a deck that wasn't active without moving anyone's view", async () => {
+    const ws = await open();
+    const side = await ws.create({ title: "Side" });
+    const main = await ws.create({ title: "Main" }); // active
+    await ws.delete(side.id);
+    expect(ws.activeDeckId).toBe(main.id);
+    await ws.restore(side.id);
+    expect(ws.activeDeckId).toBe(main.id);
+    expect(ws.list()).toHaveLength(2);
+    await ws.close();
+  });
+
+  it("empties trashed decks older than 30 days when the workspace opens", async () => {
+    const now = 100 * TRASH_KEEP_MS;
+    await mkdir(join(dir, TRASH_DIR), { recursive: true });
+    const old = `${now - TRASH_KEEP_MS - 1}-old.veloce`;
+    const recent = `${now - 1000}-recent.veloce`;
+    for (const name of [old, recent, "notes.txt"]) {
+      await writeFile(join(dir, TRASH_DIR, name), "x");
+    }
+    const ws = await Workspace.open({ dir, context, now: () => now, log: (m) => logs.push(m) });
+    expect((await readdir(join(dir, TRASH_DIR))).sort()).toEqual([recent, "notes.txt"]);
+    expect(logs.join()).toMatch(/Emptied .*old\.veloce/);
+    expect(ws.list()).toEqual([]); // the trash isn't scanned as decks
+    await ws.close();
+  });
+
+  it("deletes from a tab: every tab follows the active deck, and Undo brings it back", async () => {
+    const ws = await open();
+    const other = await ws.create({ title: "Other" });
+    const doomed = await ws.create({ title: "Doomed" });
+    const hub = new SyncHub(ws);
+    const a = client(hub);
+    const b = client(hub);
+    await a.send({ type: "open", deckId: doomed.id });
+    await b.send({ type: "open", deckId: doomed.id });
+
+    await a.send({ type: "delete", requestId: "d1", deckId: doomed.id });
+    await vi.waitFor(() => expect(a.last("result")).toMatchObject({ requestId: "d1", ok: true }));
+    for (const tab of [a, b]) {
+      expect(tab.last("decks")).toMatchObject({
+        activeDeckId: other.id,
+        decks: [{ id: other.id }],
+      });
+    }
+    // Gone: other requests for it fail plainly.
+    await a.send({ type: "delete", requestId: "d2", deckId: doomed.id });
+    await vi.waitFor(() =>
+      expect(a.last("result")).toMatchObject({
+        requestId: "d2",
+        ok: false,
+        error: { code: "NOT_FOUND" },
+      }),
+    );
+
+    await a.send({ type: "restore", requestId: "r1", deckId: doomed.id });
+    await vi.waitFor(() => expect(a.last("result")).toMatchObject({ requestId: "r1", ok: true }));
+    expect(b.last("decks")).toMatchObject({ activeDeckId: doomed.id });
+    expect(ws.list()).toHaveLength(2);
+    await ws.close();
   });
 });
 

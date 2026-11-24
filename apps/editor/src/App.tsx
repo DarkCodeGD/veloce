@@ -32,6 +32,7 @@ import { Inspector } from "./components/Inspector.js";
 import { IssuesPanel } from "./components/IssuesPanel.js";
 import { LayersPanel } from "./components/LayersPanel.js";
 import { LayoutsDialog } from "./components/LayoutsDialog.js";
+import { ManageDecksDialog } from "./components/ManageDecksDialog.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { PreferencesDialog } from "./components/PreferencesDialog.js";
 import { SaveComponentDialog } from "./components/SaveComponentDialog.js";
@@ -408,6 +409,7 @@ export function App() {
         )}
       </div>
       {dialog === "new-deck" && <NewDeckDialog onClose={closeDialog} />}
+      {dialog === "decks" && <ManageDecksDialog onClose={closeDialog} />}
       {dialog === "deck-info" && deck && <DeckInfoDialog deck={deck} onClose={closeDialog} />}
       {dialog === "theme-styles" && deck && <ThemeStylesDialog deck={deck} onClose={closeDialog} />}
       {dialog === "shortcuts" && <ShortcutsDialog onClose={closeDialog} />}

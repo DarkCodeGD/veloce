@@ -4850,3 +4850,104 @@ html.is-scrubbing * {
     opacity: 1;
   }
 }
+
+/* File → Manage decks… (D99): every deck, to open or move to the trash, several in a row. */
+
+.decks-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.decks-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.decks-list {
+  display: grid;
+  gap: 2px;
+  max-height: min(420px, calc(100vh - 300px));
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.decks-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.decks-item:hover,
+.decks-item:focus-within {
+  background: var(--hover);
+}
+
+.decks-item[aria-current="true"] {
+  background: var(--accent-soft);
+}
+
+/* The row's main button: the whole title + meta area opens the deck. */
+.decks-open {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.decks-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.decks-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.decks-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Always there (muted), so deleting is never a hidden gesture; red when pointed at. */
+.decks-trash {
+  color: var(--text-muted);
+}
+
+.decks-trash:hover,
+.decks-trash:focus-visible {
+  color: var(--danger);
+}
+
+.decks-none {
+  margin: 8px 0;
+}
+
+/* The last trashed deck's Undo, inside the dialog (the toast is inert behind it). */
+.decks-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
