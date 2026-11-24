@@ -6,6 +6,7 @@ import { VeloceError } from "../errors.js";
 import { deepEqual } from "../json.js";
 import {
   DEFAULT_THEME_MOTION,
+  MOTION_LEVEL_SCALES,
   type MotionTokens,
   motionTokens,
   resolveEasing,
@@ -16,7 +17,7 @@ import { applyOp } from "../ops/apply.js";
 import { type Op, OpSchema } from "../ops/schema.js";
 import { type Animation, AnimationSchema } from "../schema/animation.js";
 import type { Deck } from "../schema/deck.js";
-import { MotionLevelSchema } from "../schema/motion.js";
+import { MOTION_LEVELS, MotionLevelSchema } from "../schema/motion.js";
 import { type Theme, ThemeSchema } from "../schema/theme.js";
 import {
   BUILTIN_THEMES,
@@ -383,6 +384,25 @@ describe("motion levels and $motion tokens (D111)", () => {
       normal: 288, // Studio's crisp 320 at 0.9×
       distance: 1.6,
     });
+  });
+
+  it("lets more move at each level up: reach, effects per layer, ambient motion (§7)", () => {
+    const rank = <T>(order: readonly T[], value: T) => order.indexOf(value);
+    const reaches = ["key", "content", "most", "all"] as const;
+    const ambients = ["none", "key", "content", "all"] as const;
+    const levels = MOTION_LEVELS.map((level) => MOTION_LEVEL_SCALES[level]);
+    for (const [i, scale] of levels.entries()) {
+      expect(scale.summary.length).toBeGreaterThan(20);
+      const before = levels[i - 1];
+      if (!before) continue;
+      expect(rank(reaches, scale.reach)).toBeGreaterThanOrEqual(rank(reaches, before.reach));
+      expect(rank(ambients, scale.ambient)).toBeGreaterThanOrEqual(rank(ambients, before.ambient));
+      expect(scale.effectsPerLayer ?? Number.POSITIVE_INFINITY).toBeGreaterThanOrEqual(
+        before.effectsPerLayer ?? Number.POSITIVE_INFINITY,
+      );
+    }
+    expect(MOTION_LEVEL_SCALES.calm).toMatchObject({ reach: "key", ambient: "none" });
+    expect(MOTION_LEVEL_SCALES.absurd.effectsPerLayer).toBeNull();
   });
 
   it("checks levels and tokens, with errors that list the valid ones", () => {

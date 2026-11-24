@@ -2908,3 +2908,22 @@ D104 §1–2 concrete; part of format v3.
    it yet, so nothing agents use changed); editing a theme's `$motion` values in the editor;
    a theme's signature transition (with slide transitions); reduce motion playing `calm`
    (presenter mode, D104 §4).
+7. **The level also says how much moves** (added 2026-11-24, at the user's request): "calm"
+   must mean fewer things move, not the same things slower, or an agent could animate 40
+   layers slowly and call it calm. The same table holds, per level, which layers animate
+   by role (`reach`), how many effects one layer gets, which layers keep moving after they
+   arrive (`ambient`), and a one-line `summary` for people and agents:
+
+   | level   | what animates                 | effects per layer | keeps moving |
+   | ------- | ----------------------------- | ----------------- | ------------ |
+   | calm    | key: the title and main point | 1 (soft fades)    | nothing      |
+   | subtle  | content, in reading order     | 1                 | nothing      |
+   | lively  | most: content and visuals     | 2                 | key elements |
+   | intense | all, layered, with depth      | 3                 | content      |
+   | absurd  | all, all the time             | no limit          | everything   |
+
+   **Who reads it:** the choreography engine picks which layers to animate from their role
+   and this table; agents get the summaries in the MCP docs, so "make it calm" means two
+   things move, not twenty; lint warns (never errors) when a slide does far more than its
+   level says, with the fix "remove the loops, or set the slide to lively". Each lands with
+   its own roadmap item. Performance budgets (D107 §4) still cap every level.

@@ -35,8 +35,30 @@ export const DEFAULT_THEME_MOTION: ThemeMotion = {
   move: { cubicBezier: [0.65, 0, 0.35, 1] },
 };
 
-/** What a level does to the theme's motion, relative to `subtle` (all 1). */
+/**
+ * Which layers animate, by their role on the slide (D111 §7):
+ * - `key`: the title and the slide's main point (the number, the chart, the hero image);
+ * - `content`: everything that carries content, in reading order; not decoration;
+ * - `most`: content plus supporting visuals (icons, dividers, backgrounds of cards);
+ * - `all`: every layer.
+ */
+export type MotionReach = "key" | "content" | "most" | "all";
+/** Which layers keep moving after they arrive (pulses, floats, loops), by the same roles. */
+export type AmbientReach = "none" | "key" | "content" | "all";
+
+/**
+ * What a level does: how things move (the multipliers, relative to `subtle`, all 1) and how
+ * much moves (reach, effects per layer, ambient motion).
+ */
 export interface MotionLevelScale {
+  /** One line for people and agents: what this level looks like. */
+  summary: string;
+  /** Which layers animate. */
+  reach: MotionReach;
+  /** Most effects one layer gets on a slide (entrance, emphasis…); null: no limit. */
+  effectsPerLayer: number | null;
+  /** Which layers keep moving once they're in. */
+  ambient: AmbientReach;
   /** Multiplies the duration tokens: calmer is slower, wilder is snappier. */
   time: number;
   /** Multiplies the stagger: wilder reveals pile up closer together. */
@@ -48,15 +70,64 @@ export interface MotionLevelScale {
 }
 
 /**
- * The five levels (D104 §1). `calm` to `lively` stay tasteful; `intense` and `absurd` are
- * opt-in. These numbers are the whole definition: tune here, nowhere else.
+ * The five levels (D104 §1, D111). `calm` to `lively` stay tasteful; `intense` and `absurd`
+ * are opt-in. This table is the whole definition: the choreography engine, the effect
+ * presets, agents' docs and lint all read it, so tune here, nowhere else. Performance
+ * budgets (D107 §4) still cap every level, `absurd` included.
  */
 export const MOTION_LEVEL_SCALES: Readonly<Record<MotionLevel, MotionLevelScale>> = {
-  calm: { time: 1.25, stagger: 1.5, distance: 0.5, bounce: 0 },
-  subtle: { time: 1, stagger: 1, distance: 1, bounce: 1 },
-  lively: { time: 0.9, stagger: 0.8, distance: 1.6, bounce: 1.3 },
-  intense: { time: 0.8, stagger: 0.6, distance: 2.5, bounce: 1.6 },
-  absurd: { time: 0.7, stagger: 0.4, distance: 4, bounce: 2 },
+  calm: {
+    summary: "Only the key content moves, once, with soft fades. Nothing decorative, no loops.",
+    reach: "key",
+    effectsPerLayer: 1,
+    ambient: "none",
+    time: 1.25,
+    stagger: 1.5,
+    distance: 0.5,
+    bounce: 0,
+  },
+  subtle: {
+    summary: "Content enters in reading order, lists one item at a time; one effect per layer.",
+    reach: "content",
+    effectsPerLayer: 1,
+    ambient: "none",
+    time: 1,
+    stagger: 1,
+    distance: 1,
+    bounce: 1,
+  },
+  lively: {
+    summary:
+      "Most layers animate; numbers count up, charts grow, key elements get an emphasis and a gentle loop.",
+    reach: "most",
+    effectsPerLayer: 2,
+    ambient: "key",
+    time: 0.9,
+    stagger: 0.8,
+    distance: 1.6,
+    bounce: 1.3,
+  },
+  intense: {
+    summary: "Everything animates in layered choreography with depth; content keeps moving.",
+    reach: "all",
+    effectsPerLayer: 3,
+    ambient: "content",
+    time: 0.8,
+    stagger: 0.6,
+    distance: 2.5,
+    bounce: 1.6,
+  },
+  absurd: {
+    summary:
+      "Everything moves, all the time: kinetic text, particles, camera moves, loops everywhere.",
+    reach: "all",
+    effectsPerLayer: null,
+    ambient: "all",
+    time: 0.7,
+    stagger: 0.4,
+    distance: 4,
+    bounce: 2,
+  },
 };
 
 /** Every `$motion` token's value at one level, ready to play. */

@@ -36,7 +36,7 @@
   motion slot (D103). The animation direction is set: motion levels and choreography
   (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (961 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (962 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -275,7 +275,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       effect or keyframe tracks checked by the target's schema, cascade on node removal,
       derived steps (`scheduleSlide`) (D110)
 - [x] Motion level on the deck and per slide; fixed `$motion` tokens (durations, stagger,
-      easings) with a personality per built-in theme, scaled by the level (D111)
+      easings) with a personality per built-in theme, scaled by the level; the level also
+      sets how much moves (reach, effects per layer, ambient) (D111)
 - [ ] 2.5D: perspective on frames and depth (`z`) on layers; the motion slot already draws
       `z`, `rotateX` and `rotateY` (D83 §5, D103 §7)
 - [ ] Format v3: one migration for all of the above, with fixtures and a visual reference
@@ -291,10 +292,13 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [ ] Layout animations in stacks (FLIP: measure both layouts, animate the difference
       through the motion slot) and staggering in reading order (D83 §5, D103 §7)
 - [ ] Choreography from intent: a rule-based engine turns an intent into animations from
-      each layer's role, reading order, the level and the tokens; the editor's "Animate
-      this slide" and MCP call the same engine (D104 §3)
+      each layer's role, reading order, the level and the tokens; the level's reach,
+      effects per layer and ambient decide how much moves; the editor's "Animate this
+      slide" and MCP call the same engine (D104 §3, D111 §7)
 - [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key);
       a theme's signature transition as a `$motion` token (D111 §6)
+- [ ] Motion lint: a slide doing far more than its level says (more layers, effects or loops
+      than its reach) gets a warning with the fix (D111 §7)
 - [ ] Performance lint: agents and people get "this slide will drop frames" with a fix;
       starting budgets about 600 layers moving at once and 100 blurring (D104 §4, D107 §4)
 - [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
@@ -307,8 +311,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       keyframes); the quick way in from Design (right-click → Animate…, a badge on
       animated layers). Present workspace: rehearse in presenter view. Both on the round 5
       shell
-- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent, the motion level,
-      `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
+- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent, the motion level
+      (docs give each level's summary, D111 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide
 - [ ] Determinism test: seek to the same step/time twice → identical screenshots
