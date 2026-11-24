@@ -69,12 +69,13 @@ export function* walkNodes(
   }
 }
 
-/** Every slide and node ID in the deck. */
+/** Every slide, node and animation ID in the deck (one ID space, D110). */
 export function collectIds(deck: Deck): Set<string> {
   const ids = new Set<string>();
   for (const slide of deck.slides) {
     ids.add(slide.id);
     for (const { node } of walkNodes(slide.root)) ids.add(node.id);
+    for (const animation of slide.animations ?? []) ids.add(animation.id);
   }
   return ids;
 }

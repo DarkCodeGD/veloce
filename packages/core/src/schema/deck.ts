@@ -2,6 +2,7 @@
  * Slides and the deck: the top of the document model.
  */
 import { z } from "zod";
+import { AnimationsSchema } from "./animation.js";
 import { ComponentsSchema } from "./component.js";
 import { FrameNodeSchema } from "./node.js";
 import { PaintSchema } from "./paint.js";
@@ -51,13 +52,18 @@ export const SlideSchema = z.strictObject({
   section: SectionNameSchema.optional(),
   /** Leaves the deck's footer off this slide (title and section slides, D97). */
   hideFooter: z.boolean().optional(),
+  /**
+   * In play order (D110); omitted when the slide has none. Edited only with `animation.*`
+   * ops, never patched as a whole (D101 §2.1).
+   */
+  animations: AnimationsSchema.optional(),
   /** Always fills the stage; its own width/height/position are ignored. */
   root: FrameNodeSchema,
 });
 export type Slide = z.infer<typeof SlideSchema>;
 
-/** A slide's own fields without its node tree. */
-export const SlideFieldsSchema = SlideSchema.omit({ root: true });
+/** A slide's own fields, without its node tree and animations (which have their own ops). */
+export const SlideFieldsSchema = SlideSchema.omit({ root: true, animations: true });
 
 const FontWeightSchema = z.number().int().min(1).max(1000);
 

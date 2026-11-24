@@ -32,7 +32,8 @@ export interface MotionState {
   blur?: number;
 }
 
-const FIELDS = [
+/** Every motion channel: what an animation's keyframe tracks can move directly (D110). */
+export const MOTION_CHANNELS = [
   "x",
   "y",
   "z",
@@ -69,7 +70,7 @@ const REST: Required<MotionState> = {
 export function resolveMotion(motion: MotionState | undefined): Required<MotionState> {
   const out = { ...REST };
   if (!motion) return out;
-  for (const field of FIELDS) {
+  for (const field of MOTION_CHANNELS) {
     const value = motion[field];
     if (typeof value === "number" && Number.isFinite(value)) out[field] = value;
   }
@@ -85,7 +86,7 @@ export function resolveMotion(motion: MotionState | undefined): Required<MotionS
 export function isRestMotion(motion: MotionState | undefined): boolean {
   if (!motion) return true;
   const resolved = resolveMotion(motion);
-  return FIELDS.every((field) => resolved[field] === REST[field]);
+  return MOTION_CHANNELS.every((field) => resolved[field] === REST[field]);
 }
 
 /** True when both draw the layer the same way (field by field, after resolving). */
@@ -93,5 +94,5 @@ export function sameMotion(a: MotionState | undefined, b: MotionState | undefine
   if (a === b) return true;
   const ra = resolveMotion(a);
   const rb = resolveMotion(b);
-  return FIELDS.every((field) => ra[field] === rb[field]);
+  return MOTION_CHANNELS.every((field) => ra[field] === rb[field]);
 }

@@ -66,7 +66,10 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Fields, the footer and sections** (`fields.ts`, D97): a text run can be a field (slide
   number, date…) whose value depends on where the slide is; the footer is deck settings
   drawn over every slide; a section is a marker on its first slide.
-- **Ops** (`src/ops/`): `slide.*`, `node.*`, `deck.*`, `asset.*`, `component.*`. Each is
+- **Animations** (`schema/animation.ts`, `timeline.ts`, D110): each slide's `animations`, in
+  play order, with triggers that derive the steps (`scheduleSlide`); an effect or keyframe
+  tracks on motion channels or the target's own properties.
+- **Ops** (`src/ops/`): `slide.*`, `node.*`, `animation.*`, `deck.*`, `asset.*`, `component.*`. Each is
   plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
   Merge Patches. Ops copy only the path to what changed (structural sharing), so untouched
   slides keep their object identity and renderers skip them.

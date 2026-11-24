@@ -8,6 +8,7 @@
  * nested objects merge, arrays/values replace, `null` deletes a field.
  */
 import { z } from "zod";
+import { AnimationSchema } from "../schema/animation.js";
 import { ComponentNameSchema, ComponentSchema } from "../schema/component.js";
 import { AssetInfoSchema, FooterSchema, SlideSchema } from "../schema/deck.js";
 import { NodeSchema } from "../schema/node.js";
@@ -35,11 +36,23 @@ export const SlideUpdateOp = z.strictObject({
   id: IdSchema,
   set: MergePatchSchema,
 });
+/** An animation at a position in its slide's list (D110). */
+const PlacedAnimationSchema = z.strictObject({
+  index: z.number().int().min(0),
+  animation: AnimationSchema,
+});
+
 export const NodeInsertOp = z.strictObject({
   op: z.literal("node.insert"),
   parentId: IdSchema,
   node: NodeSchema,
   index: IndexSchema,
+  /**
+   * Animations of the inserted layers to put back, at their positions in the slide's list
+   * (ascending). It's how undoing `node.remove` restores the animations that removing the
+   * node took with it (D101 §2.3).
+   */
+  animations: z.array(PlacedAnimationSchema).optional(),
 });
 export const NodeRemoveOp = z.strictObject({ op: z.literal("node.remove"), id: IdSchema });
 /** Move a node to another frame (or another position in the same frame), on any slide. */
@@ -56,6 +69,32 @@ export const NodeUpdateOp = z.strictObject({
   id: IdSchema,
   set: MergePatchSchema,
 });
+// ── Animations (D110): one at a time, by ID, never the slide's list as a whole ─────────
+
+export const AnimationInsertOp = z.strictObject({
+  op: z.literal("animation.insert"),
+  slideId: IdSchema,
+  animation: AnimationSchema,
+  /** Position in the slide's play order. Omitted = last. */
+  index: IndexSchema,
+});
+export const AnimationRemoveOp = z.strictObject({
+  op: z.literal("animation.remove"),
+  id: IdSchema,
+});
+/** Move an animation within its slide's play order. */
+export const AnimationMoveOp = z.strictObject({
+  op: z.literal("animation.move"),
+  id: IdSchema,
+  index: z.number().int().min(0),
+});
+/** Patch an animation's fields (`tracks` merge by property). Not its `id`. */
+export const AnimationUpdateOp = z.strictObject({
+  op: z.literal("animation.update"),
+  id: IdSchema,
+  set: MergePatchSchema,
+});
+
 export const DeckUpdateMetaOp = z.strictObject({
   op: z.literal("deck.updateMeta"),
   set: MergePatchSchema,
@@ -102,6 +141,10 @@ export const OpSchema = z.discriminatedUnion("op", [
   NodeRemoveOp,
   NodeMoveOp,
   NodeUpdateOp,
+  AnimationInsertOp,
+  AnimationRemoveOp,
+  AnimationMoveOp,
+  AnimationUpdateOp,
   DeckUpdateMetaOp,
   DeckSetThemeOp,
   DeckSetFooterOp,

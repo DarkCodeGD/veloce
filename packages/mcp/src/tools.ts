@@ -11,6 +11,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import {
   type AgentOrigin,
+  type Animation,
   type AssetInfo,
   assetKind,
   BUILTIN_THEMES,
@@ -534,9 +535,17 @@ const upsertSlide = defineTool({
         });
       }
     }
-    // Replacing keeps the slide's root frame ID, so references to the slide frame stay valid.
-    const slide = existing
-      ? { ...normalized, root: { ...normalized.root, id: existing.slide.root.id } }
+    // Replacing keeps the slide's root frame ID, so references to the slide frame stay valid,
+    // and the animations of layers that are still there (same ID): rebuilding a slide's
+    // content shouldn't throw away how it plays (D110). The rest go with their layers.
+    const kept = existing ? keptAnimations(existing.slide, normalized) : [];
+    const dropped = (existing?.slide.animations?.length ?? 0) - kept.length;
+    const slide: Slide = existing
+      ? {
+          ...normalized,
+          ...(kept.length > 0 && { animations: kept }),
+          root: { ...normalized.root, id: existing.slide.root.id },
+        }
       : normalized;
     const ops: Op[] = existing
       ? [
@@ -560,12 +569,28 @@ const upsertSlide = defineTool({
     const position = after.slides.findIndex((s) => s.id === slide.id);
     const saved = after.slides[position];
     return text(
-      `${label}: done.`,
+      `${label}: done.${animationNote(kept.length, dropped)}`,
       saved ? slideOutline(saved, position, { footer: !!after.footer }) : "",
       await lintReport(ctx, open, [slide.id]),
     );
   },
 });
+
+/** The old slide's animations whose layers the new content still has (by ID). */
+function keptAnimations(old: Slide, next: Slide): Animation[] {
+  const ids = new Set([...walkNodes(next.root)].map(({ node }) => node.id));
+  ids.delete(next.root.id);
+  return (old.animations ?? []).filter((a) => ids.has(a.target));
+}
+
+function animationNote(kept: number, dropped: number): string {
+  const parts = [
+    kept > 0 && `kept ${kept} ${kept === 1 ? "animation" : "animations"} of layers still on it`,
+    dropped > 0 &&
+      `removed ${dropped} ${dropped === 1 ? "animation" : "animations"} whose layers are gone`,
+  ].filter(Boolean);
+  return parts.length > 0 ? ` (${parts.join("; ")})` : "";
+}
 
 const OP_TYPES = [
   "slide.insert",

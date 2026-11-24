@@ -17,10 +17,18 @@ import {
 import { caseClash, componentNotFound, componentProblem, getComponent } from "../components.js";
 import { parseOrThrow, VeloceError } from "../errors.js";
 import { diffPatch, type JsonObject, mergePatch } from "../json.js";
+import { type Animation, AnimationSchema } from "../schema/animation.js";
 import { MAX_COMPONENTS } from "../schema/component.js";
-import { type Deck, DeckMetaSchema, SlideFieldsSchema } from "../schema/deck.js";
+import { type Deck, DeckMetaSchema, type Slide, SlideFieldsSchema } from "../schema/deck.js";
 import { ElementNodeSchema, FrameFieldsSchema, type FrameNode, type Node } from "../schema/node.js";
 import { notFoundHint } from "../suggest.js";
+import {
+  type AnimationLocation,
+  animationIds,
+  animationProblem,
+  animationsTargeting,
+  findAnimation,
+} from "../timeline.js";
 import {
   collectIds,
   containsNode,
@@ -61,6 +69,14 @@ export function applyOp(deck: Deck, op: Op, ctx: ApplyContext = {}): OpResult {
       return nodeMove(deck, op);
     case "node.update":
       return nodeUpdate(deck, op, ctx);
+    case "animation.insert":
+      return animationInsert(deck, op, ctx);
+    case "animation.remove":
+      return animationRemove(deck, op);
+    case "animation.move":
+      return animationMove(deck, op);
+    case "animation.update":
+      return animationUpdate(deck, op, ctx);
     case "deck.updateMeta":
       return deckUpdateMeta(deck, op);
     case "deck.setTheme":
@@ -86,10 +102,17 @@ export function applyOp(deck: Deck, op: Op, ctx: ApplyContext = {}): OpResult {
 function slideInsert(deck: Deck, op: OpOf<"slide.insert">, ctx: ApplyContext): OpResult {
   const { slide } = op;
   const index = resolveIndex(op.index, deck.slides.length, "the deck's slides");
-  assertNewIds(collectIds(deck), [slide.id, ...subtreeIds(slide.root)]);
+  assertNewIds(collectIds(deck), [
+    slide.id,
+    ...subtreeIds(slide.root),
+    ...(slide.animations ?? []).map((a) => a.id),
+  ]);
   assertDepth(0, subtreeHeight(slide.root));
   assertAssetsExist(deck, slide, slide.id);
   assertElementsValid(slide.root, ctx, "slide.root");
+  for (const [i, animation] of (slide.animations ?? []).entries()) {
+    assertAnimationFits(slide, animation, ctx, `slide.animations[${i}]`);
+  }
   return {
     deck: { ...deck, slides: deck.slides.toSpliced(index, 0, slide) },
     inverse: { op: "slide.remove", id: slide.id },
@@ -113,15 +136,17 @@ function slideMove(deck: Deck, op: OpOf<"slide.move">): OpResult {
 
 function slideUpdate(deck: Deck, op: OpOf<"slide.update">): OpResult {
   const { slide, index } = requireSlide(deck, op.id);
-  const { root, ...fields } = slide;
+  const { root, animations, ...fields } = slide;
   forbidKeys(op.set, {
     id: "IDs can't change. Insert a new slide and remove this one instead.",
     root: `Edit the slide's content with node ops on its root frame "${root.id}".`,
+    animations:
+      "Edit animations one at a time with animation.insert, animation.update, animation.move and animation.remove.",
   });
   const next = parseOrThrow(SlideFieldsSchema, mergePatch(fields, op.set), ["set"]);
   assertAssetsExist(deck, next.background, slide.id);
   return {
-    deck: replaceSlide(deck, index, { ...next, root }),
+    deck: replaceSlide(deck, index, withAnimations({ ...next, root }, animations ?? [])),
     inverse: { op: "slide.update", id: op.id, set: inversePatch(next, fields) },
   };
 }
@@ -135,10 +160,22 @@ function nodeInsert(deck: Deck, op: OpOf<"node.insert">, ctx: ApplyContext): OpR
   assertDepth(parent.path.length + 1, subtreeHeight(op.node));
   assertAssetsExist(deck, op.node, op.node.id);
   assertElementsValid(op.node, ctx, "node");
-  return {
-    deck: insertChild(deck, parent, index, op.node),
-    inverse: { op: "node.remove", id: op.node.id },
-  };
+  let next = insertChild(deck, parent, index, op.node);
+  if (op.animations?.length) {
+    // Put back the animations that removing this node took with it, where they were.
+    assertNewIds(
+      collectIds(deck),
+      op.animations.map((p) => p.animation.id),
+    );
+    const slide = next.slides[parent.slideIndex] as Slide;
+    const list = [...(slide.animations ?? [])];
+    for (const [i, { index: at, animation }] of op.animations.entries()) {
+      assertAnimationFits(slide, animation, ctx, `animations[${i}].animation`);
+      list.splice(resolveIndex(at, list.length, `slide "${slide.id}"'s animations`), 0, animation);
+    }
+    next = replaceSlide(next, parent.slideIndex, withAnimations(slide, list));
+  }
+  return { deck: next, inverse: { op: "node.remove", id: op.node.id } };
 }
 
 function nodeRemove(deck: Deck, op: OpOf<"node.remove">): OpResult {
@@ -148,9 +185,24 @@ function nodeRemove(deck: Deck, op: OpOf<"node.remove">): OpResult {
     "removed",
     "Remove the slide with slide.remove, or remove the root's children.",
   );
+  // Its animations (and its children's) go with it, in the same op (D101 §2.3).
+  const removed = animationsTargeting(loc.slide, new Set(subtreeIds(loc.node)));
+  let next = removeChild(deck, loc);
+  if (removed.length > 0) {
+    const gone = new Set(removed.map((r) => r.animation));
+    const slide = next.slides[loc.slideIndex] as Slide;
+    const rest = (slide.animations ?? []).filter((a) => !gone.has(a));
+    next = replaceSlide(next, loc.slideIndex, withAnimations(slide, rest));
+  }
   return {
-    deck: removeChild(deck, loc),
-    inverse: { op: "node.insert", parentId: parent.id, node: loc.node, index: loc.index },
+    deck: next,
+    inverse: {
+      op: "node.insert",
+      parentId: parent.id,
+      node: loc.node,
+      index: loc.index,
+      ...(removed.length > 0 && { animations: removed }),
+    },
   };
 }
 
@@ -163,6 +215,19 @@ function nodeMove(deck: Deck, op: OpOf<"node.move">): OpResult {
       "FORBIDDEN",
       `Can't move "${op.id}" into itself or one of its own children`,
     );
+  }
+  const destination = findNode(deck, op.parentId);
+  if (destination && destination.slide.id !== loc.slide.id) {
+    const animated = animationsTargeting(loc.slide, new Set(subtreeIds(loc.node)));
+    if (animated.length > 0) {
+      throw new VeloceError(
+        "FORBIDDEN",
+        `Can't move "${op.id}" to another slide: ${quoteList(animated.map((a) => a.animation.id))} on slide "${loc.slide.id}" animate it`,
+        {
+          hint: "Animations stay on their slide. Remove them first (animation.remove), or insert a copy of the layer on the other slide.",
+        },
+      );
+    }
   }
   const without = removeChild(deck, loc);
   // Paths may have shifted after the removal, so look the target up again.
@@ -208,6 +273,85 @@ function nodeUpdate(deck: Deck, op: OpOf<"node.update">, ctx: ApplyContext): OpR
     deck: replaceSlide(deck, loc.slideIndex, { ...loc.slide, root }),
     inverse: { op: "node.update", id: op.id, set: inversePatch(after, before) },
   };
+}
+
+// ── Animations (D110) ─────────────────────────────────────────────────────────────────
+
+function animationInsert(deck: Deck, op: OpOf<"animation.insert">, ctx: ApplyContext): OpResult {
+  const { slide, index: slideIndex } = requireSlide(deck, op.slideId);
+  const list = slide.animations ?? [];
+  const index = resolveIndex(op.index, list.length, `slide "${slide.id}"'s animations`);
+  assertNewIds(collectIds(deck), [op.animation.id]);
+  assertAnimationFits(slide, op.animation, ctx, "animation");
+  return {
+    deck: replaceSlide(
+      deck,
+      slideIndex,
+      withAnimations(slide, list.toSpliced(index, 0, op.animation)),
+    ),
+    inverse: { op: "animation.remove", id: op.animation.id },
+  };
+}
+
+function animationRemove(deck: Deck, op: OpOf<"animation.remove">): OpResult {
+  const { slide, slideIndex, index, animation } = requireAnimation(deck, op.id);
+  const list = (slide.animations ?? []).toSpliced(index, 1);
+  return {
+    deck: replaceSlide(deck, slideIndex, withAnimations(slide, list)),
+    inverse: { op: "animation.insert", slideId: slide.id, animation, index },
+  };
+}
+
+function animationMove(deck: Deck, op: OpOf<"animation.move">): OpResult {
+  const { slide, slideIndex, index, animation } = requireAnimation(deck, op.id);
+  const list = slide.animations ?? [];
+  const target = resolveIndex(op.index, list.length - 1, `slide "${slide.id}"'s animations`);
+  const moved = list.toSpliced(index, 1).toSpliced(target, 0, animation);
+  return {
+    deck: replaceSlide(deck, slideIndex, withAnimations(slide, moved)),
+    inverse: { op: "animation.move", id: op.id, index },
+  };
+}
+
+function animationUpdate(deck: Deck, op: OpOf<"animation.update">, ctx: ApplyContext): OpResult {
+  const { slide, slideIndex, index, animation } = requireAnimation(deck, op.id);
+  forbidKeys(op.set, {
+    id: "IDs can't change. Insert a new animation and remove this one instead.",
+  });
+  const next = parseOrThrow(AnimationSchema, mergePatch(animation, op.set), ["set"]);
+  assertAnimationFits(slide, next, ctx, "set");
+  const list = (slide.animations ?? []).toSpliced(index, 1, next);
+  return {
+    deck: replaceSlide(deck, slideIndex, withAnimations(slide, list)),
+    inverse: { op: "animation.update", id: op.id, set: inversePatch(next, animation) },
+  };
+}
+
+/** The slide with this animation list; no list at all when it's empty (fields are omitted). */
+function withAnimations(slide: Slide, animations: readonly Animation[]): Slide {
+  const { animations: _old, ...rest } = slide;
+  return animations.length > 0 ? { ...rest, animations: [...animations] } : rest;
+}
+
+function assertAnimationFits(slide: Slide, animation: Animation, ctx: ApplyContext, at: string) {
+  const problem = animationProblem(slide, animation, ctx);
+  if (problem) {
+    throw new VeloceError(problem.code, problem.message, {
+      path: `${at}.${problem.path}`,
+      ...(problem.hint && { hint: problem.hint }),
+    });
+  }
+}
+
+function requireAnimation(deck: Deck, id: string): AnimationLocation {
+  const found = findAnimation(deck, id);
+  if (found) return found;
+  const node = findNode(deck, id);
+  throw new VeloceError("NOT_FOUND", `Animation "${id}" not found`, {
+    hint: node
+      ? `"${id}" is a node on slide "${node.slide.id}". Its animations are the ones whose target is "${id}".`
+      : notFoundHint(id, animationIds(deck), "animation"),
+  });
 }
 
 // ── Deck & assets ─────────────────────────────────────────────────────────────────────
@@ -317,10 +461,13 @@ function requireNode(deck: Deck, id: string): NodeLocation {
   const found = findNode(deck, id);
   if (found) return found;
   const slide = findSlide(deck, id);
+  const animation = slide ? null : findAnimation(deck, id);
   throw new VeloceError("NOT_FOUND", `Node "${id}" not found`, {
     hint: slide
       ? `"${id}" is a slide. Its root frame is "${slide.slide.root.id}".`
-      : notFoundHint(id, nodeIds(deck), "node"),
+      : animation
+        ? `"${id}" is an animation on slide "${animation.slide.id}" (of "${animation.animation.target}"). Edit it with animation.update.`
+        : notFoundHint(id, nodeIds(deck), "node"),
   });
 }
 

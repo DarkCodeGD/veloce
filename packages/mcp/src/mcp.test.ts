@@ -213,6 +213,38 @@ describe("building a deck", () => {
     expect(unkeyed.text).not.toMatch(/duplicate-match-key/);
     await call("apply_ops", { label: "Remove", ops: [{ op: "slide.remove", id: "keys" }] });
 
+    // Rebuilding a slide keeps the animations of layers still on it (D110).
+    await call("upsert_slide", {
+      slide: {
+        id: "anim",
+        children: [
+          { id: "stay", type: "text", props: { content: "Stays" } },
+          { id: "goes", type: "text", props: { content: "Goes" } },
+        ],
+      },
+    });
+    (await workspace.get(workspace.activeDeckId ?? "")).apply({
+      origin: "user",
+      label: "Animate",
+      ops: ["stay", "goes"].map((target) => ({
+        op: "animation.insert" as const,
+        slideId: "anim",
+        animation: { id: `an-${target}`, target, effect: { name: "fade-in" } },
+      })),
+    });
+    const rebuilt = await call("upsert_slide", {
+      overwrite: true,
+      slide: { id: "anim", children: [{ id: "stay", type: "text", props: { content: "New" } }] },
+    });
+    expect(rebuilt.text).toMatch(
+      /done\. \(kept 1 animation of layers still on it; removed 1 animation whose layers are gone\)/,
+    );
+    const anim = (await workspace.get(workspace.activeDeckId ?? "")).deck.slides.find(
+      (s) => s.id === "anim",
+    );
+    expect(anim?.animations?.map((a) => a.id)).toEqual(["an-stay"]);
+    await call("apply_ops", { label: "Remove", ops: [{ op: "slide.remove", id: "anim" }] });
+
     // Replacing a slide keeps its position.
     await call("upsert_slide", {
       slide: { id: "second", children: [{ type: "text", props: { content: "Two" } }] },

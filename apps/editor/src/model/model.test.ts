@@ -149,9 +149,44 @@ describe("commands produce valid, undoable ops", () => {
     ]);
     expect(pairs.every((p) => p.to.id !== p.from.id)).toBe(true);
     // An explicit key carries over as it is; the root frame isn't a layer and gets none.
+    expect(copy?.root.id).not.toBe(original?.root.id);
     expect(pairs.find((p) => p.from.id === "footer")?.to.matchKey).toBe("foot");
     expect(copy?.root.matchKey).toBeUndefined();
     expect(lintDeck(deck).filter((i) => i.rule === "duplicate-match-key")).toEqual([]);
+  });
+
+  it("copies a slide's animations with Duplicate slide, animating the copies (D110)", () => {
+    let deck = makeDeck();
+    deck = apply(deck, [
+      {
+        op: "animation.insert",
+        slideId: "s1",
+        animation: { id: "a1", target: "title", effect: { name: "fade-in" } },
+      },
+      {
+        op: "animation.insert",
+        slideId: "s1",
+        animation: {
+          id: "a2",
+          target: "card",
+          effect: { name: "fade-in" },
+          trigger: "afterPrevious",
+        },
+      },
+    ]);
+    deck = apply(deck, duplicateSlide(deck.slides[0] as Slide, 0).ops);
+    const copy = deck.slides[1] as Slide;
+    const ids = new Set(indexSlide(copy).nodes.keys());
+    expect(copy.animations).toHaveLength(2);
+    for (const [i, a] of (copy.animations ?? []).entries()) {
+      expect(a.id).not.toBe(`a${i + 1}`);
+      expect(ids.has(a.target)).toBe(true); // a copy on the new slide, not the original
+    }
+    expect(copy.animations?.[1]?.trigger).toBe("afterPrevious");
+    // Deleting the original's title leaves the copy's animations alone.
+    deck = apply(deck, [{ op: "node.remove", id: "title" }]);
+    expect(deck.slides[0]?.animations?.map((a) => a.id)).toEqual(["a2"]);
+    expect(deck.slides[1]?.animations).toHaveLength(2);
   });
 
   it("reorders among siblings and clamps at the ends", () => {

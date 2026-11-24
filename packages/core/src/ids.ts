@@ -12,7 +12,7 @@ import { webCrypto } from "./crypto.js";
 export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 /** Prefixes used for generated IDs. They make IDs self-describing in logs and errors. */
-export type IdPrefix = "dk" | "sl" | "nd" | "tx";
+export type IdPrefix = "dk" | "sl" | "nd" | "tx" | "an";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 /** Largest multiple of the alphabet size below 256; bytes above it are rejected to avoid modulo bias. */

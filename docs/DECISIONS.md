@@ -2823,3 +2823,45 @@ the deck, and Duplicate slide gives fresh ones, so matching by ID never finds an
 6. **The agent retest** (CLAUDE.md) happens with the morph transition, when the key has a
    visible effect for an agent to check; scripted MCP tests cover the field, its errors,
    the summary and the lint now.
+
+## D110 — The timeline schema: a slide's animations, in play order, edited one at a time
+
+**Status:** Accepted (2026-11-24). Phase 4's timeline schema, part of format v3 (D103 §7),
+keeping D101 §2's rules for suggestion mode and concurrent editing.
+
+1. **`slide.animations`: a list in play order** (omitted when empty, up to 1000). Each
+   animation has an `id` (in the deck's one ID space, with slides and nodes), a `target`
+   (a layer on the same slide, never its root frame), a `trigger` (`onClick` by default,
+   `withPrevious`, `afterPrevious`), `delay` and `duration` in milliseconds, an `easing`,
+   `repeat` (a count or `"forever"`) and `alternate`, and either an **`effect`** (a preset
+   by name with `params`) or its own **`tracks`**, never both.
+   **Why a list with triggers, not numbered steps:** PowerPoint's model, which people know;
+   and an op that adds or moves one animation means the same thing after other edits
+   (D101 §2.2). `scheduleSlide` derives the steps: step 0 plays as the slide appears, each
+   `onClick` starts the next.
+2. **Edited only by `animation.insert/update/remove/move`,** by ID, each with an exact
+   inverse; `slide.update` refuses `animations` (D101 §2.1: a merge patch would replace the
+   whole list and wipe concurrent edits).
+3. **Keyframe tracks** are keyed by what they move: a motion channel (`x`, `y`, `z`,
+   `rotate`, `rotateX`, `rotateY`, `scale`, `scaleX`, `scaleY`, `opacity`, `blur`: drawn by
+   the motion slot, D103) or a property path (`props.*` on elements, `style.*` on frames).
+   A path's values are checked by setting each keyframe into the target's own schema
+   (golden rule 5, D105 §1): `props.fill` takes what the shape's `fill` takes. Keyframes
+   sit at `at` 0–1 of the duration, so a speed control is just `duration` (D106); where a
+   track has no keyframe at 0 or 1, that end is the layer's own value, so
+   `{ "opacity": [{ "at": 0, "value": 0 }] }` fades a layer in to however opaque it is.
+4. **Easing:** CSS names, a cubic Bézier, or a duration-based spring (`{ spring: { bounce } }`).
+   All three can go to the compositor exactly (`cubic-bezier()`, `linear()`, D107 §1).
+5. **Removing a layer removes its animations** (its children's too) in the same op, and
+   the inverse `node.insert` carries them back to their exact places (D101 §2.3). **Moving an
+   animated layer to another slide is refused** with a hint: animations stay on their slide,
+   and moving them along couldn't be undone exactly by one op.
+6. **Copies:** Duplicate slide copies its animations with new IDs, pointed at the copies.
+   `upsert_slide` rebuilding a slide keeps the animations of layers still on it (same ID)
+   and says what it kept and removed. Duplicating or pasting single layers doesn't copy
+   their animations yet.
+7. **Not yet** (their own roadmap items): effect names are checked by the effect presets'
+   registry (until then any well-formed name is accepted); `$motion` tokens for durations
+   and easings; agents' animation ops and `set_animations` (`apply_ops` doesn't offer
+   `animation.*` to agents yet, so nothing agents use changed beyond `upsert_slide`'s note);
+   the evaluator and the clock that play it.

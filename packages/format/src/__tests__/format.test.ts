@@ -295,6 +295,39 @@ describe("migrations", () => {
     expect(Object.keys(text).indexOf("lead")).toBe(Object.keys(text).indexOf("body") - 1);
   });
 
+  it("keeps a slide's animations through a save and a load, and refuses dangling ones (D110)", async () => {
+    const bundle = await bundleWithAsset();
+    const [slide] = bundle.deck.slides;
+    if (!slide) throw new Error("no slide");
+    const animations = [
+      { id: "a1", target: "title", effect: { name: "fade-in" } },
+      {
+        id: "a2",
+        target: "logo",
+        trigger: "afterPrevious" as const,
+        easing: { spring: { bounce: 0.3 } },
+        tracks: {
+          y: [{ at: 0, value: 80 }],
+          opacity: [
+            { at: 0, value: 0 },
+            { at: 0.5, value: 1 },
+          ],
+        },
+      },
+    ];
+    const animated = { ...bundle, deck: { ...bundle.deck, slides: [{ ...slide, animations }] } };
+    const read = await readVeloce(await writeVeloce(animated, { now: NOW }));
+    expect(read.deck.slides[0]?.animations).toEqual(animations);
+
+    const dangling = {
+      ...animated.deck,
+      slides: [{ ...slide, animations: [{ ...animations[0], target: "gone" }] }],
+    };
+    await expect(
+      writeVeloce({ ...bundle, deck: dangling as Deck }, { now: NOW }).then(readVeloce),
+    ).rejects.toThrow(/targets "gone"/);
+  });
+
   it("opens a v2 file as v3 unchanged: everything v3 adds is optional (D103 §7, D109)", async () => {
     const good = await writeVeloce(await bundleWithAsset(), { now: NOW });
     const v2 = rezip(good, (e) => {

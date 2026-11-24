@@ -11,6 +11,7 @@ import { componentProblem } from "./components.js";
 import { type ErrorCode, formatIssues, formatPath } from "./errors.js";
 import { type Deck, DeckSchema, FORMAT_VERSION } from "./schema/deck.js";
 import { MAX_DEPTH, type Node } from "./schema/node.js";
+import { animationProblem } from "./timeline.js";
 import { walkNodes } from "./tree.js";
 
 export interface ValidationIssue {
@@ -94,6 +95,13 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
         }
       }
       checkElement(node);
+    }
+    // Animations (D110): IDs in the deck's one ID space, targets on this slide.
+    for (const [a, animation] of (slide.animations ?? []).entries()) {
+      const at = `slides[${s}].animations[${a}]`;
+      checkId(animation.id, `${at}.id`);
+      const problem = animationProblem(slide, animation, ctx);
+      if (problem) error(problem.code, problem.message, `${at}.${problem.path}`);
     }
   }
 

@@ -28,6 +28,7 @@ export * from "./settings.js";
 export * from "./suggest.js";
 export * from "./sync.js";
 export * from "./themes.js";
+export * from "./timeline.js";
 export * from "./tokens.js";
 export * from "./transaction.js";
 export * from "./tree.js";

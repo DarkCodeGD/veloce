@@ -29,9 +29,14 @@ const plural = (n: number, one: string) => (n === 1 ? one : `${n} ${one}s`);
  * slide or a layer pasted onto another slide morphs with the original, unless the slide it
  * lands on already uses that key (`taken`, e.g. the original itself): then the copy has no
  * key of its own, like any new layer. The keys it gives out are added to `taken`, so copies
- * made one after another for the same slide never share one.
+ * made one after another for the same slide never share one. `renamed`, if given, collects
+ * each old ID → new ID (to point copied animations at the copies).
  */
-export function cloneWithNewIds<T extends Node>(node: T, taken: Set<string>): T {
+export function cloneWithNewIds<T extends Node>(
+  node: T,
+  taken: Set<string>,
+  renamed?: Map<string, string>,
+): T {
   const copy = structuredClone(node) as Node;
   const renew = (n: Node) => {
     const key = matchKeyOf(n);
@@ -40,7 +45,9 @@ export function cloneWithNewIds<T extends Node>(node: T, taken: Set<string>): T 
       n.matchKey = key;
       taken.add(key);
     }
-    (n as { id: string }).id = createId("nd");
+    const id = createId("nd");
+    renamed?.set(n.id, id);
+    (n as { id: string }).id = id;
     if (n.kind === "frame") n.children.forEach(renew);
   };
   renew(copy);
@@ -128,9 +135,21 @@ export function duplicateSlide(slide: Slide, index: number): Command {
   const { section: _section, ...fields } = structuredClone(slide);
   // Every layer keeps its original's match key, so the two slides morph (D109). The root
   // frame isn't a layer: it never morphs, so it gets no key it didn't have.
-  const root = cloneWithNewIds(slide.root, new Set());
+  const renamed = new Map<string, string>();
+  const root = cloneWithNewIds(slide.root, new Set(), renamed);
   if (slide.root.matchKey === undefined) delete root.matchKey;
-  const copy: Slide = { ...fields, id: createId("sl"), root };
+  // Its animations come along, with IDs of their own, animating the copies (D110).
+  const animations = fields.animations?.map((a) => ({
+    ...a,
+    id: createId("an"),
+    target: renamed.get(a.target) ?? a.target,
+  }));
+  const copy: Slide = {
+    ...fields,
+    ...(animations && { animations }),
+    id: createId("sl"),
+    root,
+  };
   return {
     label: "Duplicate slide",
     ops: [{ op: "slide.insert", slide: copy, index: index + 1 }],

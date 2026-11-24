@@ -32,11 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-24
-- **Next:** the timeline schema (format v3, open until it ships). Done in Phase 4: visual regression tests (D102), the
+- **Next:** the motion level and `$motion` tokens, then 2.5D, and format v3 is complete. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (938 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (955 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -271,11 +271,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       clicked; Manage decks' own Undo bar is gone (D108)
 - [x] Morph match key: `matchKey`, else the ID; copies inherit it; pairing falls back to
       name and type; inspector, MCP, lint; format v3 begins (D109)
-- [ ] Timeline schema: per-slide steps (click triggers) and animations (`target`, an effect
-      or keyframe tracks, `trigger: onClick | withPrevious | afterPrevious`, delay,
-      duration, easing). Each animation has an ID and its own ops (not one patched array);
-      removing a node removes its animations in the same op (D101 §2). Keyframe tracks can
-      target any number or color in an element's schema (D105 §1)
+- [x] Timeline schema: `slide.animations` in play order with triggers, `animation.*` ops,
+      effect or keyframe tracks checked by the target's schema, cascade on node removal,
+      derived steps (`scheduleSlide`) (D110)
 - [ ] Motion level (`calm` → `absurd`) on the deck with per-slide overrides, and `$motion`
       tokens in themes (easing family, durations, stagger, signature transitions) (D104)
 - [ ] 2.5D: perspective on frames and depth (`z`) on layers; the motion slot already draws
