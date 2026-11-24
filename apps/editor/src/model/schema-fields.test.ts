@@ -12,6 +12,13 @@ describe("inspector fields from plugin schemas", () => {
     return Object.fromEntries(propFields(definition).map(({ key, ...rest }) => [key, rest]));
   };
 
+  it("leaves out props only effects move (D117)", () => {
+    const text = fields("text");
+    expect(text.content).toBeDefined();
+    expect(text.reveal).toBeUndefined(); // the typewriter's
+    expect(text.countUp).toBeUndefined(); // count-up's
+  });
+
   it("maps every built-in prop to a control", () => {
     const text = fields("text");
     expect(text.content).toMatchObject({ kind: "richText", label: "Content" });

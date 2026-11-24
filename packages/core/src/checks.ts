@@ -4,6 +4,7 @@
  */
 import { collectAssetRefs } from "./assets.js";
 import { VeloceError } from "./errors.js";
+import type { EffectRef } from "./schema/animation.js";
 import type { Deck } from "./schema/deck.js";
 import { MAX_DEPTH, type Node } from "./schema/node.js";
 import { walkNodes } from "./tree.js";
@@ -15,10 +16,27 @@ export type ElementCheck =
 
 export type ElementValidator = (type: string, props: Record<string, unknown>) => ElementCheck;
 
+/**
+ * Result of asking the plugin registry whether an animation's effect can play on its
+ * target (D117): the effect exists, its params are valid, and it suits that kind of layer.
+ */
+export type EffectCheck =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "unknown-effect" | "invalid-params" | "wrong-target";
+      message: string;
+      hint?: string;
+    };
+
+export type EffectValidator = (effect: EffectRef, target: Node) => EffectCheck;
+
 /** Hooks that make core plugin-aware without depending on any plugin code. */
 export interface ApplyContext {
   /** Usually `registry.validateElement` from `@veloce/plugin-api`. Omitted → props aren't checked. */
   validateElement?: ElementValidator;
+  /** Usually `registry.validateEffect`. Omitted → effects aren't checked. */
+  validateEffect?: EffectValidator;
 }
 
 export function subtreeIds(node: Node): string[] {

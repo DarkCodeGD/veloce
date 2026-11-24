@@ -32,11 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-25
-- **Next:** effect presets (fade, slide, scale…), so agents' `fade-in` moves. Done in Phase 4: visual regression tests (D102), the
+- **Next:** saved presets, then layout animations (FLIP). Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (1037 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1084 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -290,10 +290,11 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [x] Present, pulled forward so motion can be hand-tested: Present (Shift+F5) and from
       start (F5), fullscreen, clicks through steps and slides, back a step, hidden slides
       skipped, an end screen (D116)
-- [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), shaped by
-      the motion level and `$motion` tokens, extensible by plugins; Save as preset keeps
-      your own in the deck; `fade-in` by that name, and unknown effects load as warnings
-      (D106 §3, D113 §5)
+- [x] Effect presets: 19 entrances, exits and emphasis plus typewriter and count-up, shaped
+      by the level and `$motion` tokens; plugins add their own (conformance kit); `fade-in`
+      by that name; unknown effects open with a warning (D113 §5, D117)
+- [ ] Saved presets: Save as preset keeps a tuned animation in the deck (a v3 field and
+      ops), used by name like a built-in, following the level (D106 §3, D117 §8)
 - [ ] Layout animations in stacks (FLIP: measure both layouts, animate the difference
       through the motion slot) and staggering in reading order (D83 §5, D103 §7)
 - [ ] Choreography from intent: a rule-based engine turns an intent into animations from

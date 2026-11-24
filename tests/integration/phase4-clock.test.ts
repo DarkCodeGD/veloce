@@ -150,6 +150,7 @@ function motionMismatch(
 
 /** Moments in the middle of things: springs, 3D turns, a loop, a color, a nested slide level. */
 const MOMENTS: [slide: string, step: number, time: number, what: string][] = [
+  ["steps", 0, 200, "the title fading in, a built-in effect preset"],
   ["steps", 0, 600, "the subtitle rising and fading in"],
   ["steps", 1, 150, "two cards on a spring, staggered"],
   ["steps", 1, 770, "a card swinging in from depth, turned in 3D"],

@@ -58,6 +58,12 @@ export interface AnimationProblem {
   /** Inside the animation, e.g. `"target"` or `"tracks.props.fill[1].value"`. */
   path: string;
   hint?: string;
+  /**
+   * Only a plugin is missing (an effect nobody installed provides): an edit can't add it,
+   * but a file that has it still opens, with a warning, and the animation keeps its place
+   * in time without moving (D113 §5, D117).
+   */
+  missing?: true;
 }
 
 /**
@@ -88,6 +94,18 @@ export function animationProblem(
       path: "target",
       hint: "An animation's target is the ID of a layer on the same slide.",
     };
+  }
+  if (animation.effect && ctx.validateEffect) {
+    const check = ctx.validateEffect(animation.effect, target);
+    if (!check.ok) {
+      return {
+        code: check.reason === "unknown-effect" ? "NOT_FOUND" : "INVALID",
+        message: `Animation "${animation.id}": ${check.message}`,
+        path: check.reason === "invalid-params" ? "effect.params" : "effect.name",
+        ...(check.hint && { hint: check.hint }),
+        ...(check.reason === "unknown-effect" && { missing: true as const }),
+      };
+    }
   }
   for (const [key, keyframes] of Object.entries(animation.tracks ?? {})) {
     const [group, ...path] = key.split(".");

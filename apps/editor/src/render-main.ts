@@ -18,13 +18,14 @@ host.append(stage);
 document.body.append(host);
 
 const assetUrl = (id: string) => `/api/decks/${encodeURIComponent(deckId)}/assets/${id}`;
+const registry = createBuiltinRegistry();
 const renderer = new SlideRenderer(stage, {
-  registry: createBuiltinRegistry(),
+  registry,
   assetUrl,
   onPluginError: (error, info) =>
     console.error(`Plugin error in ${info.nodeId} (${info.phase})`, error),
 });
-const player = new SlidePlayer(renderer);
+const player = new SlidePlayer(renderer, { effects: registry.resolveEffect });
 const fonts = loadFonts();
 
 /**

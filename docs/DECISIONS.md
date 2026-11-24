@@ -3124,3 +3124,61 @@ version, v3, for the morph key, the timeline, motion levels and tokens, and 2.5D
    animated deck is the reference deck `motion.json`. A copy goes into the maintainer's
    local `./decks` as "Motion demo"; the frozen original stays as it is, and the copy
    isn't committed.
+
+## D117 — Effect presets are plugin contributions, shaped by the level
+
+**Status:** Accepted (2026-11-25). Phase 4's effect presets (D106, D110, D113 §5).
+
+1. **Effects come from plugins, like element types** (golden rule 6): `VelocePlugin.effects`,
+   each an `EffectDefinition` with a name (bare for `veloce.*`, namespaced otherwise), a
+   kind (entrance, exit, emphasis), a Zod `paramsSchema` whose fields are all optional, the
+   element types it plays on (`targets`, optional), `aiDocs`, and a pure `resolve(params,
+   { target, tokens })` that returns keyframe tracks plus the duration and easing it wants.
+   **Why tracks, not a new animation kind:** the evaluator, the compositor plan (D115) and
+   undo already handle tracks, and the timeline panel can open a preset up into its
+   keyframes later. **Why pure:** the server, the editor and export resolve the same
+   effect to the same tracks, so seeking stays deterministic (golden rule 3).
+2. **The registry checks and resolves them:** `validateEffect` (unknown name with a "did you
+   mean", params against the schema with the list of params, a target it doesn't suit) goes
+   into core through `ApplyContext`; `resolveEffect` goes to `SlidePlayer` and
+   `compileSlide`, and returns null (the animation keeps its time, moves nothing, D114 §8)
+   when the effect is unknown, its params are bad, or the plugin throws or returns invalid
+   tracks: a broken plugin never breaks a slide.
+3. **Unknown effects: an error in an edit, a warning in a file** (D113 §5), like element
+   types: an op can't add one, but a deck that has one opens, and editing that animation's
+   timing without changing its effect is allowed.
+4. **The level shapes presets, never numbers given** (D111 §4): how far a slide travels
+   (80 px × the level's distance: 40 at calm, 320 at absurd), how small a scale-in starts,
+   how blurred a blur-in begins, a flip's angle, an emphasis's size, and a pop's spring
+   bounce (none at calm) all follow `tokens.distance` and the level's bounce. Durations
+   and easings are `$motion` tokens (entrances `normal`/`enter`, exits `fast`/`exit`,
+   emphasis `slow`/`move`), so the theme's personality shows. `distance: 200` is 200 at
+   every level.
+5. **The built-ins** (`plugins/effects`, `veloce.effects`): entrances fade-in, slide-in,
+   scale-in, zoom-in, pop-in, blur-in, flip-in; exits fade-out, slide-out, scale-out,
+   zoom-out, blur-out, flip-out; emphasis pulse, shake, wiggle, bounce, float, flash.
+   **Text effects live in the text plugin**, since only it can draw them: two new text
+   props, `reveal` and `countUp` (0–1, absent means 1), that `typewriter` and `count-up`
+   animate. A typewriter keeps untyped characters in place but invisible, so nothing
+   reflows; its duration follows the text's length (a tenth of `$motion.normal` per
+   character, 8 s at most). Count-up counts every number in the text from 0, keeping its
+   decimals and thousands separators, with no locale, so every machine draws the same.
+   Both props are marked `.meta({ animationOnly: true })`, so the inspector doesn't show
+   them as fields; agents' text docs don't teach them either (effects set them).
+6. **A conformance kit for effects** (`checkEffectConformance`): at every level, `resolve`
+   gives valid tracks, durations and easings, the same output twice, and tracks the target
+   accepts; entrances land where the layer rests and emphasis starts and ends there, so
+   effects stack with each other and with the layout. Tests prove the kit catches each.
+7. **Proven on screen:** `tests/visual/decks/effects.json`, a reference deck built by a
+   script like `motion.json` (D113 §3), plays every built-in at once on each slide and is
+   captured mid-motion; `motion.json`'s `fade-in` now moves, captured at 200 ms and
+   checked equal on the clock and the compositor. A copy with one click per effect goes in
+   the maintainer's local `./decks` as "Effects demo", for hand-testing (D116 §5).
+8. **Split off, on purpose:** Save as preset (D106 §3) needs a deck field and ops, and its
+   button belongs to the Animate workspace, so it's its own roadmap item; "stagger" isn't a
+   preset but timing across layers, which the layout-animation and choreography items
+   already cover (`staggerDelays`, D114 §7).
+9. **Agents:** effects are reachable today only through `apply_ops` with `animation.*` ops,
+   which no agent doc teaches yet; the new effect errors follow the MCP standard (what's
+   wrong, and the fix). Effect docs, the gallery for agents and the real-agent retest come
+   with the MCP animation item, which changes those tools anyway.

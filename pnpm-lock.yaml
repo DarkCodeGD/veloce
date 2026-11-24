@@ -345,6 +345,9 @@ importers:
       '@veloce/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@veloce/plugin-effects':
+        specifier: workspace:*
+        version: link:../../plugins/effects
       '@veloce/plugin-image':
         specifier: workspace:*
         version: link:../../plugins/image
@@ -435,6 +438,15 @@ importers:
       '@veloce/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+
+  plugins/effects:
+    dependencies:
+      '@veloce/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@veloce/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
 
   plugins/image:
     dependencies:

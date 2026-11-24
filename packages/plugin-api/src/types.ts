@@ -10,7 +10,7 @@
  *
  * Built-in elements use this exact contract (golden rule #6).
  */
-import type { FieldValues, Sizing } from "@veloce/core";
+import type { EffectContext, FieldValues, ResolvedEffect, Sizing } from "@veloce/core";
 import type { z } from "zod";
 
 export type ElementProps = Record<string, unknown>;
@@ -80,16 +80,67 @@ export interface ElementDefinition<P extends ElementProps = ElementProps> {
   mount(container: HTMLElement, props: P, ctx: ElementContext): ElementInstance<P>;
 }
 
+/** What an effect is for: bringing a layer in, taking it out, or drawing the eye to it. */
+export type EffectKind = "entrance" | "exit" | "emphasis";
+
+export type EffectParams = Record<string, unknown>;
+
+/**
+ * An effect preset (D117): a named animation (`"fade-in"`, `"acme.sparkle"`) that turns into
+ * keyframe tracks for one layer, shaped by the slide's motion level and the theme's `$motion`
+ * tokens. Pure: no DOM, the same tracks for the same input, so it runs in the server, the
+ * editor and export alike, and seeking stays deterministic (golden rule 3).
+ */
+export interface EffectDefinition<P extends EffectParams = EffectParams> {
+  /** Built-ins are bare (`"fade-in"`); third-party effects are namespaced (`"acme.sparkle"`). */
+  name: string;
+  title: string;
+  /** One line, shown in the preset gallery and the AI's effect list. */
+  description: string;
+  kind: EffectKind;
+  /**
+   * Its settings (direction, distance…), every field optional: an effect with no params
+   * plays as `defaultParams` say. One schema for validation, the inspector, MCP and docs
+   * (golden rule 5).
+   */
+  paramsSchema: z.ZodType<P, P>;
+  /**
+   * Defaults for the params that have fixed ones: what `{ "name": "…" }` alone plays. A
+   * param left out here is decided in `resolve`, usually by the level (how far a slide-in
+   * travels).
+   */
+  defaultParams: P;
+  /** Element types it can play on (`["text"]`); omitted: any layer, frames included. */
+  targets?: readonly string[];
+  /** Markdown for AI agents: what it looks like, when to use it, its params. */
+  aiDocs: string;
+  /**
+   * The tracks it plays, and the duration and easing it wants when the animation sets none
+   * (`$motion` tokens, so they follow the level). `params` have `defaultParams` filled in;
+   * `context.tokens.distance` says how far things travel at this level.
+   */
+  resolve(params: P, context: EffectContext): ResolvedEffect;
+}
+
 export interface VelocePlugin {
   manifest: PluginManifest;
   // biome-ignore lint/suspicious/noExplicitAny: each element has its own props type
   elements: ReadonlyArray<ElementDefinition<any>>;
+  /** Effect presets it adds (D117). */
+  // biome-ignore lint/suspicious/noExplicitAny: each effect has its own params type
+  effects?: ReadonlyArray<EffectDefinition<any>>;
 }
 
 /** Identity helpers that give plugin authors full type inference. */
 export function defineElement<P extends ElementProps>(
   definition: ElementDefinition<P>,
 ): ElementDefinition<P> {
+  return definition;
+}
+
+export function defineEffect<P extends EffectParams>(
+  definition: EffectDefinition<P>,
+): EffectDefinition<P> {
   return definition;
 }
 

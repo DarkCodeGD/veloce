@@ -38,6 +38,8 @@ export type FieldKind =
 export type FieldSpec = FieldKind & { key: string; label: string };
 
 type JsonSchema = {
+  /** Set by a plugin with `.meta({ animationOnly: true })`: moved by effects, not edited. */
+  animationOnly?: boolean;
   type?: string;
   pattern?: string;
   enum?: unknown[];
@@ -146,7 +148,10 @@ export function propFields(definition: Pick<ElementDefinition, "propsSchema">): 
     io: "input",
     unrepresentable: "any",
   }) as JsonSchema;
-  const entries = Object.entries(json.properties ?? {});
+  // Props only effects move (a typewriter's `reveal`, D117) aren't inspector fields.
+  const entries = Object.entries(json.properties ?? {}).filter(
+    ([, schema]) => !flatten(schema).some((s) => s.animationOnly),
+  );
   // A point is a focus on the element's picture when it has one (the first asset prop), and
   // a fraction rectangle is its crop.
   const asset = entries.find(([, schema]) => fieldKind(schema).kind === "asset")?.[0];

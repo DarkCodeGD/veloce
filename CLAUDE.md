@@ -64,5 +64,5 @@ dependency licenses matter (check a library's license before adding it).
   not in `pnpm check`; rerun it after changing how motion is drawn or played.
 - New package/dependency between packages → update `scripts/architecture.test.ts` + DECISIONS.md.
 - Respect pnpm's minimum-release-age policy: never add `minimumReleaseAgeExclude`; pin an older version.
-- Plugins live in `plugins/<name>` as `@veloce/plugin-<name>`; every plugin test runs `checkElementConformance`.
+- Plugins live in `plugins/<name>` as `@veloce/plugin-<name>`; every plugin test runs `checkElementConformance` for its elements and `checkEffectConformance` for its effects.
 - `tests/integration/` holds per-phase acceptance tests (the roadmap's "Done when").

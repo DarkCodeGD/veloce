@@ -326,7 +326,9 @@ function animationUpdate(deck: Deck, op: OpOf<"animation.update">, ctx: ApplyCon
     id: "IDs can't change. Insert a new animation and remove this one instead.",
   });
   const next = parseOrThrow(AnimationSchema, mergePatch(animation, op.set), ["set"]);
-  assertAnimationFits(slide, next, ctx, "set");
+  // An effect from a plugin this install lacks may stay while other fields change.
+  const keepsEffect = next.effect?.name === animation.effect?.name;
+  assertAnimationFits(slide, next, ctx, "set", keepsEffect);
   const list = (slide.animations ?? []).toSpliced(index, 1, next);
   return {
     deck: replaceSlide(deck, slideIndex, withAnimations(slide, list)),
@@ -340,9 +342,15 @@ function withAnimations(slide: Slide, animations: readonly Animation[]): Slide {
   return animations.length > 0 ? { ...rest, animations: [...animations] } : rest;
 }
 
-function assertAnimationFits(slide: Slide, animation: Animation, ctx: ApplyContext, at: string) {
+function assertAnimationFits(
+  slide: Slide,
+  animation: Animation,
+  ctx: ApplyContext,
+  at: string,
+  allowMissing = false,
+) {
   const problem = animationProblem(slide, animation, ctx);
-  if (problem) {
+  if (problem && !(allowMissing && problem.missing)) {
     throw new VeloceError(problem.code, problem.message, {
       path: `${at}.${problem.path}`,
       ...(problem.hint && { hint: problem.hint }),

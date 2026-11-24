@@ -53,7 +53,7 @@ export function PresentView({
       padding: 0,
       assetUrl: (id) => assetUrl(deckId, id),
     });
-    const player = new SlidePlayer(view);
+    const player = new SlidePlayer(view, { effects: registry.resolveEffect });
     const show = new Presentation(deck, player, {
       ready: () => view.ready(),
       onChange: setState,

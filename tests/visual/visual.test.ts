@@ -15,6 +15,9 @@
  * - `motion.json` (format v3, D113) animates: every trigger, `$motion` tokens, springs, 2.5D.
  *   Its slides are drawn at rest, and also at `MOMENTS` in the middle of their animations,
  *   seeked by the clock like an export (`<deck>--<slide>@<step>-<ms>.png`, D115).
+ * - `effects.json` (D117) plays every built-in effect preset at once on each slide
+ *   (entrances, exits, emphasis, typewriter and count-up), captured mid-motion: a preset
+ *   whose look changes changes users' decks, so it shows here first.
  *
  * Needs the built editor (`pnpm build:editor`) and headless Chromium, like the other
  * browser tests: skipped locally without them, required in CI (VELOCE_REQUIRE_BROWSER=1).
@@ -71,12 +74,19 @@ const deckFiles = (await readdir(DECKS)).filter((f) => f.endsWith(".json")).sort
 /** Moments of animated decks to capture too: slide, step, ms into the step. */
 const MOMENTS: Readonly<Record<string, readonly [slide: string, step: number, time: number][]>> = {
   motion: [
+    ["steps", 0, 200], // the title fading in: a built-in effect (D117)
     ["steps", 0, 600], // the subtitle rising
     ["steps", 1, 150], // cards on a spring, staggered
     ["steps", 1, 770], // a card swinging in from depth
     ["steps", 2, 333], // bars growing, their color blending
     ["steps", 2, 1777], // the pulse looping
     ["finale", 0, 60], // the title flipping up at absurd
+  ],
+  effects: [
+    ["entrances", 0, 40],
+    ["exits", 0, 160],
+    ["emphasis", 0, 260],
+    ["text", 0, 150], // a few characters typed; numbers counting
   ],
 };
 

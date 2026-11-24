@@ -1,0 +1,22 @@
+{
+  "name": "@veloce/plugin-effects",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Built-in effect presets: entrances, exits and emphasis, shaped by the motion level.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@veloce/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@veloce/core": "workspace:*",
+    "@veloce/plugin-api": "workspace:*"
+  }
+}

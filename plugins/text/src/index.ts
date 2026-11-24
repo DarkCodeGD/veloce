@@ -6,6 +6,7 @@
  */
 import {
   ColorSchema,
+  type EffectContext,
   type FieldValues,
   type Paragraph,
   runText,
@@ -18,7 +19,7 @@ import {
   tokenRefSchema,
   toParagraphs,
 } from "@veloce/core";
-import { cssColor, defineElement, definePlugin, z } from "@veloce/plugin-api";
+import { cssColor, defineEffect, defineElement, definePlugin, z } from "@veloce/plugin-api";
 
 export const TextPropsSchema = z.strictObject({
   /** A string ("\n" separates paragraphs) or rich paragraphs with styled runs. */
@@ -37,6 +38,16 @@ export const TextPropsSchema = z.strictObject({
   font: tokenRefSchema("font").optional(),
   italic: z.boolean().optional(),
   lineHeight: z.number().positive().max(10).optional(),
+  /**
+   * Animation only (the typewriter effect, D117): the share of characters shown, 0 to 1;
+   * the rest keep their place, invisible, so nothing reflows while it types. Default 1.
+   */
+  reveal: z.number().min(0).max(1).meta({ animationOnly: true }).optional(),
+  /**
+   * Animation only (the count-up effect, D117): how far every number in the text has
+   * counted up from 0, 0 to 1, keeping its decimals and thousands separators. Default 1.
+   */
+  countUp: z.number().min(0).max(1).meta({ animationOnly: true }).optional(),
 });
 export type TextProps = z.infer<typeof TextPropsSchema>;
 
@@ -79,7 +90,9 @@ export const textElement = defineElement<TextProps>({
     container.append(root);
     const render = (p: TextProps) => {
       applyBoxStyle(root, p);
-      root.replaceChildren(...renderParagraphs(p.content, ctx.fields?.()));
+      root.replaceChildren(
+        ...renderParagraphs(p.content, ctx.fields?.(), { reveal: p.reveal, countUp: p.countUp }),
+      );
     };
     render(props);
     return {
@@ -90,15 +103,81 @@ export const textElement = defineElement<TextProps>({
   },
 });
 
+// ── Text effects (D117) ──────────────────────────────────────────────────────────────
+
+/** The characters a text layer shows, fields as their own text (a fair length estimate). */
+function characterCount(target: EffectContext["target"]): number {
+  if (target.kind !== "element") return 0;
+  const parsed = TextContentSchema.safeParse(target.props.content);
+  if (!parsed.success) return 0;
+  return toParagraphs(parsed.data).reduce(
+    (sum, p) => sum + p.runs.reduce((n, run) => n + Array.from(runText(run, null)).length, 0),
+    0,
+  );
+}
+
+/** The longest a typewriter takes by default, however long the text. */
+const MAX_TYPING_MS = 8000;
+
+export const typewriterEffect = defineEffect({
+  name: "typewriter",
+  title: "Typewriter",
+  description: "Types the text out, character by character.",
+  kind: "entrance",
+  targets: ["text"],
+  paramsSchema: z.strictObject({}),
+  defaultParams: {},
+  aiDocs:
+    "Types a text layer out character by character; the text keeps its final layout, so nothing jumps. Its duration follows the text's length (about a tenth of `$motion.normal` per character, so it follows the level, up to 8 s); set `duration` to choose. Best on short lines: a title, a quote, a command.",
+  resolve: (_, { target, tokens }) => ({
+    duration: Math.round(
+      Math.min(
+        MAX_TYPING_MS,
+        Math.max(tokens.normal, (characterCount(target) * tokens.normal) / 10),
+      ),
+    ),
+    easing: "linear",
+    tracks: {
+      "props.reveal": [
+        { at: 0, value: 0 },
+        { at: 1, value: 1 },
+      ],
+    },
+  }),
+});
+
+export const countUpEffect = defineEffect({
+  name: "count-up",
+  title: "Count up",
+  description: "Counts the numbers in the text up from zero.",
+  kind: "entrance",
+  targets: ["text"],
+  paramsSchema: z.strictObject({}),
+  defaultParams: {},
+  aiDocs:
+    'Counts every number in a text layer up from 0 to its value, keeping its format: "$4.2M" counts 0.0 → 4.2, "12,500 users" keeps its comma. For stats and key numbers; every number in the layer counts, so keep the year out of it.',
+  resolve: () => ({
+    duration: "$motion.slow",
+    easing: "$motion.enter",
+    tracks: {
+      "props.countUp": [
+        { at: 0, value: 0 },
+        { at: 1, value: 1 },
+      ],
+    },
+  }),
+});
+
 export const textPlugin = definePlugin({
   manifest: {
     id: "veloce.text",
     name: "Text",
     version: "0.1.0",
-    description: "Built-in text element.",
+    description: "Built-in text element, and the effects only text has.",
     license: "Apache-2.0",
   },
   elements: [textElement],
+  effects: [typewriterEffect, countUpEffect],
 });
 
 // ── Rendering ─────────────────────────────────────────────────────────────────────────
@@ -128,18 +207,61 @@ function applyBoxStyle(el: HTMLElement, p: TextProps): void {
   if (p.italic) s.fontStyle = "italic";
 }
 
+/** Mid-animation states of the text (D117). Absent or 1: the text as it is. */
+export interface TextProgress {
+  /** Share of characters shown (typewriter). */
+  reveal?: number | undefined;
+  /** How far numbers have counted up from 0 (count-up). */
+  countUp?: number | undefined;
+}
+
+/** A number as written in text: `12,500`, `4.2`, `99`. */
+const NUMBER = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
+
+/**
+ * `text` with every number at `progress` of its value, written the same way: as many
+ * decimals, and thousands separators if it had them. Deterministic (no locale).
+ */
+export function countedText(text: string, progress: number): string {
+  if (progress >= 1) return text;
+  return text.replace(NUMBER, (match) => {
+    const plain = match.replaceAll(",", "");
+    const decimals = plain.split(".")[1]?.length ?? 0;
+    const [whole = "0", fraction] = (Number(plain) * Math.max(0, progress))
+      .toFixed(decimals)
+      .split(".");
+    const grouped = match.includes(",") ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : whole;
+    return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+  });
+}
+
 /**
  * Paragraphs → DOM. Consecutive list paragraphs are grouped into real <ul>/<ol> elements
  * (nested by `level`), so lists stay semantic for screen readers and copy/paste.
  */
-export function renderParagraphs(content: TextContent, fields?: FieldValues | null): Node[] {
+export function renderParagraphs(
+  content: TextContent,
+  fields?: FieldValues | null,
+  progress: TextProgress = {},
+): Node[] {
   const out: Node[] = [];
   const stack: Array<{ list: HTMLElement; type: "bullet" | "number"; level: number }> = [];
+  const paragraphs = toParagraphs(content);
+  const count = progress.countUp ?? 1;
+  const texts = paragraphs.map((p) =>
+    p.runs.map((run) => countedText(runText(run, fields), count)),
+  );
+  // Characters the typewriter has shown so far, spent run by run in reading order.
+  const reveal = progress.reveal ?? 1;
+  const total = texts.flat().reduce((n, t) => n + Array.from(t).length, 0);
+  const budget = { left: reveal >= 1 ? Number.POSITIVE_INFINITY : Math.floor(reveal * total) };
+  const element = (tag: "p" | "li", i: number) =>
+    paragraphElement(tag, paragraphs[i] as Paragraph, texts[i] ?? [], budget);
 
-  for (const paragraph of toParagraphs(content)) {
+  for (const [i, paragraph] of paragraphs.entries()) {
     if (!paragraph.list) {
       stack.length = 0;
-      out.push(paragraphElement("p", paragraph, fields));
+      out.push(element("p", i));
       continue;
     }
     const level = paragraph.level ?? 0;
@@ -159,7 +281,7 @@ export function renderParagraphs(content: TextContent, fields?: FieldValues | nu
       top = { list, type: paragraph.list, level };
       stack.push(top);
     }
-    top.list.append(paragraphElement("li", paragraph, fields));
+    top.list.append(element("li", i));
   }
   return out;
 }
@@ -167,10 +289,13 @@ export function renderParagraphs(content: TextContent, fields?: FieldValues | nu
 function paragraphElement(
   tag: "p" | "li",
   paragraph: Paragraph,
-  fields: FieldValues | null | undefined,
+  texts: readonly string[],
+  budget: { left: number },
 ): HTMLElement {
   const el = document.createElement(tag);
   el.style.margin = "0";
+  // Not typed yet: kept in place but invisible, its bullet or number too.
+  if (budget.left <= 0) el.style.visibility = "hidden";
   if (paragraph.align) el.style.textAlign = paragraph.align;
   if (paragraph.style) {
     // The whole style (letter-spacing and case too), so a "display" paragraph inside a body
@@ -179,19 +304,34 @@ function paragraphElement(
       el.style.setProperty(prop, value);
     }
   }
-  const texts = paragraph.runs.map((run) => runText(run, fields));
   if (texts.every((t) => t === "")) {
     el.append(document.createElement("br")); // keep empty lines one line tall
   } else {
-    el.append(...paragraph.runs.map((run, i) => runElement(run, texts[i] ?? "")));
+    el.append(
+      ...paragraph.runs.map((run, i) => {
+        const text = texts[i] ?? "";
+        const shown = Math.min(budget.left, Array.from(text).length);
+        budget.left -= shown;
+        return runElement(run, text, shown);
+      }),
+    );
   }
   return el;
 }
 
-function runElement(run: TextRun, text: string): HTMLElement {
+/** A run, its first `shown` characters visible and the rest holding their place. */
+function runElement(run: TextRun, text: string, shown = Number.POSITIVE_INFINITY): HTMLElement {
   const isLink = run.link !== undefined && SAFE_LINK.test(run.link);
   const el = document.createElement(isLink ? "a" : "span");
-  el.textContent = text;
+  const chars = Array.from(text);
+  if (shown >= chars.length) {
+    el.textContent = text;
+  } else {
+    const rest = document.createElement("span");
+    rest.style.visibility = "hidden";
+    rest.textContent = chars.slice(shown).join("");
+    el.append(chars.slice(0, shown).join(""), rest);
+  }
   if (run.field) el.dataset.vField = run.field;
   if (isLink && el instanceof HTMLAnchorElement && run.link) {
     el.href = run.link;

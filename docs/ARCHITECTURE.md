@@ -152,9 +152,13 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
   loop. The render page (`render-main.ts`) uses it, so screenshots take a moment (`at`).
   Proven libraries only draw (D105).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
-  `update`, `seek`, `dispose`, and `aiDocs` for agents) and registers them in a registry that
-  core uses to validate props. Every plugin passes the conformance kit. The built-in ones
-  (`text`, `shape`, `image`) use the same public API (`packages/builtins` bundles them).
+  `update`, `seek`, `dispose`, and `aiDocs` for agents) and **effect presets** (D117: a Zod
+  params schema and a pure `resolve` that turns params, the target and the level's tokens
+  into keyframe tracks), and registers them in a registry that core uses to validate props
+  and effects (`applyContext`) and players use to resolve effects (`resolveEffect`). Every
+  element and effect passes its conformance kit. The built-in ones (`text` with typewriter
+  and count-up, `shape`, `image`, and `effects` with the entrances, exits and emphasis) use
+  the same public API (`packages/builtins` bundles them).
 
 ## The editor (`apps/editor`)
 
@@ -221,12 +225,13 @@ flowchart BT
 
 ## Where to start reading
 
-| To understand…                     | Read                                                                          |
-| ---------------------------------- | ----------------------------------------------------------------------------- |
-| what a deck is                     | `packages/core/src/schema/`                                                   |
-| how a change is applied and undone | `core/src/ops/apply.ts`, `core/src/document.ts`                               |
-| how tabs stay in sync              | `core/src/sync.ts`, `doc-server/src/sync-hub.ts`, `editor/src/sync-client.ts` |
-| what agents can do                 | `packages/mcp/src/tools.ts`, `packages/mcp/src/docs.ts`                       |
-| how a slide is drawn               | `renderer/src/slide-renderer.ts`, `renderer/src/layout.ts`                    |
-| how to write an element plugin     | `plugin-api/src/types.ts`, `plugins/shape/src/index.ts`                       |
-| an editor feature                  | its command in `editor/src/commands/`, then its model in `editor/src/model/`  |
+| To understand…                     | Read                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| what a deck is                     | `packages/core/src/schema/`                                                    |
+| how a change is applied and undone | `core/src/ops/apply.ts`, `core/src/document.ts`                                |
+| how tabs stay in sync              | `core/src/sync.ts`, `doc-server/src/sync-hub.ts`, `editor/src/sync-client.ts`  |
+| what agents can do                 | `packages/mcp/src/tools.ts`, `packages/mcp/src/docs.ts`                        |
+| how a slide is drawn               | `renderer/src/slide-renderer.ts`, `renderer/src/layout.ts`                     |
+| how to write an element plugin     | `plugin-api/src/types.ts`, `plugins/shape/src/index.ts`                        |
+| how to write an effect preset      | `plugin-api/src/types.ts` (`EffectDefinition`), `plugins/effects/src/index.ts` |
+| an editor feature                  | its command in `editor/src/commands/`, then its model in `editor/src/model/`   |

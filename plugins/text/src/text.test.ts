@@ -1,7 +1,21 @@
 // @vitest-environment happy-dom
-import { checkElementConformance } from "@veloce/plugin-api";
+import { element, motionTokens } from "@veloce/core";
+import {
+  checkEffectConformance,
+  checkElementConformance,
+  PluginRegistry,
+} from "@veloce/plugin-api";
 import { describe, expect, it } from "vitest";
-import { renderParagraphs, type TextProps, TextPropsSchema, textElement } from "./index.js";
+import {
+  countedText,
+  countUpEffect,
+  renderParagraphs,
+  type TextProps,
+  TextPropsSchema,
+  textElement,
+  textPlugin,
+  typewriterEffect,
+} from "./index.js";
 
 function mount(props: TextProps): HTMLElement {
   const container = document.createElement("div");
@@ -104,5 +118,76 @@ describe("text element", () => {
   it("keeps empty lines one line tall", () => {
     const container = mount({ content: "a\n\nb" });
     expect(container.querySelectorAll("p")[1]?.innerHTML).toBe("<br>");
+  });
+});
+
+describe("text effects (D117)", () => {
+  const registry = new PluginRegistry().register(textPlugin);
+  const title = element("text", { content: "Hello there" }, { id: "t" });
+
+  it.each([typewriterEffect, countUpEffect])(
+    "$name passes the effect conformance kit",
+    (effect) => {
+      const report = checkEffectConformance(effect, {
+        target: title,
+        context: registry.applyContext(),
+      });
+      expect(report.failures).toEqual([]);
+    },
+  );
+
+  it("plays only on text layers", () => {
+    const shape = element("shape", { shape: "rect" }, { id: "s" });
+    expect(registry.validateEffect({ name: "typewriter" }, shape)).toMatchObject({
+      ok: false,
+      reason: "wrong-target",
+    });
+  });
+
+  it("types for as long as the text is, at the level's pace", () => {
+    const duration = (content: string, level: "calm" | "subtle") =>
+      registry.resolveEffect(
+        { name: "typewriter" },
+        {
+          animation: {} as never,
+          target: element("text", { content }, { id: "t" }),
+          tokens: motionTokens(undefined, level),
+        },
+      )?.duration;
+    expect(duration("Hello there", "subtle")).toBe(440); // 11 characters × 40 ms
+    expect(duration("Hi", "subtle")).toBe(400); // never quicker than $motion.normal
+    expect(duration("Hello there", "calm")).toBe(550); // calm types slower
+    expect(duration("x".repeat(1000), "subtle")).toBe(8000);
+  });
+
+  it("types out text without moving it: what's not typed yet keeps its place", () => {
+    const [p] = renderParagraphs(
+      [{ runs: [{ text: "Hello " }, { text: "world", bold: true }] }, { runs: [{ text: "Next" }] }],
+      null,
+      { reveal: 0.5 },
+    ) as HTMLElement[];
+    // 15 characters, 7 shown: "Hello " and the "w" of "world".
+    expect(p?.textContent).toBe("Hello world");
+    const hidden = [...(p?.querySelectorAll<HTMLElement>("span span") ?? [])];
+    expect(hidden.map((h) => [h.textContent, h.style.visibility])).toEqual([["orld", "hidden"]]);
+    const rest = renderParagraphs([{ runs: [{ text: "a" }] }, { runs: [{ text: "b" }] }], null, {
+      reveal: 0.5,
+    }) as HTMLElement[];
+    expect(rest[1]?.style.visibility).toBe("hidden"); // a paragraph not reached, bullet and all
+    const done = renderParagraphs("Hello", null, { reveal: 1 }) as HTMLElement[];
+    expect(done[0]?.querySelector("span span")).toBeNull();
+  });
+
+  it("counts numbers up keeping how they're written", () => {
+    expect(countedText("$4.2M raised", 0.5)).toBe("$2.1M raised");
+    expect(countedText("12,500 users", 0.5)).toBe("6,250 users");
+    expect(countedText("1,234,567", 0.1)).toBe("123,457");
+    expect(countedText("99% of 40", 0)).toBe("0% of 0");
+    expect(countedText("v2.0 from 12", 1)).toBe("v2.0 from 12"); // untouched when done
+  });
+
+  it("draws the counted text when mounted with countUp", () => {
+    const box = mount({ content: "1,000 users", countUp: 0.25 });
+    expect(box.textContent).toBe("250 users");
   });
 });

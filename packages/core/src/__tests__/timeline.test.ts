@@ -431,3 +431,89 @@ describe("motion levels and $motion tokens (D111)", () => {
     expect(validateDeck(deck).ok).toBe(true);
   });
 });
+
+describe("effects checked by the plugins that provide them (D117)", () => {
+  /** Knows "fade-in" (no params) and "type" (text only), like a registry would. */
+  const effects: ApplyContext = {
+    validateEffect: (effect, target) => {
+      if (effect.name === "type" && !(target.kind === "element" && target.type === "text")) {
+        return { ok: false, reason: "wrong-target", message: '"type" plays on text elements' };
+      }
+      if (effect.name !== "fade-in" && effect.name !== "type") {
+        return {
+          ok: false,
+          reason: "unknown-effect",
+          message: `Unknown effect "${effect.name}"`,
+          hint: 'Did you mean "fade-in"?',
+        };
+      }
+      return effect.params?.speed !== undefined
+        ? { ok: false, reason: "invalid-params", message: "speed: not a param" }
+        : { ok: true };
+    },
+  };
+
+  it("refuses an edit that adds an unknown effect, with the fix", () => {
+    const error = failure(
+      fixtureDeck(),
+      insert({ ...fadeIn("x", "title"), effect: { name: "fade-inn" } }),
+      effects,
+    );
+    expect([error.code, error.path, error.hint]).toEqual([
+      "NOT_FOUND",
+      "animation.effect.name",
+      'Did you mean "fade-in"?',
+    ]);
+    const params = failure(
+      fixtureDeck(),
+      insert({ ...fadeIn("x", "title"), effect: { name: "fade-in", params: { speed: 2 } } }),
+      effects,
+    );
+    expect([params.code, params.path]).toEqual(["INVALID", "animation.effect.params"]);
+    const shape = failure(
+      fixtureDeck(),
+      insert({ ...fadeIn("x", "card-1"), effect: { name: "type" } }),
+      effects,
+    );
+    expect([shape.code, shape.message]).toEqual([
+      "INVALID",
+      'Animation "x": "type" plays on text elements',
+    ]);
+  });
+
+  it("opens a file whose effect isn't installed, with a warning", () => {
+    const deck = animated(); // "fade-in" everywhere: make one unknown
+    const unknown = {
+      ...deck,
+      slides: deck.slides.map((s, i) =>
+        i === 0
+          ? {
+              ...s,
+              animations: s.animations?.map((a, j) =>
+                j === 0 ? { ...a, effect: { name: "acme.sparkle" } } : a,
+              ),
+            }
+          : s,
+      ),
+    };
+    const result = validateDeck(unknown, effects);
+    expect(result.ok).toBe(true);
+    expect(result.warnings.map((w) => [w.code, w.path])).toEqual([
+      ["NOT_FOUND", "slides[0].animations[0].effect.name"],
+    ]);
+    // Editing that animation's timing keeps its effect: allowed, though nobody here plays it.
+    const edited = applyOp(
+      unknown,
+      OpSchema.parse({ op: "animation.update", id: "a1", set: { delay: 100 } }),
+      effects,
+    );
+    expect(edited.deck.slides[0]?.animations?.[0]?.delay).toBe(100);
+    // Changing it to another unknown one isn't.
+    const changed = failure(
+      unknown,
+      { op: "animation.update", id: "a1", set: { effect: { name: "acme.glow" } } },
+      effects,
+    );
+    expect(changed.code).toBe("NOT_FOUND");
+  });
+});

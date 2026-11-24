@@ -101,7 +101,14 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
       const at = `slides[${s}].animations[${a}]`;
       checkId(animation.id, `${at}.id`);
       const problem = animationProblem(slide, animation, ctx);
-      if (problem) error(problem.code, problem.message, `${at}.${problem.path}`);
+      if (problem?.missing) {
+        warnings.push({
+          severity: "warning",
+          code: problem.code,
+          message: problem.message,
+          path: `${at}.${problem.path}`,
+        });
+      } else if (problem) error(problem.code, problem.message, `${at}.${problem.path}`);
     }
   }
 
