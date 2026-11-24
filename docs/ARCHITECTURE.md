@@ -158,6 +158,10 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
   render worker and compare every slide pixel by pixel with stored screenshots (D102).
   After a deliberate visual change, review the diffs in `tests/visual/.output/` and run
   `pnpm test:visual:update`.
+- **The motion performance test** (`tests/perf/motion/`, `pnpm perf:motion`, D107) plays a
+  slide of hundreds of moving layers in GPU Chromium, through the main thread and through the
+  compositor, and reads smoothness from Chrome's own frame reports. It depends on the
+  machine, so it isn't part of `pnpm check`.
 - **`scripts/architecture.test.ts`** enforces which package may depend on which. Changing
   the graph means updating it and recording why in DECISIONS.md.
 

@@ -32,10 +32,10 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-24
-- **Next:** the performance test (D104 §4), then toasts over dialogs, the morph match key
-  and the timeline schema (format v3). Done in Phase 4: visual regression tests (D102), the
+- **Next:** toasts over dialogs, then the morph match key and the timeline schema (format
+  v3). Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107);
   phases after 4 were renumbered when Motion graphics became Phase 5.
 - **State:** `pnpm check` is green (926 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
@@ -266,9 +266,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       pixel in CI; `pnpm test:visual:update` after a deliberate change (D102)
 - [x] Motion slot: the renderer draws motion (move, turn, flip, scale, fade, blur) on top of
       a layer's rest position, never width/height per frame (D83 §5, D103)
-- [ ] Performance test first: 300+ animated layers with blur on a modest machine, played by
-      main-thread `setMotion` and by the browser's compositor (Web Animations API); the
-      numbers decide how presenting plays, recorded as a decision (D104 §4)
+- [x] Performance test: `pnpm perf:motion`; presenting plays on the compositor, seeking and
+      export on the clock; budgets for performance lint (D107)
 - [ ] Toasts show over open dialogs: a modal `<dialog>` makes everything behind it inert, so
       an error from a dialog's action (Save version failing) is dimmed and can't be
       clicked. Manage decks works around it with its own Undo bar (D99 §4); fix it once,
@@ -291,8 +290,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       deck that animates
 - [ ] Timeline evaluator in core: keyframes, cubic-Bézier easing, springs, stagger, seeded
       randomness; pure and deterministic, no dependencies (D105 §1)
-- [ ] Core clock: `seek(slideId, step, t)` drives the motion slot and plugins' `seek(t)`;
-      playback as the performance test decided (D104 §4, D105 §2)
+- [ ] Core clock: `seek(slideId, step, t)` drives the motion slot and plugins' `seek(t)`
+      (scrubbing, export); presenting plays transform, opacity and filter tracks on the
+      compositor as Web Animations, and a pixel test proves both draw the same frame (D107)
 - [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), shaped by
       the motion level and `$motion` tokens, extensible by plugins; Save as preset keeps
       your own in the deck (D106 §3)
@@ -302,8 +302,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       each layer's role, reading order, the level and the tokens; the editor's "Animate
       this slide" and MCP call the same engine (D104 §3)
 - [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key)
-- [ ] Performance lint: the render worker measures frame times; agents and people get
-      "this slide will drop frames" with a fix (D104 §4)
+- [ ] Performance lint: agents and people get "this slide will drop frames" with a fix;
+      starting budgets about 600 layers moving at once and 100 blurring (D104 §4, D107 §4)
 - [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
       synced, laser pointer; its slide overview grouped by sections (D97); reduce motion
       plays the calm version (D104 §4)
@@ -342,7 +342,8 @@ Animate workspace and over MCP (D106).
 - [ ] Text animators: per character, word or line; stagger, scramble, cascade, seeded
       randomness; still selectable, accessible text
 - [ ] Masks and mattes (animated), blend modes
-- [ ] `effects` plugin on WebGL (PixiJS): particles, glow, displacement, shader
+- [ ] `effects` plugin on WebGL (PixiJS): particles (thousands of moving things never are
+      DOM layers, D107 §5), glow, displacement, shader
       transitions; a WebGL context budget (under 16 live contexts) and a fallback picture
       where WebGL is missing
 - [ ] Camera: zoom, pan and parallax across the slide's 2.5D depth

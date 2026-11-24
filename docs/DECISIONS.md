@@ -2715,3 +2715,57 @@ do in the editor (golden rule 1). A Simple/Advanced switch was considered and no
    "Custom", with its live preview, so a simple user can still keep, tweak or remove it.
 5. **Remembered, not moded:** whether the timeline panel is open is panel state, stored per
    workspace (D90), not a setting that changes what the app can do.
+
+## D107 — Presenting plays motion on the compositor; seeking and export stay on the clock
+
+**Status:** Accepted (2026-11-24). The measurement D104 §4 asked for, before the timeline.
+
+**The test** (`tests/perf/motion/`, `pnpm perf:motion`): one 1920×1080 slide of 300 to 3000
+layers (shapes and text) all moving at once (move, turn, scale, fade; blur on one layer in
+three), drawn by the real renderer. Two ways to play it: the main thread evaluates motion
+every frame and calls `setMotion` (D103), or the renderer composes the same motion into
+keyframes with its own `drawnCss` and hands them to the browser's compositor (Web Animations
+API). Three conditions: normal, the main thread slowed 4× (a weak laptop), and a 250 ms long
+task every second (autosave on a big deck, a React re-render, a plugin mounting). Smoothness
+comes from Chrome's own frame reports in a trace, on the real GPU (Intel Iris Xe, i5-12500H,
+headless Chromium with `--enable-gpu`), median of 3 runs.
+
+| Moving layers         | Main thread: normal / CPU 4× / long tasks | Compositor: normal / CPU 4× / long tasks |
+| --------------------- | ----------------------------------------- | ---------------------------------------- |
+| 300                   | 60 / 60 / 50 fps, **233 ms freezes**      | 60 / 60 / 60 fps, no drops               |
+| 600                   | 60 / 53 / 50 fps                          | 60 / 60 / 60 fps                         |
+| 1000                  | 53 / 32 / 44 fps                          | 60 / 60 / 60 fps                         |
+| 3000                  | 17 / 10 / 15 fps                          | 30 / 30 / 30 fps                         |
+| 1000, a third blurred | 37 / 25 / 31 fps                          | 34 / 37 / 34 fps                         |
+
+Main-thread motion costs 2 ms of JavaScript per frame for 300 layers and 6 ms for 1000
+(16 ms at 4× slower): cheap, but any long task freezes it for the task's length.
+
+1. **Presenting plays transform, opacity and filter tracks on the compositor:** the timeline
+   evaluator (core, D105) turns each track into Web Animations keyframes, composed by the
+   renderer's `drawnCss`, so the renderer stays the only writer of those properties (D103 §2)
+   and owns every `Animation` it starts. Easing goes over as `cubic-bezier()` or `linear()`
+   (springs), not sampled, where the browser can express it. **Why:** it's the only way that
+   stays at 60 fps while the app is busy, and it holds 60 fps up to 1000 moving layers even
+   on a slowed CPU.
+2. **Everything else plays on the clock (main thread):** tracks the compositor can't run
+   (any schema property: chart values, colors, gradient stops, text animators) go through
+   `seek(t)` and plugins, as golden rule 3 says.
+3. **Seeking, scrubbing and export stay on the clock** (`setMotion` from the evaluator):
+   frame-exact and deterministic. A test proves both paths draw the same frame at the same
+   time (pixel comparison), so what you scrub is what plays.
+4. **Budgets for performance lint (D104 §4),** measured on the machine above, with a margin
+   for weaker GPUs: warn above about **600 layers moving at once** (1000 measured smooth) and
+   about **100 blurring at once** (blur is the GPU's cost: 100 is smooth, 200 starts dropping,
+   333 runs at 35 fps whichever path plays it). The exact numbers are set when the lint is
+   built, from this test.
+5. **Thousands of moving things are particles, not layers:** 3000 DOM layers top out at
+   30 fps however they're played, so swarms, confetti and starfields belong in the WebGL
+   effects plugin (Phase 5, PixiJS, D105 §2).
+6. **Animate only what a track changes.** Animating `filter: none` on every layer made Chrome
+   build a filter effect for each one and halved the compositor's frame rate at 1000 layers
+   (35 fps → 60 fps once fixed). Keyframes carry a property only if the track moves it.
+
+**Caveats:** one machine, headless Chromium at 60 Hz; CPU throttling slows the main thread
+only. The numbers are recorded here, and the test is rerun when how motion is drawn or played
+changes (CLAUDE.md).
