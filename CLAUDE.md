@@ -36,6 +36,12 @@ dependency licenses matter (check a library's license before adding it).
 - Every new op, migration and plugin ships with tests (plugins must pass the conformance kit).
 - Plugins must `dispose()` everything they create (DOM, listeners, WebGL contexts, workers).
 - MCP tools: few, high-leverage, batch-friendly; errors must tell the agent how to fix the call.
+- After changing anything agents use (MCP tools, docs, errors), retest with a real agent: run
+  the server, spawn a subagent (Sonnet 5.5, high effort) that has only the Veloce MCP tools,
+  have it build a real deck and try to break it, and report what worked, friction, errors,
+  docs gaps and bugs. Fix, retest, repeat until it comes back clean; the maintainer does the
+  final hand test. Scripted MCP tests prove the tools work, not that agents can discover and
+  use them (D97 §8). Editor-only changes get unit and browser tests instead.
 - Never put base64 blobs in `document.json`; assets are content-hashed files in the `.veloce` zip.
 
 ## Commands
