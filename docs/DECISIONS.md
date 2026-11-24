@@ -2467,3 +2467,68 @@ palette) takes the open deck away; a toast offers **Undo**, as for other destruc
    the `AnimationDriver` interface, and plugins still implement `seek(t)` on the one clock
    (golden rule 3). Check Motion's license and version when it's added (CLAUDE.md), and
    use only its MIT core, not the paid Motion+ extras.
+
+## D101 — Suggestion mode fits without a format break; what Phase 4 must keep true
+
+**Status:** Accepted (2026-11-24). A design note, not a feature: suggestion mode ships after
+1.0. Resolves the Open question that gated Phase 4's timeline schema.
+
+**The question:** could agent edits later be held as a reviewable change set (the user sees
+them, then accepts or rejects them, per origin like undo) without breaking `.veloce`?
+**Answer: yes**, if Phase 4 keeps the six rules in §2.
+
+1. **The shape it would take:** a suggestion is a list of ordinary transactions held
+   **beside** the deck, not applied to it. Nothing about suggestions goes in
+   `document.json`, and nothing like Google Docs' inline suggestion markup either.
+   - _Preview_ applies them to a copy of the deck. Structural sharing makes that cheap, and
+     the read-only versions preview (D93 §5) already draws a deck that isn't the live one.
+   - _The agent sees its own work:_ its session reads, lints and previews the live deck
+     with its pending ops applied on top. When the live deck changes, those ops are
+     re-applied (rebased) to it.
+   - _Accept_ applies the ops to the live deck as one **`user`** transaction ("Accept:
+     <label>"), the same way Revert is the user's own change (D71 §2). So Ctrl+Z takes it
+     back, undo stays per origin, and the agent hears about it in its digest (D71 §5).
+   - _Reject_ throws the ops away. The deck never changed, so there's nothing to undo.
+   - _Conflicts:_ an op that no longer applies (its node was removed) fails, like a stale
+     revert. A field the user changed since the suggestion was made is caught by
+     comparing the suggestion's inverse (the values it saw) with the live deck. The review
+     UI shows those ops as conflicts instead of silently overwriting the user's edits.
+     **Why beside, not inline:** inline markup would change the document format and every
+     reader of it. Ops held beside the deck are the same ops humans and agents already send
+     (golden rule 1), so the feature adds a holding area and changes nothing in the model.
+2. **What Phase 4 must keep true** (these also serve concurrent editing today):
+   1. **Animations have IDs and are edited by their own ops**, like nodes
+      (`animation.insert/update/remove/move` keyed by animation ID, or the same thing
+      under other names). They must not be one array patched on the slide. **Why:** a
+      merge patch replaces an array whole. A held suggestion that rewrote `animations`
+      would wipe, on accept, every animation the user had added since. The same thing
+      happens right now if the user and an agent edit one slide's animations at the same
+      time (Phase 3's "Done when": no conflicts). MCP's `set_animations(slideId, steps)` can
+      stay a friendly whole-slide call, turned into per-animation ops the way `upsert_slide`
+      input is normalized.
+   2. **References use IDs, never positions.** An animation's `target` is a node ID, and
+      steps aren't numbered in storage (the step order can be derived from triggers), so a
+      held op still means the same thing after other edits.
+   3. **Removing a node removes the animations that target it, inside the same op,** and the
+      inverse puts them back exactly. **Why:** otherwise a rebased suggestion (or an undo)
+      ends up with animations pointing at nothing, and whether that fails depends on
+      ordering.
+   4. **Ops stay deterministic:** `applyOp` never makes IDs, reads the clock or uses
+      randomness (true today: components make IDs while building ops, not while applying
+      them). Rebasing re-applies ops, so the same ops must give the same deck.
+   5. **Only document state goes through ops.** Presenter state (current slide or step,
+      timer, laser pointer) and the Animate workspace's playhead are view state, like zoom
+      (D60), not deck fields. Anything else in `document.json` changes only through ops.
+   6. **Transitions and morph settings are slide or node fields patched by key** (objects,
+      not arrays), so the existing merge-patch rule applies field by field.
+3. **No new origin kind.** Pending ops keep their author's origin (`agent:<id>`); "pending"
+   is where they sit, not who made them. When suggestion mode is built, the sync protocol
+   gets additive messages (`suggestion.*`, an `accepts` link on change entries, next to
+   `reverts` / `restores`). That's the protocol, not the file format.
+4. **If suggestions are ever kept in the file**, stored ops become part of the format. The
+   choice then is `suggestions/<id>.json` with the format version it was written in,
+   handled like versions (D93 §2): an older reader skips the folder, and a suggestion that
+   is too new or can't be migrated is dropped with a warning, never fatally. The first
+   version can keep suggestions in memory only, for the session, and avoid this entirely.
+5. **Kept out:** building any of it before 1.0, suggestions from the user (the "track
+   changes" mode for people), and partial accept below one op.

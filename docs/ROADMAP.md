@@ -28,8 +28,8 @@
 
 - **Active phase:** Phase 4: Motion
 - **Last updated:** 2026-11-24
-- **Next:** the suggestion-mode design note (Open questions), then Phase 4's first item,
-  visual regression tests. The Phase 3 gate is done: Motion replaces GSAP (D100); tables,
+- **Next:** Phase 4's first item, visual regression tests. The suggestion-mode note is
+  done (D101): the timeline schema must follow its rules (§2). The Phase 3 gate is done: Motion replaces GSAP (D100); tables,
   lines and arrows, a morph match key and toasts over dialogs were added to the plan.
 - **State:** `pnpm check` is green (906 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
@@ -251,8 +251,8 @@ never undoes the agent's work.
 
 ## Phase 4 — Motion
 
-**Before the timeline schema:** the suggestion-mode design note (Open questions), so the
-document-model changes below don't rule out reviewable agent edits later.
+**The timeline schema follows D101 §2** (the suggestion-mode note), so the document-model
+changes below don't rule out reviewable agent edits later.
 
 - [ ] Visual regression tests first: reference decks rendered in CI and compared with
       stored screenshots, so the renderer work below can't silently move a pixel in
@@ -268,7 +268,9 @@ document-model changes below don't rule out reviewable agent edits later.
       finds anything; Duplicate slide fills the key from the original node, agents set it
       themselves, and morph falls back to name and type (like PowerPoint's `!!name`).
       Decided and in the schema before the timeline schema
-- [ ] Timeline schema: per-slide steps (click triggers); animations `{ target, effect | keyframes, trigger: onClick | withPrevious | afterPrevious, delay, duration, easing }`
+- [ ] Timeline schema: per-slide steps (click triggers); animations `{ target, effect | keyframes, trigger: onClick | withPrevious | afterPrevious, delay, duration, easing }`.
+      Each animation has an ID and its own ops (not one patched array); removing a node
+      removes its animations in the same op (D101 §2)
 - [ ] Core clock: `seek(slideId, step, t)`; plugins driven via `seek(t)`
 - [ ] `AnimationDriver` interface, with Motion as the driver (D100)
 - [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), extensible by plugins
@@ -449,7 +451,7 @@ user moves one into a phase.
 **AI**
 
 - Suggestion mode: an agent's edits arrive as a change set to accept or reject per slide
-  (see Open questions: check the design before Phase 4)
+  (design checked: D101)
 - Deck translation that keeps the layout (lint catches overflow); generated speaker notes
 
 **Plugins**
@@ -476,9 +478,8 @@ user moves one into a phase.
       (2026-11-24, D100).
 - [ ] **Name:** trademark search for "Veloce" in the software class.
 - [x] **Extension:** `.veloce` confirmed by the user (2026-11-18).
-- [ ] **Suggestion mode (after 1.0, but check now):** before Phase 4 changes the document
-      model, confirm that agent edits could later be held as a reviewable change set (per
-      origin, like undo) without a format break. A short design note is enough. **Resolve
-      before Phase 4's timeline schema.**
+- [x] **Suggestion mode (after 1.0, but check now):** it fits without a format break, held
+      beside the deck as ordinary ops; Phase 4 keeps six rules so it stays that way
+      (2026-11-24, D101).
 - [ ] **Sync:** server op log now; move to Yjs only if cloud multi-user collaboration becomes a goal.
 - [ ] **Business:** hosted web viewer / cloud sync / plugin marketplace (post-launch).
