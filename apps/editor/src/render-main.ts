@@ -5,7 +5,8 @@
  */
 import { createBuiltinRegistry } from "@veloce/builtins";
 import type { Deck, SlideMeasurement } from "@veloce/core";
-import { SlideRenderer } from "@veloce/renderer";
+import { seekPosition } from "@veloce/core";
+import { SlidePlayer, SlideRenderer } from "@veloce/renderer";
 import { syncDeckFonts } from "./deck-fonts.js";
 import { loadFonts } from "./fonts.js";
 
@@ -23,13 +24,27 @@ const renderer = new SlideRenderer(stage, {
   onPluginError: (error, info) =>
     console.error(`Plugin error in ${info.nodeId} (${info.phase})`, error),
 });
+const player = new SlidePlayer(renderer);
 const fonts = loadFonts();
+
+/**
+ * A moment of a slide's animations (D115): `time` ms into `step`, every step before it
+ * played out. Drawn by the clock (`seek`, like export), or with `playback: "compositor"` by
+ * the Web Animations presenting uses, frozen at that moment: the pixel test that proves
+ * both draw the same frame compares the two.
+ */
+interface Moment {
+  step: number;
+  time: number;
+  playback?: "clock" | "compositor";
+}
 
 async function draw(deck: Deck, id: string, slideId: string, scale: number): Promise<void> {
   await fonts;
   deckId = id;
   await syncDeckFonts(deck, assetUrl); // the deck's own fonts, before anything is measured
   host.style.transform = scale === 1 ? "" : `scale(${scale})`;
+  player.unload(); // at rest: measurements and plain previews show the layout, no motion
   renderer.render(deck, slideId);
   await renderer.ready();
 }
@@ -54,9 +69,20 @@ const api = {
     id: string,
     slideId: string,
     width: number,
+    at?: Moment,
   ): Promise<{ width: number; height: number }> {
     const scale = width / deck.stage.width;
     await draw(deck, id, slideId, scale);
+    if (at) {
+      player.load(deck, slideId);
+      if (at.playback === "compositor") {
+        player.play(seekPosition(player.steps, at.step, 0));
+        player.pause(seekPosition(player.steps, at.step, at.time).time);
+      } else {
+        player.seek(at.step, at.time);
+      }
+      await renderer.ready();
+    }
     return { width: Math.round(width), height: Math.round(deck.stage.height * scale) };
   },
 };

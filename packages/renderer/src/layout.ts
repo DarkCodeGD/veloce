@@ -159,9 +159,7 @@ export function nodeBoxCss(
     const h = anchorCss(node.anchor?.x ?? "start", x, ["left", "right"]);
     const v = anchorCss(node.anchor?.y ?? "start", y, ["top", "bottom"]);
     Object.assign(css, h.css, v.css);
-    if (h.center || v.center) {
-      shift = `translate(${h.center ? "-50%" : "0"}, ${v.center ? "-50%" : "0"})`;
-    }
+    shift = anchorShift(node, parent);
     css.width = absoluteSize(size.width, h.inset, "max-content");
     css.height = absoluteSize(size.height, v.inset, "auto");
   } else {
@@ -204,31 +202,94 @@ export const MOTION_PROPERTIES = ["transform", "opacity", "filter"] as const;
  * anchor's shift, a plain translate. So a rotated sticker moves where you'd expect, scales
  * along its own edges and stays centred on its anchor, the order motion tools use.
  */
-export function drawnCss(node: Node, shift: string | null, motion?: MotionState): CssRecord {
+export function drawnCss(
+  node: Node,
+  shift: string | null,
+  motion?: MotionState,
+  fixed?: DrawnStructure,
+): CssRecord {
   const m = resolveMotion(motion);
   const css: CssRecord = {};
   const parts: string[] = [];
   if (shift) parts.push(shift);
   // Depth (2.5D, D112) rests where the document puts it; motion's `z` moves it from there.
   const z = (node.depth ?? 0) + m.z;
-  if (z !== 0) {
+  const move = fixed ? fixed.move : z !== 0 ? "3d" : m.x !== 0 || m.y !== 0 ? "2d" : "none";
+  if (move === "3d") {
     parts.push(`translate3d(${num(m.x)}px, ${num(m.y)}px, ${m.z === 0 ? z : num(z)}px)`);
-  } else if (m.x !== 0 || m.y !== 0) parts.push(`translate(${num(m.x)}px, ${num(m.y)}px)`);
+  } else if (move === "2d") parts.push(`translate(${num(m.x)}px, ${num(m.y)}px)`);
   // Values from the document alone stay exact (a node at rest gets the CSS it always had).
   const rotation = (node.rotation ?? 0) + m.rotate;
-  if (rotation !== 0) parts.push(`rotate(${m.rotate === 0 ? rotation : num(rotation)}deg)`);
-  if (m.rotateY !== 0) parts.push(`rotateY(${num(m.rotateY)}deg)`);
-  if (m.rotateX !== 0) parts.push(`rotateX(${num(m.rotateX)}deg)`);
+  if (fixed ? fixed.rotate : rotation !== 0)
+    parts.push(`rotate(${m.rotate === 0 ? rotation : num(rotation)}deg)`);
+  if (fixed ? fixed.rotateY : m.rotateY !== 0) parts.push(`rotateY(${num(m.rotateY)}deg)`);
+  if (fixed ? fixed.rotateX : m.rotateX !== 0) parts.push(`rotateX(${num(m.rotateX)}deg)`);
   const sx = m.scale * m.scaleX;
   const sy = m.scale * m.scaleY;
-  if (sx !== 1 || sy !== 1)
+  if (fixed?.scale) parts.push(`scale(${num(sx)}, ${num(sy)})`);
+  else if (!fixed && (sx !== 1 || sy !== 1))
     parts.push(sx === sy ? `scale(${num(sx)})` : `scale(${num(sx)}, ${num(sy)})`);
   if (parts.length > 0) css.transform = parts.join(" ");
+  else if (fixed) css.transform = "none";
 
   const opacity = (node.opacity ?? 1) * m.opacity;
-  if (opacity < 1) css.opacity = m.opacity === 1 ? String(opacity) : num(opacity);
-  if (m.blur > 0) css.filter = `blur(${num(m.blur)}px)`;
+  if (fixed || opacity < 1) css.opacity = m.opacity === 1 ? String(opacity) : num(opacity);
+  if (fixed || m.blur > 0) css.filter = `blur(${num(m.blur)}px)`;
   return css;
+}
+
+/**
+ * Which transform functions every keyframe of a clip carries, so all its keyframes list the
+ * same functions in the same order. Then the browser interpolates each number on its own;
+ * lists that differ would go through matrices, which turn a 360° spin into no spin at all.
+ */
+export interface DrawnStructure {
+  move: "none" | "2d" | "3d";
+  rotate: boolean;
+  rotateY: boolean;
+  rotateX: boolean;
+  scale: boolean;
+}
+
+/** A centred anchor's shift back by half the layer's own size (a free layer's), or null. */
+export function anchorShift(node: Node, parent: Layout | null): string | null {
+  if (parent === null || !isFreeLayer(node, parent)) return null;
+  const h = node.anchor?.x === "center";
+  const v = node.anchor?.y === "center";
+  return h || v ? `translate(${h ? "-50%" : "0"}, ${v ? "-50%" : "0"})` : null;
+}
+
+/**
+ * A clip's motion states as Web Animations keyframes (D107, D115), composed exactly as the
+ * renderer draws a still frame. Only `transform`, `opacity` and `filter` the clip changes go
+ * in: animating a constant `filter` would still make Chrome build a filter effect per layer.
+ */
+export function motionKeyframes(
+  node: Node,
+  parent: Layout | null,
+  states: readonly MotionState[],
+): CssRecord[] {
+  const resolved = states.map(resolveMotion);
+  const some = (test: (m: ReturnType<typeof resolveMotion>) => boolean) => resolved.some(test);
+  const structure: DrawnStructure = {
+    move:
+      (node.depth ?? 0) !== 0 || some((m) => m.z !== 0)
+        ? "3d"
+        : some((m) => m.x !== 0 || m.y !== 0)
+          ? "2d"
+          : "none",
+    rotate: (node.rotation ?? 0) !== 0 || some((m) => m.rotate !== 0),
+    rotateY: some((m) => m.rotateY !== 0),
+    rotateX: some((m) => m.rotateX !== 0),
+    scale: some((m) => m.scale * m.scaleX !== 1 || m.scale * m.scaleY !== 1),
+  };
+  const shift = anchorShift(node, parent);
+  const frames = states.map((state) => drawnCss(node, shift, state, structure));
+  for (const property of MOTION_PROPERTIES) {
+    const first = frames[0]?.[property];
+    if (frames.every((f) => f[property] === first)) for (const f of frames) delete f[property];
+  }
+  return frames;
 }
 
 /** A number for CSS: at most 4 decimals, so strings stay short and stable across frames. */

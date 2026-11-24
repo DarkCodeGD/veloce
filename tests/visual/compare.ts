@@ -27,9 +27,24 @@ const THRESHOLD = 0.1;
  */
 const MAX_DIFF_PIXELS = 0;
 
-export function compareScreenshots(baseline: Uint8Array, actual: Uint8Array): Comparison {
-  const a = PNG.sync.read(Buffer.from(baseline));
-  const b = PNG.sync.read(Buffer.from(actual));
+export interface CompareOptions {
+  /**
+   * Average `pool`×`pool` blocks of pixels before comparing: how sharply an edge was
+   * rasterized stops counting, where it is still does (a layer moved by two pixels shifts
+   * a full-contrast edge through a block). For frames drawn two different ways, such as
+   * the compositor's stretched layer bitmaps against a fresh paint (D115).
+   */
+  pool?: number;
+}
+
+export function compareScreenshots(
+  baseline: Uint8Array,
+  actual: Uint8Array,
+  options: CompareOptions = {},
+): Comparison {
+  const pool = options.pool ?? 1;
+  const a = pooled(PNG.sync.read(Buffer.from(baseline)), pool);
+  const b = pooled(PNG.sync.read(Buffer.from(actual)), pool);
   if (a.width !== b.width || a.height !== b.height) {
     return {
       match: false,
@@ -48,4 +63,26 @@ export function compareScreenshots(baseline: Uint8Array, actual: Uint8Array): Co
     reason: `${count} pixels differ (${share}% of the slide)`,
     diff: new Uint8Array(PNG.sync.write(diff)),
   };
+}
+
+/** The image with each `size`×`size` block replaced by its average (`size` 1: as it is). */
+function pooled(image: PNG, size: number): PNG {
+  if (size <= 1) return image;
+  const width = Math.floor(image.width / size);
+  const height = Math.floor(image.height / size);
+  const out = new PNG({ width, height });
+  const area = size * size;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      for (let c = 0; c < 4; c++) {
+        let sum = 0;
+        for (let dy = 0; dy < size; dy++) {
+          const row = (y * size + dy) * image.width;
+          for (let dx = 0; dx < size; dx++) sum += image.data[(row + x * size + dx) * 4 + c] ?? 0;
+        }
+        out.data[(y * width + x) * 4 + c] = Math.round(sum / area);
+      }
+    }
+  }
+  return out;
 }

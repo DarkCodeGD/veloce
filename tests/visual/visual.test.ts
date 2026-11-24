@@ -13,7 +13,8 @@
  *   `pnpm test:visual:update`.
  * - Avoid what changes by itself: the `date` field and the footer's date show today.
  * - `motion.json` (format v3, D113) animates: every trigger, `$motion` tokens, springs, 2.5D.
- *   Until the clock can seek it, slides are drawn at rest (where the layout puts each layer).
+ *   Its slides are drawn at rest, and also at `MOMENTS` in the middle of their animations,
+ *   seeked by the clock like an export (`<deck>--<slide>@<step>-<ms>.png`, D115).
  *
  * Needs the built editor (`pnpm build:editor`) and headless Chromium, like the other
  * browser tests: skipped locally without them, required in CI (VELOCE_REQUIRE_BROWSER=1).
@@ -67,6 +68,18 @@ async function loadReferenceDeck(file: string, registry = createBuiltinRegistry(
 
 const deckFiles = (await readdir(DECKS)).filter((f) => f.endsWith(".json")).sort();
 
+/** Moments of animated decks to capture too: slide, step, ms into the step. */
+const MOMENTS: Readonly<Record<string, readonly [slide: string, step: number, time: number][]>> = {
+  motion: [
+    ["steps", 0, 600], // the subtitle rising
+    ["steps", 1, 150], // cards on a spring, staggered
+    ["steps", 1, 770], // a card swinging in from depth
+    ["steps", 2, 333], // bars growing, their color blending
+    ["steps", 2, 1777], // the pulse looping
+    ["finale", 0, 60], // the title flipping up at absurd
+  ],
+};
+
 let dir: string;
 let workspace: Workspace;
 let app: VeloceServer;
@@ -116,14 +129,22 @@ describe.skipIf(problem !== null)("Visual regression: reference decks", { timeou
       if (!render) throw new Error("the server has no renderer");
 
       const failures: string[] = [];
-      for (const slide of deck.slides) {
+      const shots: { slideId: string; key: string; at?: { step: number; time: number } }[] = [
+        ...deck.slides.map((s) => ({ slideId: s.id, key: `${name}--${s.id}` })),
+        ...(MOMENTS[name] ?? []).map(([slideId, step, time]) => ({
+          slideId,
+          key: `${name}--${slideId}@${step}-${time}`,
+          at: { step, time },
+        })),
+      ];
+      for (const { slideId, key, at } of shots) {
         const shot = await render.screenshot(deck, {
           deckId: deck.id,
-          slideId: slide.id,
+          slideId,
           width: deck.stage.width,
           format: "png",
+          ...(at && { at }),
         });
-        const key = `${name}--${slide.id}`;
         const baselinePath = join(SCREENSHOTS, `${key}.png`);
         if (UPDATE) {
           await mkdir(SCREENSHOTS, { recursive: true });
@@ -145,8 +166,7 @@ describe.skipIf(problem !== null)("Visual regression: reference decks", { timeou
       // Stored screenshots for slides the deck no longer has would never be checked again.
       const stale = existsSync(SCREENSHOTS)
         ? (await readdir(SCREENSHOTS)).filter(
-            (f) =>
-              f.startsWith(`${name}--`) && !deck.slides.some((s) => f === `${name}--${s.id}.png`),
+            (f) => f.startsWith(`${name}--`) && !shots.some((s) => f === `${s.key}.png`),
           )
         : [];
       expect(stale, "stored screenshots of slides the deck doesn't have").toEqual([]);

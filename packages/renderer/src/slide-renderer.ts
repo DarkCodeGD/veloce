@@ -19,6 +19,8 @@
  * turn, scale, fade, blur) without touching layout. The renderer is the only writer of a
  * layer's `transform`, `opacity` and `filter`: it combines the motion with the layer's own
  * rotation, anchor and opacity, and keeps it when an edit restyles the layer mid-playback.
+ * `playMotion` hands motion to the browser's compositor instead (D107, D115): keyframes
+ * composed the same way, as Web Animations this renderer starts, owns and cancels.
  */
 import {
   type Deck,
@@ -32,6 +34,7 @@ import {
   isFooterId,
   isRestMotion,
   type Layout,
+  type MotionClip,
   type MotionState,
   type Node,
   type Slide,
@@ -48,6 +51,7 @@ import {
   frameSpaceCss,
   frameStyleCss,
   MOTION_PROPERTIES,
+  motionKeyframes,
   nodeBoxCss,
   type ResolvedSizing,
 } from "./layout.js";
@@ -89,6 +93,8 @@ export class SlideRenderer {
   #footerFrom: { footer: Deck["footer"]; slide: Slide | null } = { footer: undefined, slide: null };
   #time = 0;
   #disposed = false;
+  /** Web Animations playing motion on the compositor, by node ID, with their clip's start. */
+  #clips = new Map<string, { animation: Animation; start: number }[]>();
 
   /** `stage` is an empty element the renderer owns; it's sized to the deck's stage. */
   constructor(stage: HTMLElement, options: SlideRendererOptions) {
@@ -197,6 +203,60 @@ export class SlideRenderer {
       const after = next.get(id);
       if (!sameMotion(before, after)) this.#applyMotion(m, after);
     }
+  }
+
+  /**
+   * Play motion on the compositor (D107): each layer's clips become Web Animations of its
+   * `transform`, `opacity` and `filter`, composed like `setMotion` draws them. `origin` is
+   * the time on `document.timeline` at which the slide's time is 0, so clips (in slide
+   * time) start in step with each other and with the clock. Replaces what was playing.
+   * Where a clip isn't playing, a layer shows what `setMotion` last drew.
+   */
+  playMotion(clips: ReadonlyMap<string, readonly MotionClip[]>, origin: number): void {
+    this.stopMotion();
+    for (const [id, layerClips] of clips) {
+      const m = this.#mounted.get(id);
+      if (!m) continue;
+      const playing: { animation: Animation; start: number }[] = [];
+      for (const clip of layerClips) {
+        const end = clip.times.at(-1) ?? clip.start;
+        const duration = end - clip.start;
+        if (duration <= 0) continue;
+        const frames = motionKeyframes(m.node, m.parentLayout, clip.states);
+        if (Object.keys(frames[0] ?? {}).length === 0) continue; // nothing it shows changes
+        const keyframes = frames.map((css, i) => ({
+          ...css,
+          offset: ((clip.times[i] ?? end) - clip.start) / duration,
+        }));
+        const animation = m.el.animate(keyframes, {
+          duration,
+          easing: "linear",
+          iterations: clip.loop ? Number.POSITIVE_INFINITY : 1,
+          // A finished clip holds its last frame; a loop clip only shows while it loops, and
+          // being created later, it plays over the clip before it.
+          fill: clip.loop ? "none" : "forwards",
+        });
+        animation.startTime = origin + clip.start;
+        playing.push({ animation, start: clip.start });
+      }
+      if (playing.length > 0) this.#clips.set(id, playing);
+    }
+  }
+
+  /** Freeze the compositor's motion, at slide time `time` if given (else where it is). */
+  pauseMotion(time?: number): void {
+    for (const clips of this.#clips.values()) {
+      for (const { animation, start } of clips) {
+        animation.pause();
+        if (time !== undefined) animation.currentTime = time - start;
+      }
+    }
+  }
+
+  /** Stop the compositor's motion: layers show what `setMotion` last drew. */
+  stopMotion(): void {
+    for (const clips of this.#clips.values()) for (const { animation } of clips) animation.cancel();
+    this.#clips.clear();
   }
 
   /** Resolves when fonts and images on the stage have loaded, so measurements are final. */
@@ -342,6 +402,8 @@ export class SlideRenderer {
   }
 
   #disposeOne(id: string, m: Mounted): void {
+    for (const { animation } of this.#clips.get(id) ?? []) animation.cancel();
+    this.#clips.delete(id);
     const instance = m.instance;
     if (instance && m.node.kind === "element")
       this.#guard(id, m.node.type, "dispose", () => instance.dispose());

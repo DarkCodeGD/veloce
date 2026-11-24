@@ -79,6 +79,10 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   `compileSlide(deck, slide)` once per edit, then `at({ time, clicks })` per frame gives every
   animated layer's `MotionState` and property values. Pure: presenting, scrubbing (`seek`)
   and export draw the same frame for the same moment. Effects come in through a resolver.
+- **The motion planner** (`motion-plan.ts`, D115): `planMotion(compiled, moment)` samples
+  each layer's motion from that moment into keyframe clips for the compositor (a clip to
+  where it stops, then a loop), within what nobody can see; loops that don't line up
+  stay on the clock.
 - **Ops** (`src/ops/`): `slide.*`, `node.*`, `animation.*`, `deck.*`, `asset.*`, `component.*`. Each is
   plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
   Merge Patches. Ops copy only the path to what changed (structural sharing), so untouched
@@ -141,7 +145,11 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
   **Motion** (D103) is drawn on top of layout: `setMotion` moves, turns, scales, fades and
   blurs layers from their rest position (core's `MotionState`) without re-running layout,
   and the renderer is the only writer of `transform`, `opacity` and `filter`. Core's
-  evaluator produces the motion (D114); the clock that feeds it to `setMotion` is next.
+  evaluator produces the motion (D114). **`SlidePlayer`** (`slide-player.ts`, D115) is the
+  clock: `seek` draws a moment on the main thread (motion, animated properties re-rendered,
+  plugins' `seek(t)`), `play`/`next`/`pause` hand planned motion to the renderer's Web
+  Animations (`playMotion`) and keep only properties, clock loops and plugins on a frame
+  loop. The render page (`render-main.ts`) uses it, so screenshots take a moment (`at`).
   Proven libraries only draw (D105).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
   `update`, `seek`, `dispose`, and `aiDocs` for agents) and registers them in a registry that

@@ -34,6 +34,7 @@ interface RenderPageApi {
     deckId: string,
     slideId: string,
     width: number,
+    at?: { step: number; time: number },
   ): Promise<{ width: number; height: number }>;
 }
 
@@ -74,14 +75,15 @@ export class PlaywrightRenderService implements RenderService {
     const format = options.format ?? "jpeg";
     return this.#run(async (page) => {
       const size = await page.evaluate(
-        ([d, id, slide, w]) =>
+        ([d, id, slide, w, at]) =>
           (globalThis as unknown as { veloceRender: RenderPageApi }).veloceRender.show(
             d,
             id,
             slide,
             w,
+            at ?? undefined,
           ),
-        [deck, options.deckId, options.slideId, width] as const,
+        [deck, options.deckId, options.slideId, width, options.at ?? null] as const,
       );
       const data = await page.screenshot({
         clip: { x: 0, y: 0, width: size.width, height: size.height },

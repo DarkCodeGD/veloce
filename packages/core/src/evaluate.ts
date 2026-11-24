@@ -28,7 +28,7 @@ import {
 } from "./motion-tokens.js";
 import type { Animation, EffectRef, Keyframe, Tracks } from "./schema/animation.js";
 import type { Deck, Slide } from "./schema/deck.js";
-import type { Node } from "./schema/node.js";
+import type { FrameNode, Node } from "./schema/node.js";
 import type { Theme } from "./schema/theme.js";
 import {
   type AnimationDefaults,
@@ -79,11 +79,37 @@ export interface CompileOptions {
 export interface CompiledSlide {
   /** When each animation plays (the same schedule the editor's steps list shows). */
   steps: Step[];
+  /** The layers its animations move, in slide order. */
+  layers: readonly string[];
   /** The frame at a moment of a performance. */
   at(position: PlayPosition): SlideFrame;
+  /** One layer at a moment (undefined when nothing animates it): what playback samples. */
+  layerAt(id: string, position: PlayPosition): LayerFrame | undefined;
   /** The frame `time` ms into `step`, every step before it played to its end. */
   seek(step: number, time: number): SlideFrame;
+  /**
+   * When each animated layer stops changing, given the clicks so far (no more coming):
+   * what the compositor can play ahead of time (D115).
+   */
+  activity(clicks: readonly number[]): ReadonlyMap<string, LayerActivity>;
 }
+
+/**
+ * How a layer changes from now on, for its motion channels and for its properties:
+ * after `until` (slide ms) it holds still (`period` null) or repeats every `period` ms;
+ * `Infinity` when its loops don't line up within a minute. Null: nothing animates it.
+ */
+export interface LayerActivity {
+  motion: ActivitySpan | null;
+  properties: ActivitySpan | null;
+}
+export interface ActivitySpan {
+  until: number;
+  period: number | null;
+}
+
+/** Loops longer than this before they line up again play on the clock, not the compositor. */
+export const MAX_LOOP_PERIOD = 60_000;
 
 /**
  * Where `seek(step, time)` is as a performance: each click comes as the step before it ends
@@ -208,7 +234,18 @@ export function compileSlide(
   }
 
   const at = (position: PlayPosition): SlideFrame => evaluate(groups, position);
-  return { steps, at, seek: (step, time) => at(seekPosition(steps, step, time)) };
+  const layers = [...nodes.keys()].filter((id) => groups.has(id));
+  return {
+    steps,
+    layers,
+    at,
+    layerAt: (id, position) => {
+      const byKey = groups.get(id);
+      return byKey ? evaluateLayer(byKey, position) : undefined;
+    },
+    seek: (step, time) => at(seekPosition(steps, step, time)),
+    activity: (clicks) => activity(groups, clicks),
+  };
 }
 
 function compileTrack(
@@ -287,34 +324,138 @@ function parseValue(raw: unknown, theme: Theme): Value {
 
 function evaluate(groups: Map<string, Map<string, Entry[]>>, position: PlayPosition): SlideFrame {
   const frame = new Map<string, LayerFrame>();
-  for (const [target, byKey] of groups) {
-    const layer: LayerFrame = { motion: {}, properties: {} };
-    for (const [key, entries] of byKey) {
-      // The animation that started last shows; before any started, the first one's start.
-      let chosen: Entry | undefined;
-      let chosenStart = Number.NEGATIVE_INFINITY;
-      for (const entry of entries) {
-        const stepStart = entry.step === 0 ? 0 : position.clicks[entry.step - 1];
-        if (stepStart === undefined) continue;
-        const start = stepStart + entry.start;
-        if (start <= position.time && start >= chosenStart) {
-          chosen = entry;
-          chosenStart = start;
-        }
-      }
-      const entry = chosen ?? entries[0];
-      if (!entry) continue;
-      const progress = chosen ? progressAt(position.time - chosenStart, entry) : 0;
-      const value = valueAt(entry.track, progress);
-      if (entry.track.channel) {
-        if (typeof value === "number") layer.motion[key as keyof MotionState] = value;
-      } else {
-        layer.properties[key] = value;
+  for (const [target, byKey] of groups) frame.set(target, evaluateLayer(byKey, position));
+  return frame;
+}
+
+/** When a step started: step 0 as the slide appears, the others at their click. */
+const stepStartOf = (step: number, clicks: readonly number[]) =>
+  step === 0 ? 0 : clicks[step - 1];
+
+function evaluateLayer(byKey: Map<string, Entry[]>, position: PlayPosition): LayerFrame {
+  const layer: LayerFrame = { motion: {}, properties: {} };
+  for (const [key, entries] of byKey) {
+    // The animation that started last shows; before any started, the first one's start.
+    let chosen: Entry | undefined;
+    let chosenStart = Number.NEGATIVE_INFINITY;
+    for (const entry of entries) {
+      const stepStart = stepStartOf(entry.step, position.clicks);
+      if (stepStart === undefined) continue;
+      const start = stepStart + entry.start;
+      if (start <= position.time && start >= chosenStart) {
+        chosen = entry;
+        chosenStart = start;
       }
     }
-    frame.set(target, layer);
+    const entry = chosen ?? entries[0];
+    if (!entry) continue;
+    const progress = chosen ? progressAt(position.time - chosenStart, entry) : 0;
+    const value = valueAt(entry.track, progress);
+    if (entry.track.channel) {
+      if (typeof value === "number") layer.motion[key as keyof MotionState] = value;
+    } else {
+      layer.properties[key] = value;
+    }
   }
-  return frame;
+  return layer;
+}
+
+function activity(
+  groups: Map<string, Map<string, Entry[]>>,
+  clicks: readonly number[],
+): Map<string, LayerActivity> {
+  const out = new Map<string, LayerActivity>();
+  for (const [target, byKey] of groups) {
+    const spans: Record<"motion" | "properties", ActivitySpan | null> = {
+      motion: null,
+      properties: null,
+    };
+    for (const entries of byKey.values()) {
+      for (const entry of entries) {
+        const stepStart = stepStartOf(entry.step, clicks);
+        if (stepStart === undefined) continue; // waits for a click: changes nothing until then
+        const kind = entry.track.channel ? "motion" : "properties";
+        const span = spans[kind] ?? { until: Number.NEGATIVE_INFINITY, period: null };
+        const start = stepStart + entry.start;
+        if (Number.isFinite(entry.plays)) {
+          span.until = Math.max(span.until, start + entry.duration * entry.plays);
+        } else {
+          span.until = Math.max(span.until, start);
+          span.period = lcm(span.period, entry.duration * (entry.alternate ? 2 : 1));
+        }
+        spans[kind] = span;
+      }
+    }
+    out.set(target, spans);
+  }
+  return out;
+}
+
+/** The shortest period two loops share; Infinity past a minute or for uneven times. */
+function lcm(a: number | null, b: number): number {
+  if (a === null) return b;
+  if (!Number.isFinite(a) || a === b) return a;
+  if (!Number.isInteger(a) || !Number.isInteger(b)) return Number.POSITIVE_INFINITY;
+  const gcd = (x: number, y: number): number => (y === 0 ? x : gcd(y, x % y));
+  const period = (a / gcd(a, b)) * b;
+  return period > MAX_LOOP_PERIOD ? Number.POSITIVE_INFINITY : period;
+}
+
+// ── A frame's parts ──────────────────────────────────────────────────────────────────
+
+/** The motion of every layer in a frame, for the renderer's `setMotion` (D103). */
+export function motionOf(frame: SlideFrame): Map<string, MotionState> {
+  const out = new Map<string, MotionState>();
+  for (const [id, layer] of frame) out.set(id, layer.motion);
+  return out;
+}
+
+/** True when some layer in the frame has animated properties (they redraw on the clock). */
+export function hasProperties(frame: SlideFrame): boolean {
+  for (const layer of frame.values()) if (Object.keys(layer.properties).length > 0) return true;
+  return false;
+}
+
+/**
+ * The slide as it looks in `frame`: animated `props.*` and `style.*` values written in, the
+ * rest the same objects (structural sharing, so the renderer redraws only what changed).
+ * Not a document edit: nothing stores it, and it never goes through ops.
+ */
+export function withProperties(slide: Slide, frame: SlideFrame): Slide {
+  const patch = (node: Node): Node => {
+    const values = frame.get(node.id)?.properties;
+    let next: Node = node;
+    if (values && Object.keys(values).length > 0) {
+      for (const [key, value] of Object.entries(values)) {
+        const [group, ...path] = key.split(".");
+        if (group === "props" && next.kind === "element")
+          next = { ...next, props: setIn(next.props, path, value) };
+        else if (group === "style" && next.kind === "frame")
+          next = { ...next, style: setIn(next.style ?? {}, path, value) };
+      }
+    }
+    if (next.kind !== "frame") return next;
+    const children = next.children.map(patch);
+    return children.some((c, i) => c !== (next as FrameNode).children[i])
+      ? { ...next, children }
+      : next;
+  };
+  const root = patch(slide.root);
+  return root === slide.root ? slide : { ...slide, root: root as FrameNode };
+}
+
+function setIn<T extends object>(object: T, path: readonly string[], value: unknown): T {
+  const [head, ...rest] = path;
+  if (head === undefined) return object;
+  const record = object as Record<string, unknown>;
+  const inner = record[head];
+  return {
+    ...object,
+    [head]:
+      rest.length === 0
+        ? value
+        : setIn(typeof inner === "object" && inner !== null ? inner : {}, rest, value),
+  } as T;
 }
 
 /** Where in one play an animation is, `elapsed` ms after it started: 0 → 1. */

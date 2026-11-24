@@ -12,6 +12,11 @@ export interface ScreenshotOptions {
   width?: number;
   /** Default `"jpeg"` (smaller for agents); `"png"` for lossless. */
   format?: "png" | "jpeg";
+  /**
+   * A moment of the slide's animations: `time` ms into `step`, every step before it played
+   * out (D115). Without it, the slide at rest: every layer where the layout puts it.
+   */
+  at?: { step: number; time: number };
 }
 
 export interface Screenshot {

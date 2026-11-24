@@ -2720,6 +2720,8 @@ do in the editor (golden rule 1). A Simple/Advanced switch was considered and no
 ## D107 — Presenting plays motion on the compositor; seeking and export stay on the clock
 
 **Status:** Accepted (2026-11-24). The measurement D104 §4 asked for, before the timeline.
+§1's easing hand-over (native `cubic-bezier()`/`linear()`) is superseded by D115 §2: motion
+goes over sampled.
 
 **The test** (`tests/perf/motion/`, `pnpm perf:motion`): one 1920×1080 slide of 300 to 3000
 layers (shapes and text) all moving at once (move, turn, scale, fade; blur on one layer in
@@ -3042,3 +3044,52 @@ version, v3, for the morph key, the timeline, motion levels and tokens, and 2.5D
    duration and easing, which `scheduleSlide` also reads, so the schedule and the frames
    agree. Without one (until the presets item), an effect moves nothing but keeps its place
    in time.
+
+## D115 — The clock: one player, motion sampled for the compositor, both paths proven equal
+
+**Status:** Accepted (2026-11-25). Phase 4's core clock (D107 §1–3, golden rule 3).
+
+1. **One `SlidePlayer`** (renderer) drives a `SlideRenderer` from the evaluator (D114).
+   `seek(step, t)` / `seekTo(moment)` draw a moment on the main thread: `setMotion`, the
+   slide re-rendered with its animated properties written in (`withProperties`, structural
+   sharing; the document never changes), and every plugin's `seek(t)` in seconds. `play()`
+   hands motion to the compositor from any moment; `next()` is a click (the next step
+   starts now, motion is planned again from there); `pause(at)` freezes the compositor at
+   that slide time and draws the rest of the moment on the main thread. Time is
+   `document.timeline`, the clock Web Animations run on, so the two can't drift.
+2. **Motion goes to the compositor sampled, not as native easings** (refines D107 §1).
+   `planMotion` samples each layer's _composed_ motion from now on into keyframes, split
+   adaptively until the straight line is within 0.25 px, 0.1°, scale 0.0005, opacity 1/255
+   and blur 0.25 px of the real curve (from a 1/30 s grid, never closer than 4 ms). **Why:**
+   a layer's channels come from several animations at once (a fade-in, a looping pulse),
+   all landing in one `transform`; one Web Animation per animation would replace the others,
+   not add to them, and composite modes can't express "the one that started last wins"
+   (D114 §3). Sampling also covers springs and per-stretch easing with no special cases. A
+   calm loop needs fewer keyframes than 60 Hz frames, a bouncy spring more; a test pins the
+   accuracy every 1.7 ms.
+3. **Clips:** one runs until the layer stops changing (`activity(clicks)` says when), then a
+   loop clip over the period its loops share (their LCM) repeats forever, its last state
+   equal to its first. Loops that don't line up within `MAX_LOOP_PERIOD` (60 s), or aren't
+   whole milliseconds, play on the clock instead (`"clock"`). Layers that won't move again
+   get no clips and hold where the moment put them.
+4. **The renderer composes and owns every Web Animation** (D103 §2): every keyframe of a
+   clip lists the same transform functions (`DrawnStructure`), so the browser interpolates
+   numbers, never matrices; only properties that change go in; `startTime = origin +
+   clip.start`. Animated properties (colors, radii, any schema value), clock loops and
+   plugins stay on a frame loop on the main thread, which only redraws properties while one
+   still changes.
+5. **Proof, in real Chromium** (`tests/integration/phase4-clock.test.ts`): `motion.json` at
+   seven moments mid-animation (springs, 3D turn, a loop with blur, a color, `repeat`, the
+   absurd level), drawn both ways. Every layer's computed transform, opacity and filter must
+   agree within the tolerances above, and the frames must match compared in 4×4 blocks
+   (`compareScreenshots(…, { pool: 4 })`). **Why pooled:** Chrome stretches a layer it
+   animates from a bitmap rasterized earlier, and when it re-rasterizes depends on load, so
+   an exact comparison passed alone and failed in the full suite on edge softness alone
+   (same position, measured). Pooled, a frame shifted by 1 px still fails (412 blocks); the
+   softness doesn't. The test also cancels the animations to show the compositor really
+   drew the moment, and freezing it at 97% of the time fails five of the seven.
+6. **Render page and screenshots take a moment:** `ScreenshotOptions.at = { step, time }`
+   (and `playback: "compositor"` on the render page, for the test). The visual test captures
+   `motion.json` at six moments (`motion--<slide>@<step>-<ms>.png`), as D113 §4 promised.
+   MCP's `render_preview` gets a step and time with its own roadmap item and an agent
+   retest.
