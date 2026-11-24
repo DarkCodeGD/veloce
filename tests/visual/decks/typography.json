@@ -1,0 +1,554 @@
+{
+  "id": "visual-typography",
+  "formatVersion": 2,
+  "meta": {
+    "title": "Typography reference"
+  },
+  "stage": {
+    "width": 1920,
+    "height": 1080
+  },
+  "theme": {
+    "name": "Veloce Light",
+    "colors": {
+      "background": "#ffffff",
+      "surface": "#f4f5f7",
+      "text": "#111318",
+      "muted": "#5b6170",
+      "border": "#e3e5ea",
+      "primary": "#4f46e5",
+      "on-primary": "#ffffff",
+      "secondary": "#0ea5e9",
+      "accent": "#f59e0b",
+      "success": "#16a34a",
+      "danger": "#dc2626"
+    },
+    "fonts": {
+      "heading": "Inter, system-ui, sans-serif",
+      "body": "Inter, system-ui, sans-serif",
+      "mono": "'JetBrains Mono', ui-monospace, monospace"
+    },
+    "text": {
+      "display": {
+        "font": "heading",
+        "size": 120,
+        "weight": 800,
+        "lineHeight": 1.05,
+        "letterSpacing": -0.02
+      },
+      "h1": {
+        "font": "heading",
+        "size": 80,
+        "weight": 700,
+        "lineHeight": 1.1,
+        "letterSpacing": -0.01
+      },
+      "h2": {
+        "font": "heading",
+        "size": 56,
+        "weight": 700,
+        "lineHeight": 1.15
+      },
+      "h3": {
+        "font": "heading",
+        "size": 40,
+        "weight": 600,
+        "lineHeight": 1.2
+      },
+      "lead": {
+        "font": "body",
+        "size": 48,
+        "weight": 400,
+        "lineHeight": 1.4
+      },
+      "body": {
+        "font": "body",
+        "size": 32,
+        "weight": 400,
+        "lineHeight": 1.4
+      },
+      "small": {
+        "font": "body",
+        "size": 24,
+        "weight": 400,
+        "lineHeight": 1.4
+      },
+      "caption": {
+        "font": "body",
+        "size": 20,
+        "weight": 500,
+        "lineHeight": 1.3,
+        "letterSpacing": 0.02
+      },
+      "code": {
+        "font": "mono",
+        "size": 26,
+        "weight": 400,
+        "lineHeight": 1.5
+      }
+    },
+    "space": {
+      "xs": 8,
+      "sm": 16,
+      "md": 32,
+      "lg": 64,
+      "xl": 96,
+      "xxl": 160
+    },
+    "radius": {
+      "sm": 8,
+      "md": 16,
+      "lg": 32,
+      "full": 9999
+    },
+    "shadow": {
+      "sm": {
+        "x": 0,
+        "y": 2,
+        "blur": 6,
+        "color": "#0000001a"
+      },
+      "md": {
+        "x": 0,
+        "y": 8,
+        "blur": 24,
+        "color": "#00000026"
+      },
+      "lg": {
+        "x": 0,
+        "y": 24,
+        "blur": 64,
+        "color": "#00000033"
+      }
+    }
+  },
+  "slides": [
+    {
+      "id": "styles",
+      "section": "Type",
+      "root": {
+        "id": "nd_bbzxyflz1u",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "gap": "$space.sm",
+          "padding": "$space.xl",
+          "justify": "start"
+        },
+        "children": [
+          {
+            "id": "nd_1g83ztfklp",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Display style",
+              "style": "$text.display"
+            }
+          },
+          {
+            "id": "nd_n3v9wrk9z4",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Heading one",
+              "style": "$text.h1"
+            }
+          },
+          {
+            "id": "nd_syu20j1k20",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Heading two",
+              "style": "$text.h2"
+            }
+          },
+          {
+            "id": "nd_qduceukwb6",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Heading three",
+              "style": "$text.h3"
+            }
+          },
+          {
+            "id": "nd_o9ej6265qg",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Lead text for bullets and short paragraphs",
+              "style": "$text.lead"
+            }
+          },
+          {
+            "id": "nd_hzr60lyzp7",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Body text: the quick brown fox jumps over the lazy dog, 0123456789.",
+              "style": "$text.body"
+            }
+          },
+          {
+            "id": "nd_pdlvw4o7zr",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Small text for notes and sources",
+              "style": "$text.small"
+            }
+          },
+          {
+            "id": "nd_3rive6z66v",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Caption style",
+              "style": "$text.caption"
+            }
+          },
+          {
+            "id": "nd_rfxepxz69e",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "const code = style('mono');",
+              "style": "$text.code"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "rich",
+      "root": {
+        "id": "nd_azpy7jrdea",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "gap": "$space.lg",
+          "padding": "$space.xl",
+          "justify": "start"
+        },
+        "children": [
+          {
+            "id": "nd_u0n1bih2zu",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Rich text, lists and fields",
+              "style": "$text.h2"
+            }
+          },
+          {
+            "id": "nd_8i6wl1yyzv",
+            "height": "fill",
+            "kind": "frame",
+            "layout": {
+              "mode": "stack",
+              "direction": "row",
+              "gap": "$space.lg"
+            },
+            "children": [
+              {
+                "id": "nd_fw6enm5nxj",
+                "width": "fill",
+                "kind": "element",
+                "type": "text",
+                "props": {
+                  "style": "$text.body",
+                  "content": [
+                    {
+                      "runs": [
+                        {
+                          "text": "Bold",
+                          "bold": true
+                        },
+                        {
+                          "text": ", "
+                        },
+                        {
+                          "text": "italic",
+                          "italic": true
+                        },
+                        {
+                          "text": ", "
+                        },
+                        {
+                          "text": "underline",
+                          "underline": true
+                        },
+                        {
+                          "text": ", "
+                        },
+                        {
+                          "text": "strike",
+                          "strike": true
+                        },
+                        {
+                          "text": ", "
+                        },
+                        {
+                          "text": "inline code",
+                          "code": true
+                        },
+                        {
+                          "text": ", "
+                        },
+                        {
+                          "text": "accent color",
+                          "color": "$color.accent"
+                        },
+                        {
+                          "text": " and a "
+                        },
+                        {
+                          "text": "link",
+                          "link": "https://example.com"
+                        },
+                        {
+                          "text": "."
+                        }
+                      ]
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "First bullet"
+                        }
+                      ],
+                      "list": "bullet"
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "Nested bullet"
+                        }
+                      ],
+                      "list": "bullet",
+                      "level": 1
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "Deeper still"
+                        }
+                      ],
+                      "list": "bullet",
+                      "level": 2
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "Numbered one"
+                        }
+                      ],
+                      "list": "number"
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "Numbered two"
+                        }
+                      ],
+                      "list": "number"
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "Nested number"
+                        }
+                      ],
+                      "list": "number",
+                      "level": 1
+                    },
+                    {
+                      "runs": [
+                        {
+                          "text": "Slide "
+                        },
+                        {
+                          "field": "slideNumber",
+                          "text": ""
+                        },
+                        {
+                          "text": " of "
+                        },
+                        {
+                          "field": "slideCount",
+                          "text": ""
+                        },
+                        {
+                          "text": " · "
+                        },
+                        {
+                          "field": "deckTitle",
+                          "text": ""
+                        },
+                        {
+                          "text": " · "
+                        },
+                        {
+                          "field": "section",
+                          "text": ""
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "nd_yifffpukci",
+                "width": "fill",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "gap": "$space.sm"
+                },
+                "children": [
+                  {
+                    "id": "nd_neunp4uj4s",
+                    "height": 112,
+                    "kind": "frame",
+                    "layout": {
+                      "mode": "stack",
+                      "padding": "$space.sm"
+                    },
+                    "style": {
+                      "fill": "$color.surface",
+                      "radius": "$radius.sm"
+                    },
+                    "children": [
+                      {
+                        "id": "nd_j5muwwf1qv",
+                        "height": "fill",
+                        "kind": "element",
+                        "type": "text",
+                        "props": {
+                          "content": "Centered",
+                          "style": "$text.body",
+                          "align": "center"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "nd_licedyogsc",
+                    "height": 112,
+                    "kind": "frame",
+                    "layout": {
+                      "mode": "stack",
+                      "padding": "$space.sm"
+                    },
+                    "style": {
+                      "fill": "$color.surface",
+                      "radius": "$radius.sm"
+                    },
+                    "children": [
+                      {
+                        "id": "nd_cix63fapwn",
+                        "height": "fill",
+                        "kind": "element",
+                        "type": "text",
+                        "props": {
+                          "content": "Right aligned",
+                          "style": "$text.body",
+                          "align": "right"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "nd_gyqm7dc75m",
+                    "height": 112,
+                    "kind": "frame",
+                    "layout": {
+                      "mode": "stack",
+                      "padding": "$space.sm"
+                    },
+                    "style": {
+                      "fill": "$color.surface",
+                      "radius": "$radius.sm"
+                    },
+                    "children": [
+                      {
+                        "id": "nd_9ursm1pls0",
+                        "height": "fill",
+                        "kind": "element",
+                        "type": "text",
+                        "props": {
+                          "content": "Justified text spreads each full line across the box, so both edges line up neatly here.",
+                          "style": "$text.body",
+                          "align": "justify"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "nd_qz43cn23id",
+                    "height": 112,
+                    "kind": "frame",
+                    "layout": {
+                      "mode": "stack",
+                      "padding": "$space.sm"
+                    },
+                    "style": {
+                      "fill": "$color.surface",
+                      "radius": "$radius.sm"
+                    },
+                    "children": [
+                      {
+                        "id": "nd_1n2doh8d86",
+                        "height": "fill",
+                        "kind": "element",
+                        "type": "text",
+                        "props": {
+                          "content": "Middle",
+                          "style": "$text.body",
+                          "verticalAlign": "middle",
+                          "align": "center"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "nd_72nemi7nmy",
+                    "height": 112,
+                    "kind": "frame",
+                    "layout": {
+                      "mode": "stack",
+                      "padding": "$space.sm"
+                    },
+                    "style": {
+                      "fill": "$color.surface",
+                      "radius": "$radius.sm"
+                    },
+                    "children": [
+                      {
+                        "id": "nd_keefcfy8tt",
+                        "height": "fill",
+                        "kind": "element",
+                        "type": "text",
+                        "props": {
+                          "content": "Bottom",
+                          "style": "$text.body",
+                          "verticalAlign": "bottom"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "assets": {},
+  "footer": {
+    "text": "Visual reference",
+    "slideNumber": true
+  }
+}
