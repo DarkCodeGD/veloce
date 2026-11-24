@@ -170,6 +170,9 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
   render worker and compare every slide pixel by pixel with stored screenshots (D102).
   After a deliberate visual change, review the diffs in `tests/visual/.output/` and run
   `pnpm test:visual:update`.
+- **Format fixtures** in `packages/format/src/__tests__/fixtures/`: one document and theme
+  per format version, opened like a file and migrated; the current version's is also saved
+  back and must come out identical (D113).
 - **The motion performance test** (`tests/perf/motion/`, `pnpm perf:motion`, D107) plays a
   slide of hundreds of moving layers in GPU Chromium, through the main thread and through the
   compositor, and reads smoothness from Chrome's own frame reports. It depends on the

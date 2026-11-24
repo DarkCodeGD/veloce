@@ -9,7 +9,10 @@ import {
   element,
   FORMAT_VERSION,
   MIDNIGHT_THEME,
+  morphPairs,
+  scheduleSlide,
   sha256Hex,
+  slideMotionTokens,
   type Theme,
 } from "@veloce/core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -56,6 +59,21 @@ function rezip(
   const entries = unzipSync(file);
   mutate(entries);
   return zipSync(entries);
+}
+
+const fixture = (name: string) =>
+  readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+
+/** A `.veloce` file whose document and theme are the format `version` fixtures, no assets. */
+async function fixtureFile(version: number): Promise<Uint8Array> {
+  const good = await writeVeloce(await bundleWithAsset(), { now: NOW });
+  return rezip(good, (e) => {
+    const manifest = JSON.parse(strFromU8(e["manifest.json"] as Uint8Array));
+    e["manifest.json"] = strToU8(JSON.stringify({ ...manifest, formatVersion: version }));
+    e["document.json"] = strToU8(fixture(`v${version}-document.json`));
+    e["theme.json"] = strToU8(fixture(`v${version}-theme.json`));
+    for (const name of Object.keys(e)) if (name.startsWith("assets/")) delete e[name];
+  });
 }
 
 async function readError(
@@ -279,23 +297,15 @@ describe("migrations", () => {
   });
 
   it("opens a v1 file with the lead style added, from its own body style (v2, D98)", async () => {
-    const fixture = (name: string) =>
-      readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
-    const good = await writeVeloce(await bundleWithAsset(), { now: NOW });
-    const v1 = rezip(good, (e) => {
-      const manifest = JSON.parse(strFromU8(e["manifest.json"] as Uint8Array));
-      e["manifest.json"] = strToU8(JSON.stringify({ ...manifest, formatVersion: 1 }));
-      e["document.json"] = strToU8(fixture("v1-document.json"));
-      e["theme.json"] = strToU8(fixture("v1-theme.json"));
-      for (const name of Object.keys(e)) if (name.startsWith("assets/")) delete e[name];
-    });
-    const read = await readVeloce(v1);
+    const read = await readVeloce(await fixtureFile(1));
     expect(read.migratedFrom).toBe(1);
     expect(read.deck.formatVersion).toBe(FORMAT_VERSION);
     const text = read.deck.theme.text;
     // Paper's body: Lora (the body font), 32px at line height 1.5. Lead: 48px, the rest alike.
     expect(text.lead).toEqual({ font: "body", size: 48, weight: 400, lineHeight: 1.5 });
     expect(Object.keys(text).indexOf("lead")).toBe(Object.keys(text).indexOf("body") - 1);
+    // Through both migrations, an untouched v1 Paper is today's Paper, motion and all (D111).
+    expect(read.deck.theme).toEqual(BUILTIN_THEMES.paper);
   });
 
   it("keeps a slide's animations through a save and a load, and refuses dangling ones (D110)", async () => {
@@ -347,6 +357,50 @@ describe("migrations", () => {
       formatVersion: 2,
       slides: [],
     });
+  });
+
+  it("opens a v2 fixture as v3: content unchanged, Midnight moving like Midnight (D111)", async () => {
+    const read = await readVeloce(await fixtureFile(2));
+    expect(read.migratedFrom).toBe(2);
+    expect(read.deck.theme).toEqual(BUILTIN_THEMES.midnight);
+    const { formatVersion: _, ...v2 } = JSON.parse(fixture("v2-document.json"));
+    expect(read.deck).toEqual({ ...v2, formatVersion: FORMAT_VERSION, theme: MIDNIGHT_THEME });
+  });
+
+  it("opens the v3 fixture as stored and saves it back unchanged (D109–D112)", async () => {
+    const read = await readVeloce(await fixtureFile(3));
+    expect(read.migratedFrom).toBeUndefined();
+    const { deck } = read;
+    // Every field the motion release adds survives the read.
+    expect(deck.motionLevel).toBe("lively");
+    const [s1, s2] = deck.slides;
+    if (!s1 || !s2) throw new Error("the fixture has two slides");
+    expect(s1.motionLevel).toBe("calm");
+    expect(s1.root.perspective).toBe(1600);
+    expect(morphPairs(s1, s2).map((p) => `${p.from.id}→${p.to.id} (${p.by})`)).toEqual([
+      "title→title2 (key)",
+    ]);
+    expect(deck.theme.motion?.enter).toEqual({ spring: { bounce: 0.2 } });
+    // Its own tokens at the slide's level time it: calm stretches them (D111).
+    const steps = scheduleSlide(s1, slideMotionTokens(deck, s1));
+    expect(steps.map((s) => s.animations.map((a) => a.animation.id))).toEqual([
+      ["a-title", "a-card"],
+      ["a-dot"],
+      ["a-shake"],
+    ]);
+    // a-title: normal 300 × 1.25 = 375; a-card after it: stagger 40 × 1.5, then slow 600 × 1.25.
+    expect(steps[0]?.animations.map(({ start, end }) => [start, end])).toEqual([
+      [0, 375],
+      [435, 1185],
+    ]);
+    // Saving writes back exactly the document and theme it was read from.
+    const saved = unzipSync(await writeVeloce({ deck, assets: new Map() }, { now: NOW }));
+    expect(JSON.parse(strFromU8(saved["document.json"] as Uint8Array))).toEqual(
+      JSON.parse(fixture("v3-document.json")),
+    );
+    expect(JSON.parse(strFromU8(saved["theme.json"] as Uint8Array))).toEqual(
+      JSON.parse(fixture("v3-theme.json")),
+    );
   });
 
   it("gives a v2 built-in theme its motion personality, and other themes none (D111)", () => {

@@ -12,6 +12,8 @@
  *   it). After a deliberate visual change, review the diffs, then update the baselines:
  *   `pnpm test:visual:update`.
  * - Avoid what changes by itself: the `date` field and the footer's date show today.
+ * - `motion.json` (format v3, D113) animates: every trigger, `$motion` tokens, springs, 2.5D.
+ *   Until the clock can seek it, slides are drawn at rest (where the layout puts each layer).
  *
  * Needs the built editor (`pnpm build:editor`) and headless Chromium, like the other
  * browser tests: skipped locally without them, required in CI (VELOCE_REQUIRE_BROWSER=1).

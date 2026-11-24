@@ -49,8 +49,10 @@ function addLeadStyle(doc: RawDocument): RawDocument {
  * none and moves with Veloce's default. The values are a snapshot: tuning a built-in later
  * mustn't change how an old file opens.
  *
- * v3 is unreleased while Phase 4 builds it, so this migration may still grow (2.5D next);
- * it freezes when v3 ships.
+ * v3 holds the morph key, the timeline, motion levels and tokens, and 2.5D (D109–D112),
+ * none of which needs more from this migration. It stays open while Phase 4 adds fields
+ * (transitions, saved presets) and freezes when v3 ships; the v2 and v3 fixtures
+ * (`__tests__/fixtures/`) prove it either way (D113).
  */
 const VELOCE_MOTION = {
   fast: 200,

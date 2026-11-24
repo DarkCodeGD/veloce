@@ -1,0 +1,887 @@
+{
+  "id": "visual-motion",
+  "formatVersion": 3,
+  "meta": {
+    "title": "Motion reference"
+  },
+  "stage": {
+    "width": 1920,
+    "height": 1080
+  },
+  "theme": {
+    "name": "Midnight",
+    "colors": {
+      "background": "#0a1024",
+      "surface": "#141c3a",
+      "text": "#eef2ff",
+      "muted": "#a5b0d4",
+      "border": "#26305a",
+      "primary": "#8b6dff",
+      "on-primary": "#0a1024",
+      "secondary": "#22d3ee",
+      "accent": "#f472b6",
+      "success": "#34d399",
+      "danger": "#fb7185"
+    },
+    "fonts": {
+      "heading": "Inter, system-ui, sans-serif",
+      "body": "Inter, system-ui, sans-serif",
+      "mono": "'JetBrains Mono', ui-monospace, monospace"
+    },
+    "text": {
+      "display": {
+        "font": "heading",
+        "size": 120,
+        "weight": 900,
+        "lineHeight": 1.05,
+        "letterSpacing": -0.02
+      },
+      "h1": {
+        "font": "heading",
+        "size": 80,
+        "weight": 700,
+        "lineHeight": 1.1,
+        "letterSpacing": -0.01
+      },
+      "h2": {
+        "font": "heading",
+        "size": 56,
+        "weight": 700,
+        "lineHeight": 1.15
+      },
+      "h3": {
+        "font": "heading",
+        "size": 40,
+        "weight": 600,
+        "lineHeight": 1.2
+      },
+      "lead": {
+        "font": "body",
+        "size": 48,
+        "weight": 400,
+        "lineHeight": 1.4
+      },
+      "body": {
+        "font": "body",
+        "size": 32,
+        "weight": 400,
+        "lineHeight": 1.4
+      },
+      "small": {
+        "font": "body",
+        "size": 24,
+        "weight": 400,
+        "lineHeight": 1.4
+      },
+      "caption": {
+        "font": "body",
+        "size": 20,
+        "weight": 600,
+        "lineHeight": 1.3,
+        "letterSpacing": 0.12,
+        "transform": "uppercase"
+      },
+      "code": {
+        "font": "mono",
+        "size": 26,
+        "weight": 400,
+        "lineHeight": 1.5
+      }
+    },
+    "space": {
+      "xs": 8,
+      "sm": 16,
+      "md": 32,
+      "lg": 64,
+      "xl": 96,
+      "xxl": 160
+    },
+    "radius": {
+      "sm": 8,
+      "md": 16,
+      "lg": 32,
+      "full": 9999
+    },
+    "shadow": {
+      "sm": {
+        "x": 0,
+        "y": 2,
+        "blur": 6,
+        "color": "#00000066"
+      },
+      "md": {
+        "x": 0,
+        "y": 8,
+        "blur": 24,
+        "color": "#00000080"
+      },
+      "lg": {
+        "x": 0,
+        "y": 24,
+        "blur": 64,
+        "color": "#00000099"
+      }
+    },
+    "motion": {
+      "fast": 260,
+      "normal": 550,
+      "slow": 900,
+      "stagger": 120,
+      "enter": {
+        "cubicBezier": [0.22, 1, 0.36, 1]
+      },
+      "exit": {
+        "cubicBezier": [0.64, 0, 0.78, 0]
+      },
+      "move": {
+        "cubicBezier": [0.83, 0, 0.17, 1]
+      }
+    }
+  },
+  "slides": [
+    {
+      "id": "depth",
+      "root": {
+        "id": "depth-root",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "direction": "column",
+          "gap": "$space.lg",
+          "padding": "$space.xl",
+          "align": "center",
+          "justify": "center"
+        },
+        "children": [
+          {
+            "id": "depth-title",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Depth",
+              "style": "$text.h1"
+            }
+          },
+          {
+            "id": "depth-sub",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Perspective 1600 px: far is smaller, near is bigger",
+              "style": "$text.body",
+              "color": "$color.muted"
+            }
+          },
+          {
+            "id": "depth-row",
+            "kind": "frame",
+            "layout": {
+              "mode": "stack",
+              "direction": "row",
+              "gap": "$space.lg",
+              "justify": "center",
+              "align": "center"
+            },
+            "width": "fill",
+            "children": [
+              {
+                "id": "far",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "align": "center",
+                  "justify": "center"
+                },
+                "width": 360,
+                "height": 240,
+                "style": {
+                  "fill": "$color.surface",
+                  "radius": "$radius.lg",
+                  "stroke": {
+                    "color": "$color.border",
+                    "width": 2
+                  }
+                },
+                "depth": -800,
+                "children": [
+                  {
+                    "id": "far-label",
+                    "kind": "element",
+                    "type": "text",
+                    "props": {
+                      "content": "−800",
+                      "style": "$text.h2",
+                      "align": "center"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "level",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "align": "center",
+                  "justify": "center"
+                },
+                "width": 360,
+                "height": 240,
+                "style": {
+                  "fill": "$color.surface",
+                  "radius": "$radius.lg",
+                  "stroke": {
+                    "color": "$color.border",
+                    "width": 2
+                  }
+                },
+                "children": [
+                  {
+                    "id": "level-label",
+                    "kind": "element",
+                    "type": "text",
+                    "props": {
+                      "content": "0",
+                      "style": "$text.h2",
+                      "align": "center"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "near",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "align": "center",
+                  "justify": "center"
+                },
+                "width": 360,
+                "height": 240,
+                "style": {
+                  "fill": "$color.surface",
+                  "radius": "$radius.lg",
+                  "stroke": {
+                    "color": "$color.border",
+                    "width": 2
+                  }
+                },
+                "depth": 400,
+                "children": [
+                  {
+                    "id": "near-label",
+                    "kind": "element",
+                    "type": "text",
+                    "props": {
+                      "content": "+400",
+                      "style": "$text.h2",
+                      "align": "center"
+                    }
+                  }
+                ]
+              }
+            ],
+            "perspective": 1600
+          },
+          {
+            "id": "ghost",
+            "kind": "element",
+            "type": "shape",
+            "width": 280,
+            "height": 280,
+            "depth": -1500,
+            "positioning": "free",
+            "position": {
+              "x": 1000,
+              "y": 60
+            },
+            "anchor": {
+              "x": "center",
+              "y": "center"
+            },
+            "props": {
+              "shape": "ellipse",
+              "fill": "$color.accent/80"
+            }
+          },
+          {
+            "id": "box",
+            "kind": "frame",
+            "layout": {
+              "mode": "stack",
+              "align": "center",
+              "justify": "center"
+            },
+            "width": 420,
+            "height": 220,
+            "perspective": 500,
+            "positioning": "free",
+            "position": {
+              "x": 64,
+              "y": 64
+            },
+            "anchor": {
+              "y": "end"
+            },
+            "style": {
+              "fill": "$color.surface",
+              "radius": "$radius.md"
+            },
+            "children": [
+              {
+                "id": "box-deep",
+                "kind": "element",
+                "type": "shape",
+                "width": 300,
+                "height": 140,
+                "depth": -250,
+                "props": {
+                  "shape": "rect",
+                  "fill": "$color.secondary",
+                  "radius": 12
+                }
+              }
+            ]
+          },
+          {
+            "id": "sticker",
+            "kind": "frame",
+            "layout": {
+              "mode": "stack",
+              "padding": {
+                "x": 24,
+                "y": 12
+              }
+            },
+            "width": "hug",
+            "rotation": -8,
+            "depth": 120,
+            "positioning": "free",
+            "position": {
+              "x": 200,
+              "y": 160
+            },
+            "anchor": {
+              "x": "end"
+            },
+            "style": {
+              "fill": "$color.primary",
+              "radius": "$radius.sm"
+            },
+            "children": [
+              {
+                "id": "sticker-text",
+                "kind": "element",
+                "type": "text",
+                "width": "hug",
+                "props": {
+                  "content": "2.5D",
+                  "style": "$text.h3",
+                  "color": "$color.on-primary"
+                }
+              }
+            ]
+          }
+        ],
+        "perspective": 1600
+      }
+    },
+    {
+      "id": "steps",
+      "animations": [
+        {
+          "id": "an-title",
+          "target": "steps-title",
+          "trigger": "withPrevious",
+          "effect": {
+            "name": "fade-in"
+          }
+        },
+        {
+          "id": "an-sub",
+          "target": "steps-sub",
+          "trigger": "afterPrevious",
+          "duration": "$motion.fast",
+          "easing": "$motion.enter",
+          "tracks": {
+            "y": [
+              {
+                "at": 0,
+                "value": 40
+              }
+            ],
+            "opacity": [
+              {
+                "at": 0,
+                "value": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-click",
+          "target": "click",
+          "easing": {
+            "spring": {
+              "bounce": 0.3
+            }
+          },
+          "tracks": {
+            "x": [
+              {
+                "at": 0,
+                "value": -160
+              }
+            ],
+            "opacity": [
+              {
+                "at": 0,
+                "value": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-with",
+          "target": "with",
+          "trigger": "withPrevious",
+          "delay": "$motion.stagger",
+          "easing": {
+            "spring": {
+              "bounce": 0.3
+            }
+          },
+          "tracks": {
+            "x": [
+              {
+                "at": 0,
+                "value": -160
+              }
+            ],
+            "opacity": [
+              {
+                "at": 0,
+                "value": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-after",
+          "target": "after",
+          "trigger": "afterPrevious",
+          "delay": 120,
+          "duration": 500,
+          "easing": {
+            "cubicBezier": [0.34, 1.56, 0.64, 1]
+          },
+          "tracks": {
+            "z": [
+              {
+                "at": 0,
+                "value": -600
+              }
+            ],
+            "rotateY": [
+              {
+                "at": 0,
+                "value": 90
+              }
+            ],
+            "opacity": [
+              {
+                "at": 0,
+                "value": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-bars",
+          "target": "bar-3",
+          "duration": "$motion.slow",
+          "easing": "$motion.move",
+          "tracks": {
+            "scaleY": [
+              {
+                "at": 0,
+                "value": 0
+              }
+            ],
+            "props.fill": [
+              {
+                "at": 0,
+                "value": "$color.muted"
+              },
+              {
+                "at": 0.6,
+                "value": "$color.accent",
+                "easing": "ease-out"
+              },
+              {
+                "at": 1,
+                "value": "$color.primary"
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-card-fill",
+          "target": "after",
+          "trigger": "afterPrevious",
+          "tracks": {
+            "style.fill": [
+              {
+                "at": 0,
+                "value": "$color.surface"
+              },
+              {
+                "at": 1,
+                "value": "$color.secondary/30"
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-pulse",
+          "target": "pulse",
+          "trigger": "withPrevious",
+          "duration": 900,
+          "easing": "ease-in-out",
+          "repeat": "forever",
+          "alternate": true,
+          "tracks": {
+            "scale": [
+              {
+                "at": 1,
+                "value": 1.4
+              }
+            ],
+            "blur": [
+              {
+                "at": 1,
+                "value": 4
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-shake",
+          "target": "bar-1",
+          "repeat": 3,
+          "duration": 160,
+          "tracks": {
+            "rotate": [
+              {
+                "at": 0.5,
+                "value": 6
+              }
+            ]
+          }
+        }
+      ],
+      "root": {
+        "id": "steps-root",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "direction": "column",
+          "gap": "$space.lg",
+          "padding": "$space.xl",
+          "align": "center",
+          "justify": "center"
+        },
+        "children": [
+          {
+            "id": "steps-title",
+            "kind": "element",
+            "type": "text",
+            "matchKey": "headline",
+            "props": {
+              "content": "Every trigger",
+              "style": "$text.h1"
+            }
+          },
+          {
+            "id": "steps-sub",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Step 0 plays as the slide appears; each click starts the next",
+              "style": "$text.body",
+              "color": "$color.muted"
+            }
+          },
+          {
+            "id": "steps-cards",
+            "kind": "frame",
+            "layout": {
+              "mode": "stack",
+              "direction": "row",
+              "gap": "$space.lg",
+              "justify": "center",
+              "align": "center"
+            },
+            "width": "fill",
+            "children": [
+              {
+                "id": "click",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "align": "center",
+                  "justify": "center"
+                },
+                "width": 360,
+                "height": 240,
+                "style": {
+                  "fill": "$color.surface",
+                  "radius": "$radius.lg",
+                  "stroke": {
+                    "color": "$color.border",
+                    "width": 2
+                  }
+                },
+                "children": [
+                  {
+                    "id": "click-label",
+                    "kind": "element",
+                    "type": "text",
+                    "props": {
+                      "content": "Click",
+                      "style": "$text.h2",
+                      "align": "center"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "with",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "align": "center",
+                  "justify": "center"
+                },
+                "width": 360,
+                "height": 240,
+                "style": {
+                  "fill": "$color.surface",
+                  "radius": "$radius.lg",
+                  "stroke": {
+                    "color": "$color.border",
+                    "width": 2
+                  }
+                },
+                "children": [
+                  {
+                    "id": "with-label",
+                    "kind": "element",
+                    "type": "text",
+                    "props": {
+                      "content": "With",
+                      "style": "$text.h2",
+                      "align": "center"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "after",
+                "kind": "frame",
+                "layout": {
+                  "mode": "stack",
+                  "align": "center",
+                  "justify": "center"
+                },
+                "width": 360,
+                "height": 240,
+                "style": {
+                  "fill": "$color.surface",
+                  "radius": "$radius.lg",
+                  "stroke": {
+                    "color": "$color.border",
+                    "width": 2
+                  }
+                },
+                "children": [
+                  {
+                    "id": "after-label",
+                    "kind": "element",
+                    "type": "text",
+                    "props": {
+                      "content": "After",
+                      "style": "$text.h2",
+                      "align": "center"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bars",
+            "kind": "frame",
+            "layout": {
+              "mode": "stack",
+              "direction": "row",
+              "gap": "$space.lg",
+              "justify": "center",
+              "align": "end"
+            },
+            "width": "fill",
+            "children": [
+              {
+                "id": "bar-1",
+                "kind": "element",
+                "type": "shape",
+                "width": 120,
+                "height": 120,
+                "props": {
+                  "shape": "rect",
+                  "fill": "$color.primary",
+                  "radius": 8
+                }
+              },
+              {
+                "id": "bar-2",
+                "kind": "element",
+                "type": "shape",
+                "width": 120,
+                "height": 200,
+                "props": {
+                  "shape": "rect",
+                  "fill": "$color.primary",
+                  "radius": 8
+                }
+              },
+              {
+                "id": "bar-3",
+                "kind": "element",
+                "type": "shape",
+                "width": 120,
+                "height": 280,
+                "props": {
+                  "shape": "rect",
+                  "fill": "$color.primary",
+                  "radius": 8
+                }
+              }
+            ]
+          },
+          {
+            "id": "pulse",
+            "kind": "element",
+            "type": "shape",
+            "width": 56,
+            "height": 56,
+            "positioning": "free",
+            "position": {
+              "x": 72,
+              "y": 72
+            },
+            "anchor": {
+              "x": "end",
+              "y": "end"
+            },
+            "props": {
+              "shape": "ellipse",
+              "fill": "$color.accent"
+            }
+          }
+        ],
+        "perspective": 2000
+      }
+    },
+    {
+      "id": "finale",
+      "motionLevel": "absurd",
+      "animations": [
+        {
+          "id": "an-finale",
+          "target": "finale-title",
+          "trigger": "withPrevious",
+          "duration": "$motion.slow",
+          "easing": {
+            "spring": {
+              "bounce": 0.5
+            }
+          },
+          "tracks": {
+            "scale": [
+              {
+                "at": 0,
+                "value": 0.4
+              }
+            ],
+            "rotateX": [
+              {
+                "at": 0,
+                "value": -70
+              }
+            ]
+          }
+        },
+        {
+          "id": "an-finale-sub",
+          "target": "finale-sub",
+          "trigger": "afterPrevious",
+          "delay": "$motion.stagger",
+          "tracks": {
+            "opacity": [
+              {
+                "at": 0,
+                "value": 0
+              }
+            ],
+            "blur": [
+              {
+                "at": 0,
+                "value": 12
+              }
+            ]
+          }
+        }
+      ],
+      "root": {
+        "id": "finale-root",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "direction": "column",
+          "gap": "$space.lg",
+          "padding": "$space.xl",
+          "align": "center",
+          "justify": "center"
+        },
+        "children": [
+          {
+            "id": "finale-title",
+            "kind": "element",
+            "type": "text",
+            "matchKey": "headline",
+            "depth": 150,
+            "props": {
+              "content": "Absurd",
+              "style": "$text.display",
+              "align": "center"
+            }
+          },
+          {
+            "id": "finale-sub",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "This slide overrides the deck's level",
+              "style": "$text.lead",
+              "color": "$color.muted",
+              "align": "center"
+            }
+          }
+        ],
+        "perspective": 1200
+      }
+    }
+  ],
+  "assets": {},
+  "motionLevel": "lively"
+}

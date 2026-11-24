@@ -2961,3 +2961,34 @@ D104 §1–2 concrete; part of format v3.
    moving over the 2.5D scene (Phase 5); agents' input fields, docs and outline for
    `depth` and `perspective`, with the MCP item's real-agent retest (core ops already
    accept them, and the two lint rules are in `get_docs("lint")`).
+
+## D113 — Format v3: fixtures per version and an animated reference deck
+
+**Status:** Accepted (2026-11-25). Completes Phase 4's schema work (D103 §7): one format
+version, v3, for the morph key, the timeline, motion levels and tokens, and 2.5D.
+
+1. **One migration, v2 → v3** (`motionRelease`): every v3 field is optional, so it only
+   gives an untouched built-in theme its motion (D111). 2.5D needed nothing. It stays open
+   while Phase 4 adds fields (transitions, saved presets) and freezes when v3 ships.
+2. **A fixture per format version** (`packages/format/src/__tests__/fixtures/vN-*.json`,
+   document and theme, frozen like the reference decks): each opens through `readVeloce`
+   exactly as a file would. v1 Paper and v2 Midnight come out as today's built-ins, motion
+   included, so the theme picker still knows them. The v3 fixture uses every v3 field, is
+   read without migrating, is timed by its own tokens at its slide's level, and **saves
+   back byte-for-byte the same JSON**. **Why the save-back:** a later schema change that
+   drops, renames or defaults a v3 field fails here, before it silently rewrites users'
+   files; a migration test alone only checks the way in.
+3. **`tests/visual/decks/motion.json`**, a reference deck in format v3 that animates:
+   depth and perspective (nested, a far layer drawn in front by layer order), every
+   trigger, `$motion` times and easings, springs, cubic Béziers, motion, `props.*` and
+   `style.*` tracks, repeats, a loop, a slide level over the deck's, and a match key across
+   slides. **Built by a script through core's builders and `validateDeck`**, not through
+   MCP as D102 §2 says, because agents can't set depth or animations yet (the MCP item);
+   it's frozen from now on all the same. Its lint is clean: building it caught a real
+   `flat-depth` trap (perspective only reaches a frame's own children).
+4. **Drawn at rest until the clock lands:** the visual test renders where the layout puts
+   each layer. The core clock item adds frames of this deck mid-step, so the same deck
+   proves the evaluator and the compositor draw what the stored screenshots show.
+5. **Effect names in frozen files are a promise:** the fixtures use `"fade-in"` (the
+   name D110's docs teach), so the effect presets ship one by that name, and an unknown
+   effect stays a warning when loading, like an unknown element type, never an error.

@@ -1,0 +1,48 @@
+{
+  "id": "v2deck",
+  "formatVersion": 2,
+  "meta": {
+    "title": "A v2 deck"
+  },
+  "stage": {
+    "width": 1920,
+    "height": 1080
+  },
+  "slides": [
+    {
+      "id": "s1",
+      "root": {
+        "id": "s1-root",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "direction": "column",
+          "gap": "$space.md",
+          "padding": "$space.xl",
+          "justify": "center"
+        },
+        "children": [
+          {
+            "id": "title",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Written by format v2",
+              "style": "$text.h1"
+            }
+          },
+          {
+            "id": "lead",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Before motion",
+              "style": "$text.lead"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "assets": {}
+}
