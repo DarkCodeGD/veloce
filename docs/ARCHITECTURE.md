@@ -69,6 +69,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Animations** (`schema/animation.ts`, `timeline.ts`, D110): each slide's `animations`, in
   play order, with triggers that derive the steps (`scheduleSlide`); an effect or keyframe
   tracks on motion channels or the target's own properties.
+- **Motion levels and tokens** (`schema/motion.ts`, `motion-tokens.ts`, D111): the theme's
+  `$motion` values, scaled by the slide's or deck's level, resolve an animation's times and
+  easings (`slideMotionTokens` → `scheduleSlide`).
 - **Ops** (`src/ops/`): `slide.*`, `node.*`, `animation.*`, `deck.*`, `asset.*`, `component.*`. Each is
   plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
   Merge Patches. Ops copy only the path to what changed (structural sharing), so untouched

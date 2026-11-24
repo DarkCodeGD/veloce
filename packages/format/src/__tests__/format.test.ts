@@ -1,13 +1,16 @@
 import { readFileSync } from "node:fs";
 import {
   assetRef,
+  BUILTIN_THEMES,
   createDeck,
   createSlide,
   type Deck,
   deepEqual,
   element,
   FORMAT_VERSION,
+  MIDNIGHT_THEME,
   sha256Hex,
+  type Theme,
 } from "@veloce/core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
@@ -344,6 +347,20 @@ describe("migrations", () => {
       formatVersion: 2,
       slides: [],
     });
+  });
+
+  it("gives a v2 built-in theme its motion personality, and other themes none (D111)", () => {
+    const migrate = (theme: Record<string, unknown>) =>
+      (migrateDocument({ formatVersion: 2, theme }, 2, 3) as { theme: Theme }).theme;
+    for (const builtin of Object.values(BUILTIN_THEMES)) {
+      const { motion: _, ...v2 } = builtin;
+      // An untouched built-in comes out exactly as today's: the theme picker still knows it.
+      expect(migrate(v2)).toEqual(builtin);
+    }
+    const { motion: _, ...custom } = { ...MIDNIGHT_THEME, name: "Midnight (custom)" };
+    expect(migrate(custom)).not.toHaveProperty("motion");
+    const own = { ...MIDNIGHT_THEME, motion: { ...MIDNIGHT_THEME.motion, fast: 99 } };
+    expect(migrate(own).motion?.fast).toBe(99);
   });
 
   it("keeps a theme's own lead, and leaves themes without a body style alone", () => {

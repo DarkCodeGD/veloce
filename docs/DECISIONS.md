@@ -2865,3 +2865,46 @@ keeping D101 §2's rules for suggestion mode and concurrent editing.
    and easings; agents' animation ops and `set_animations` (`apply_ops` doesn't offer
    `animation.*` to agents yet, so nothing agents use changed beyond `upsert_slide`'s note);
    the evaluator and the clock that play it.
+
+## D111 — Motion levels scale the theme's `$motion` tokens; explicit numbers never scale
+
+**Status:** Accepted (2026-11-24). Phase 4's motion level and `$motion` tokens, making
+D104 §1–2 concrete; part of format v3.
+
+1. **The level:** `deck.motionLevel` (`calm`, `subtle`, `lively`, `intense`, `absurd`;
+   omitted means `subtle`), set with `deck.setMotionLevel`, and `slide.motionLevel`, set
+   with `slide.update`, overriding it. A slide moves at its own level, else the deck's.
+2. **`$motion` tokens are a fixed set,** not open names like `$color`: durations
+   `$motion.fast`, `.normal` and `.slow`; `$motion.stagger`; easings `$motion.enter`,
+   `.exit` and `.move`. **Why fixed:** the schema catches a typo and lists the valid ones,
+   agents learn seven words instead of picking milliseconds, and every theme can be swapped
+   for another without a missing token.
+3. **Themes hold the values at `subtle`** in `theme.motion`: their motion personality.
+   Veloce (light and dark) is quick with a soft landing, Midnight cinematic, Ember springy,
+   Paper gentle and editorial, Studio crisp. A theme without `motion` (custom ones) moves
+   like Veloce. An animation's defaults are `$motion.normal` and `$motion.enter`, so an
+   unconfigured animation follows the theme and the level.
+4. **The level scales tokens, never explicit numbers** (`MOTION_LEVEL_SCALES` is the whole
+   definition, tuned in one place):
+
+   | level   | durations | stagger | distance | spring bounce |
+   | ------- | --------- | ------- | -------- | ------------- |
+   | calm    | ×1.25     | ×1.5    | ×0.5     | none          |
+   | subtle  | ×1        | ×1      | ×1       | ×1            |
+   | lively  | ×0.9      | ×0.8    | ×1.6     | ×1.3          |
+   | intense | ×0.8      | ×0.6    | ×2.5     | ×1.6          |
+   | absurd  | ×0.7      | ×0.4    | ×4       | ×2 (max 1)    |
+
+   **Why explicit numbers don't scale:** a person or agent who typed 800 ms meant it; only
+   "the theme's normal speed" should follow the level. Distance is read by the effect
+   presets (how far a slide-in travels, how big a pop gets); the level's other powers
+   (more effects, denser choreography) belong to the presets and the choreography engine.
+5. **Migration:** a v2 theme still named like a built-in (editing one renames it
+   "… (custom)") gets that built-in's motion from a frozen snapshot in the v2→v3
+   migration, so it still matches its theme card; a test keeps the snapshot equal to the
+   built-ins until v3 ships.
+6. **Not yet:** setting the level in the editor (the Animate workspace's slider and the New
+   deck dialog, D106) and over MCP (the MCP item: `set_theme` and `apply_ops` don't offer
+   it yet, so nothing agents use changed); editing a theme's `$motion` values in the editor;
+   a theme's signature transition (with slide transitions); reduce motion playing `calm`
+   (presenter mode, D104 §4).

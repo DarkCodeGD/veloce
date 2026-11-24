@@ -1,3 +1,4 @@
+import { DEFAULT_THEME_MOTION } from "./motion-tokens.js";
 import type { Theme } from "./schema/theme.js";
 
 /**
@@ -47,4 +48,5 @@ export const DEFAULT_THEME: Theme = {
     md: { x: 0, y: 8, blur: 24, color: "#00000026" },
     lg: { x: 0, y: 24, blur: 64, color: "#00000033" },
   },
+  motion: DEFAULT_THEME_MOTION,
 };

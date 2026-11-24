@@ -9,13 +9,16 @@
  */
 import type { ApplyContext } from "./checks.js";
 import type { ErrorCode } from "./errors.js";
+import { type MotionTokens, motionTokens, resolveTime } from "./motion-tokens.js";
 import type { Animation } from "./schema/animation.js";
 import type { Deck, Slide } from "./schema/deck.js";
+import type { Easing, Time } from "./schema/motion.js";
 import { FrameStyleSchema, type Node } from "./schema/node.js";
 import { walkNodes } from "./tree.js";
 
-/** One play when an animation gives no duration (the motion tokens will refine it, D104). */
-export const DEFAULT_ANIMATION_MS = 500;
+/** An animation's duration and easing when it (and its effect) give none (D111). */
+export const DEFAULT_DURATION: Time = "$motion.normal";
+export const DEFAULT_EASING: Easing = "$motion.enter";
 
 export interface AnimationLocation {
   animation: Animation;
@@ -181,9 +184,13 @@ export interface Step {
  * When every animation of a slide plays. Step 0 holds the animations before the first
  * `onClick` (they play as the slide appears) and is always there, even empty; each `onClick`
  * starts a step. `withPrevious` starts with the animation before it, `afterPrevious` when it
- * ends; the first animation of a step starts at its delay.
+ * ends; the first animation of a step starts at its delay. `$motion` times resolve from
+ * `tokens` (`slideMotionTokens(deck, slide)`; default: Veloce's own motion, `subtle`).
  */
-export function scheduleSlide(slide: Pick<Slide, "animations">): Step[] {
+export function scheduleSlide(
+  slide: Pick<Slide, "animations">,
+  tokens: MotionTokens = motionTokens(undefined),
+): Step[] {
   const steps: Step[] = [{ animations: [], duration: 0 }];
   let previous: ScheduledAnimation | null = null;
   for (const animation of slide.animations ?? []) {
@@ -195,10 +202,10 @@ export function scheduleSlide(slide: Pick<Slide, "animations">): Step[] {
     const step = steps.at(-1) as Step;
     const from: number =
       previous === null ? 0 : trigger === "afterPrevious" ? previous.end : previous.start;
-    const start: number = from + (animation.delay ?? 0);
+    const start: number = from + resolveTime(animation.delay ?? 0, tokens);
     const forever = animation.repeat === "forever";
     const plays = typeof animation.repeat === "number" ? animation.repeat : 1;
-    const end = start + (animation.duration ?? DEFAULT_ANIMATION_MS) * plays;
+    const end = start + resolveTime(animation.duration ?? DEFAULT_DURATION, tokens) * plays;
     const scheduled: ScheduledAnimation = { animation, start, end, forever };
     step.animations.push(scheduled);
     step.duration = Math.max(step.duration, end);

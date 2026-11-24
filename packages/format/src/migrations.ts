@@ -40,12 +40,77 @@ function addLeadStyle(doc: RawDocument): RawDocument {
 
 /**
  * v2 → v3: the motion release (D103 §7). Everything v3 adds is optional, so a v2 document is
- * already a valid v3 one: the version number is what makes an older Veloce say "update
- * Veloce" instead of failing on a field it doesn't know. v3 is unreleased while Phase 4
- * builds it, so this migration may still grow (match keys, D109; then the timeline, 2.5D,
- * the motion level and `$motion` tokens); it freezes when v3 ships.
+ * otherwise already a valid v3 one: the version number is what makes an older Veloce say
+ * "update Veloce" instead of failing on a field it doesn't know.
+ *
+ * One change (D111): a theme left exactly as a built-in one (its name unchanged; editing a
+ * theme renames it "… (custom)") gets that built-in's `$motion` tokens, so a Midnight deck
+ * moves like Midnight and still shows as Midnight in the theme picker. Any other theme gets
+ * none and moves with Veloce's default. The values are a snapshot: tuning a built-in later
+ * mustn't change how an old file opens.
+ *
+ * v3 is unreleased while Phase 4 builds it, so this migration may still grow (2.5D next);
+ * it freezes when v3 ships.
  */
-const motionRelease: Migration = (doc) => doc;
+const VELOCE_MOTION = {
+  fast: 200,
+  normal: 400,
+  slow: 700,
+  stagger: 80,
+  enter: { cubicBezier: [0.16, 1, 0.3, 1] },
+  exit: { cubicBezier: [0.7, 0, 0.84, 0] },
+  move: { cubicBezier: [0.65, 0, 0.35, 1] },
+};
+const V3_BUILTIN_MOTION: Readonly<Record<string, Json>> = {
+  "Veloce Light": VELOCE_MOTION,
+  "Veloce Dark": VELOCE_MOTION,
+  Midnight: {
+    fast: 260,
+    normal: 550,
+    slow: 900,
+    stagger: 120,
+    enter: { cubicBezier: [0.22, 1, 0.36, 1] },
+    exit: { cubicBezier: [0.64, 0, 0.78, 0] },
+    move: { cubicBezier: [0.83, 0, 0.17, 1] },
+  },
+  Ember: {
+    fast: 180,
+    normal: 380,
+    slow: 650,
+    stagger: 60,
+    enter: { spring: { bounce: 0.3 } },
+    exit: { cubicBezier: [0.7, 0, 0.84, 0] },
+    move: { spring: { bounce: 0.15 } },
+  },
+  Paper: {
+    fast: 240,
+    normal: 480,
+    slow: 800,
+    stagger: 100,
+    enter: "ease-out",
+    exit: "ease-in",
+    move: "ease-in-out",
+  },
+  Studio: {
+    fast: 150,
+    normal: 320,
+    slow: 560,
+    stagger: 50,
+    enter: { cubicBezier: [0.2, 0, 0, 1] },
+    exit: { cubicBezier: [0.3, 0, 1, 1] },
+    move: { cubicBezier: [0.2, 0, 0, 1] },
+  },
+};
+
+function motionRelease(doc: RawDocument): RawDocument {
+  const theme = doc.theme;
+  if (!isObject(theme) || "motion" in theme || typeof theme.name !== "string") return doc;
+  if (!Object.hasOwn(V3_BUILTIN_MOTION, theme.name)) return doc;
+  return {
+    ...doc,
+    theme: { ...theme, motion: JSON.parse(JSON.stringify(V3_BUILTIN_MOTION[theme.name])) },
+  };
+}
 
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   1: addLeadStyle,

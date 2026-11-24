@@ -6,6 +6,7 @@
  * scale instead of inventing colors and font sizes per slide.
  */
 import { z } from "zod";
+import { ThemeMotionSchema } from "./motion.js";
 import { HexColorSchema, TokenNameSchema } from "./primitives.js";
 
 export const ShadowSchema = z.strictObject({
@@ -41,6 +42,11 @@ export const ThemeSchema = z
     space: z.record(TokenNameSchema, z.number().min(0).max(10_000)),
     radius: z.record(TokenNameSchema, z.number().min(0).max(10_000)),
     shadow: z.record(TokenNameSchema, ShadowSchema),
+    /**
+     * The `$motion` tokens: the theme's motion personality (D111). Themes made before motion
+     * have none and move with the default's.
+     */
+    motion: ThemeMotionSchema.optional(),
   })
   .superRefine((theme, ctx) => {
     for (const [name, style] of Object.entries(theme.text)) {

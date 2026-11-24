@@ -62,6 +62,16 @@ export const MIDNIGHT_THEME: Theme = {
     },
   },
   shadow: DARK_SHADOWS,
+  // Cinematic: unhurried, long smooth landings.
+  motion: {
+    fast: 260,
+    normal: 550,
+    slow: 900,
+    stagger: 120,
+    enter: { cubicBezier: [0.22, 1, 0.36, 1] },
+    exit: { cubicBezier: [0.64, 0, 0.78, 0] },
+    move: { cubicBezier: [0.83, 0, 0.17, 1] },
+  },
 };
 
 export const EMBER_THEME: Theme = {
@@ -81,6 +91,16 @@ export const EMBER_THEME: Theme = {
     danger: "#b91c1c",
   },
   radius: { sm: 6, md: 12, lg: 24, full: 9999 },
+  // Warm and playful: things spring in with a little bounce.
+  motion: {
+    fast: 180,
+    normal: 380,
+    slow: 650,
+    stagger: 60,
+    enter: { spring: { bounce: 0.3 } },
+    exit: { cubicBezier: [0.7, 0, 0.84, 0] },
+    move: { spring: { bounce: 0.15 } },
+  },
 };
 
 /** Light and editorial: serif headings (Fraunces) over a calm text serif (Lora), warm paper. */
@@ -114,6 +134,16 @@ export const PAPER_THEME: Theme = {
     body: { font: "body", size: 32, weight: 400, lineHeight: 1.5 },
   },
   radius: { sm: 4, md: 8, lg: 16, full: 9999 },
+  // Editorial and calm: classic, gentle curves, like turning pages.
+  motion: {
+    fast: 240,
+    normal: 480,
+    slow: 800,
+    stagger: 100,
+    enter: "ease-out",
+    exit: "ease-in",
+    move: "ease-in-out",
+  },
 };
 
 /** Dark and bold: a grotesk for headings (Space Grotesk), Manrope body, an electric lime. */
@@ -153,6 +183,16 @@ export const STUDIO_THEME: Theme = {
   },
   radius: { sm: 4, md: 10, lg: 20, full: 9999 },
   shadow: DARK_SHADOWS,
+  // Crisp and precise: fast, decisive moves that stop exactly.
+  motion: {
+    fast: 150,
+    normal: 320,
+    slow: 560,
+    stagger: 50,
+    enter: { cubicBezier: [0.2, 0, 0, 1] },
+    exit: { cubicBezier: [0.3, 0, 1, 1] },
+    move: { cubicBezier: [0.2, 0, 0, 1] },
+  },
 };
 
 /** Built-in themes keyed by their short ID (what `set_theme` and the UI accept). */

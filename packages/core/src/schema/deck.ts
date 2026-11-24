@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { AnimationsSchema } from "./animation.js";
 import { ComponentsSchema } from "./component.js";
+import { MotionLevelSchema } from "./motion.js";
 import { FrameNodeSchema } from "./node.js";
 import { PaintSchema } from "./paint.js";
 import { AssetIdSchema, IdSchema } from "./primitives.js";
@@ -52,6 +53,8 @@ export const SlideSchema = z.strictObject({
   section: SectionNameSchema.optional(),
   /** Leaves the deck's footer off this slide (title and section slides, D97). */
   hideFooter: z.boolean().optional(),
+  /** This slide's motion level, instead of the deck's (D111): a wild intro, calm data slides. */
+  motionLevel: MotionLevelSchema.optional(),
   /**
    * In play order (D110); omitted when the slide has none. Edited only with `animation.*`
    * ops, never patched as a whole (D101 §2.1).
@@ -135,5 +138,7 @@ export const DeckSchema = z.strictObject({
   components: ComponentsSchema.optional(),
   /** Omitted when the deck has no footer (D97). */
   footer: FooterSchema.optional(),
+  /** How much the deck moves, `calm` to `absurd` (D104, D111). Omitted: `"subtle"`. */
+  motionLevel: MotionLevelSchema.optional(),
 });
 export type Deck = z.infer<typeof DeckSchema>;

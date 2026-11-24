@@ -1,12 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { createSlide, element, frame } from "../builders.js";
 import type { ApplyContext } from "../checks.js";
+import { DEFAULT_THEME } from "../default-theme.js";
 import { VeloceError } from "../errors.js";
 import { deepEqual } from "../json.js";
+import {
+  DEFAULT_THEME_MOTION,
+  type MotionTokens,
+  motionTokens,
+  resolveEasing,
+  slideMotionLevel,
+  slideMotionTokens,
+} from "../motion-tokens.js";
 import { applyOp } from "../ops/apply.js";
 import { type Op, OpSchema } from "../ops/schema.js";
 import { type Animation, AnimationSchema } from "../schema/animation.js";
 import type { Deck } from "../schema/deck.js";
+import { MotionLevelSchema } from "../schema/motion.js";
+import { type Theme, ThemeSchema } from "../schema/theme.js";
+import {
+  BUILTIN_THEMES,
+  EMBER_THEME,
+  MIDNIGHT_THEME,
+  PAPER_THEME,
+  STUDIO_THEME,
+} from "../themes.js";
 import { scheduleSlide } from "../timeline.js";
 import { collectIds } from "../tree.js";
 import { validateDeck } from "../validate.js";
@@ -269,8 +287,8 @@ describe("whole decks with animations", () => {
 });
 
 describe("the schedule: steps from order and triggers, never stored (D101 §2.2)", () => {
-  const at = (animations: Animation[]) =>
-    scheduleSlide({ animations }).map((step) => ({
+  const at = (animations: Animation[], tokens?: MotionTokens) =>
+    scheduleSlide({ animations }, tokens).map((step) => ({
       duration: step.duration,
       plays: step.animations.map((s) => `${s.animation.id}@${s.start}-${s.end}`),
     }));
@@ -286,8 +304,9 @@ describe("the schedule: steps from order and triggers, never stored (D101 §2.2)
         fadeIn("c2", "t", { delay: 50, duration: 1000 }),
       ]),
     ).toEqual([
-      { duration: 500, plays: ["intro@0-500"] },
-      { duration: 800, plays: ["c1@0-500", "w@100-600", "after@600-800"] },
+      // No duration: "$motion.normal", 400 ms in Veloce's own motion at "subtle".
+      { duration: 400, plays: ["intro@0-400"] },
+      { duration: 700, plays: ["c1@0-400", "w@100-500", "after@500-700"] },
       { duration: 1050, plays: ["c2@50-1050"] },
     ]);
   });
@@ -301,11 +320,94 @@ describe("the schedule: steps from order and triggers, never stored (D101 §2.2)
       ]),
     ).toEqual([
       { duration: 0, plays: [] },
-      { duration: 1500, plays: ["twice@0-600", "loop@600-1000", "next@1000-1500"] },
+      { duration: 1400, plays: ["twice@0-600", "loop@600-1000", "next@1000-1400"] },
     ]);
     expect(
       scheduleSlide({ animations: [fadeIn("f", "t", { repeat: "forever" })] })[1]?.animations[0]
         ?.forever,
     ).toBe(true);
+  });
+});
+
+describe("motion levels and $motion tokens (D111)", () => {
+  const schedule = (animations: Animation[], tokens: MotionTokens) =>
+    scheduleSlide({ animations }, tokens)
+      .flatMap((step) => step.animations)
+      .map((s) => `${s.animation.id}@${s.start}-${s.end}`);
+
+  it("plays tokens at the theme's values, scaled by the level; explicit ms never scale", () => {
+    const animations = [
+      fadeIn("a", "t", { duration: "$motion.slow" }),
+      fadeIn("b", "t", { trigger: "afterPrevious", delay: "$motion.stagger" }),
+      fadeIn("c", "t", { trigger: "afterPrevious", duration: 300 }),
+    ];
+    // Midnight is slow and smooth: slow 900, normal 550, stagger 120.
+    expect(schedule(animations, motionTokens(MIDNIGHT_THEME))).toEqual([
+      "a@0-900",
+      "b@1020-1570",
+      "c@1570-1870",
+    ]);
+    // Calm takes 1.25× as long and staggers 1.5× wider; absurd is 0.7× and 0.4×.
+    expect(schedule(animations, motionTokens(MIDNIGHT_THEME, "calm"))).toEqual([
+      "a@0-1125",
+      "b@1305-1993",
+      "c@1993-2293",
+    ]);
+    expect(schedule(animations, motionTokens(MIDNIGHT_THEME, "absurd"))).toEqual([
+      "a@0-630",
+      "b@678-1063",
+      "c@1063-1363",
+    ]);
+  });
+
+  it("scales spring bounce with the level: calm never bounces, nothing passes 1", () => {
+    expect(motionTokens(EMBER_THEME).enter).toEqual({ spring: { bounce: 0.3 } });
+    expect(motionTokens(EMBER_THEME, "calm").enter).toEqual({ spring: {} });
+    expect(motionTokens(EMBER_THEME, "absurd").enter).toEqual({ spring: { bounce: 0.6 } });
+    const wild = { motion: { ...DEFAULT_THEME_MOTION, move: { spring: { bounce: 0.8 } } } };
+    expect(motionTokens(wild, "absurd").move).toEqual({ spring: { bounce: 1 } });
+    // Curves aren't springs: unchanged at every level.
+    expect(motionTokens(MIDNIGHT_THEME, "absurd").enter).toEqual(MIDNIGHT_THEME.motion?.enter);
+    expect(resolveEasing("$motion.exit", motionTokens(PAPER_THEME))).toBe("ease-in");
+    expect(resolveEasing("linear", motionTokens(PAPER_THEME))).toBe("linear");
+  });
+
+  it("moves a slide at its own level, else the deck's, else subtle; themes without motion use Veloce's", () => {
+    expect(slideMotionLevel({}, {})).toBe("subtle");
+    expect(slideMotionLevel({ motionLevel: "intense" }, {})).toBe("intense");
+    expect(slideMotionLevel({ motionLevel: "intense" }, { motionLevel: "calm" })).toBe("calm");
+    const { motion: _, ...old } = DEFAULT_THEME;
+    expect(motionTokens(old as Theme).normal).toBe(DEFAULT_THEME_MOTION.normal);
+    expect(slideMotionTokens({ theme: STUDIO_THEME, motionLevel: "lively" }, {})).toMatchObject({
+      level: "lively",
+      normal: 288, // Studio's crisp 320 at 0.9×
+      distance: 1.6,
+    });
+  });
+
+  it("checks levels and tokens, with errors that list the valid ones", () => {
+    const bad = (extra: Partial<Record<string, unknown>>) =>
+      AnimationSchema.safeParse({ ...fadeIn("a", "t"), ...extra }).error?.issues[0]?.message;
+    expect(bad({ duration: "$motion.fast" })).toBeUndefined();
+    expect(bad({ easing: "$motion.move" })).toBeUndefined();
+    expect(bad({ duration: "$motion.quick" })).toMatch(/"\$motion.fast", "\$motion.normal"/);
+    expect(bad({ easing: "$motion.bounce" })).toMatch(/"\$motion.enter"/);
+    expect(MotionLevelSchema.safeParse("wild").error?.issues[0]?.message).toMatch(
+      /"calm", "subtle", "lively", "intense", "absurd"/,
+    );
+    for (const theme of Object.values(BUILTIN_THEMES)) {
+      expect(ThemeSchema.safeParse(theme).success).toBe(true);
+      expect(theme.motion).toBeDefined();
+    }
+  });
+
+  it("sets the deck's level with one undoable op, and a slide's with slide.update", () => {
+    let deck = roundTrip(fixtureDeck(), { op: "deck.setMotionLevel", level: "absurd" });
+    expect(deck.motionLevel).toBe("absurd");
+    deck = roundTrip(deck, { op: "deck.setMotionLevel", level: null });
+    expect(deck).not.toHaveProperty("motionLevel");
+    deck = roundTrip(deck, { op: "slide.update", id: "outro", set: { motionLevel: "calm" } });
+    expect(deck.slides[1]?.motionLevel).toBe("calm");
+    expect(validateDeck(deck).ok).toBe(true);
   });
 });

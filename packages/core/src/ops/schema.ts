@@ -11,6 +11,7 @@ import { z } from "zod";
 import { AnimationSchema } from "../schema/animation.js";
 import { ComponentNameSchema, ComponentSchema } from "../schema/component.js";
 import { AssetInfoSchema, FooterSchema, SlideSchema } from "../schema/deck.js";
+import { MotionLevelSchema } from "../schema/motion.js";
 import { NodeSchema } from "../schema/node.js";
 import { AssetIdSchema, IdSchema } from "../schema/primitives.js";
 import { ThemeSchema } from "../schema/theme.js";
@@ -108,6 +109,11 @@ export const DeckSetFooterOp = z.strictObject({
   op: z.literal("deck.setFooter"),
   footer: FooterSchema.nullable(),
 });
+/** Set the deck's motion level (D111), or go back to the default with `null`. */
+export const DeckSetMotionLevelOp = z.strictObject({
+  op: z.literal("deck.setMotionLevel"),
+  level: MotionLevelSchema.nullable(),
+});
 /** Register an asset's metadata. Idempotent: adding an existing asset is a no-op. */
 export const AssetAddOp = z.strictObject({
   op: z.literal("asset.add"),
@@ -148,6 +154,7 @@ export const OpSchema = z.discriminatedUnion("op", [
   DeckUpdateMetaOp,
   DeckSetThemeOp,
   DeckSetFooterOp,
+  DeckSetMotionLevelOp,
   AssetAddOp,
   AssetRemoveOp,
   ComponentSaveOp,

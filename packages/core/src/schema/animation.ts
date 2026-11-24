@@ -15,6 +15,7 @@
  */
 import { z } from "zod";
 import { MOTION_CHANNELS } from "../motion.js";
+import { EasingSchema, timeSchema } from "./motion.js";
 import { ELEMENT_TYPE_PATTERN } from "./node.js";
 import { IdSchema } from "./primitives.js";
 
@@ -22,26 +23,6 @@ import { IdSchema } from "./primitives.js";
 export const MAX_ANIMATION_MS = 600_000;
 export const MAX_ANIMATIONS_PER_SLIDE = 1000;
 export const MAX_KEYFRAMES = 100;
-
-const MsSchema = z.number().min(0).max(MAX_ANIMATION_MS);
-
-/**
- * How progress speeds up and slows down. Named CSS curves, a cubic Bézier (x between 0 and 1,
- * y may overshoot), or a spring that settles within the duration (`bounce` 0 = none).
- */
-export const EasingSchema = z.union([
-  z.enum(["linear", "ease", "ease-in", "ease-out", "ease-in-out"]),
-  z.strictObject({
-    cubicBezier: z.tuple([
-      z.number().min(0).max(1),
-      z.number().min(-5).max(5),
-      z.number().min(0).max(1),
-      z.number().min(-5).max(5),
-    ]),
-  }),
-  z.strictObject({ spring: z.strictObject({ bounce: z.number().min(0).max(1).optional() }) }),
-]);
-export type Easing = z.infer<typeof EasingSchema>;
 
 /** A value at one point of the animation: `at` 0 is its start, 1 its end. */
 export const KeyframeSchema = z.strictObject({
@@ -134,11 +115,11 @@ export const AnimationSchema = z
      * before any click, play when the slide appears.
      */
     trigger: TriggerSchema.optional(),
-    /** Milliseconds after its trigger. Default: 0. */
-    delay: MsSchema.optional(),
-    /** Milliseconds for one play. Default: the effect's, or 500. */
-    duration: MsSchema.min(1).optional(),
-    /** Over the whole animation. Default: the effect's, or "ease-out". */
+    /** After its trigger: milliseconds, or `"$motion.stagger"`. Default: 0. */
+    delay: timeSchema().optional(),
+    /** One play: milliseconds, or a `$motion` duration. Default: the effect's, or `"$motion.normal"`. */
+    duration: timeSchema(1).optional(),
+    /** Over the whole animation. Default: the effect's, or `"$motion.enter"`. */
     easing: EasingSchema.optional(),
     effect: EffectRefSchema.optional(),
     tracks: TracksSchema.optional(),

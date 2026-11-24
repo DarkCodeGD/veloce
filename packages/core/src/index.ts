@@ -21,6 +21,7 @@ export * from "./lint.js";
 export * from "./measure.js";
 export * from "./morph.js";
 export * from "./motion.js";
+export * from "./motion-tokens.js";
 export * from "./ops/apply.js";
 export * from "./ops/schema.js";
 export * from "./schema/index.js";

@@ -86,6 +86,13 @@ export function applyOp(deck: Deck, op: Op, ctx: ApplyContext = {}): OpResult {
       };
     case "deck.setFooter":
       return deckSetFooter(deck, op);
+    case "deck.setMotionLevel": {
+      const { motionLevel: before, ...rest } = deck;
+      return {
+        deck: op.level ? { ...rest, motionLevel: op.level } : rest,
+        inverse: { op: "deck.setMotionLevel", level: before ?? null },
+      };
+    }
     case "asset.add":
       return assetAdd(deck, op);
     case "asset.remove":
