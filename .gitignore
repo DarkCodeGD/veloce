@@ -10,6 +10,7 @@ out/
 coverage/
 test-results/
 playwright-report/
+tests/visual/.output/
 
 # electron packaging
 release/

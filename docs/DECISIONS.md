@@ -2532,3 +2532,35 @@ them, then accepts or rejects them, per origin like undo) without breaking `.vel
    version can keep suggestions in memory only, for the session, and avoid this entirely.
 5. **Kept out:** building any of it before 1.0, suggestions from the user (the "track
    changes" mode for people), and partial accept below one op.
+
+## D102 — Visual regression tests: frozen reference decks, compared pixel by pixel
+
+**Status:** Accepted (2026-11-24). Phase 4's first item, so the renderer work after it
+can't silently move a pixel in existing decks.
+
+1. **What's compared:** reference decks in `tests/visual/decks/` (5 decks, 14 slides, 5
+   built-in themes), covering text styles, rich runs, lists, fields and the footer;
+   stacks, grids, wrap, sizing, padding; free layers, anchors, rotation and opacity; every
+   paint, strokes, shadows, clip; image fit, focus and crop; the built-in slide layouts and a
+   component. Each slide is rendered by the real render worker
+   (`PlaywrightRenderService.screenshot`, the same path as `render_preview`) at the stage's
+   full size and compared with `tests/visual/screenshots/<deck>--<slide>.png`.
+2. **The decks are frozen "existing decks":** JSON as stored, loaded like a file (migrated
+   from its format version, validated, written as a `.veloce` and opened by the
+   workspace), so a future migration is tested on them too. They were built once through
+   MCP, the way an agent builds a deck, then saved. Don't edit one to make a test pass: add
+   a deck or a slide. Nothing in them changes by itself: no `date` field or footer date.
+3. **Comparison:** pixelmatch (ISC) with pngjs (MIT), root dev dependencies. Anti-aliased
+   pixels are detected and ignored; everything else must match (threshold 0.1, **0 differing
+   pixels allowed**). A 1px move of a rotated shape gives 14 differing pixels, of a small
+   text label 119, both caught. **Why not a tolerance:** the same baselines match exactly on
+   Fedora 44, Ubuntu 24.04 and Ubuntu 26.04 (CI's `ubuntu-latest`), checked in containers,
+   because Chromium brings its own FreeType and HarfBuzz and the fonts are bundled. Raise
+   the limit only with a CI diff that is noise, and record it here. **Why not SSIM** (which
+   `@veloce/images` has): it scores how alike images _look_, so a small shift scores near 1.
+   **Why not Playwright Test's `toHaveScreenshot`:** a second test runner beside Vitest.
+4. **Workflow:** a mismatch writes `<slide>.actual.png` and `<slide>.diff.png` to
+   `tests/visual/.output/` (git-ignored; CI uploads it as the `visual-diffs` artifact). After a
+   deliberate visual change: look at the diffs, run `pnpm test:visual:update`, and commit the
+   new screenshots with the change, so the review shows the before and after. Stored
+   screenshots of slides that no longer exist fail the test. 14 screenshots are ~0.9 MB.

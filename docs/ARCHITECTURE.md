@@ -150,6 +150,10 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
 - **Acceptance tests** in `tests/integration/` drive the real built editor in headless
   Chromium against a real server, one file per roadmap feature (`phaseN-*.test.ts`). They
   need `pnpm build:editor` first; locally they skip without Chromium, and CI requires them.
+- **Visual regression tests** in `tests/visual/` render frozen reference decks with the
+  render worker and compare every slide pixel by pixel with stored screenshots (D102).
+  After a deliberate visual change, review the diffs in `tests/visual/.output/` and run
+  `pnpm test:visual:update`.
 - **`scripts/architecture.test.ts`** enforces which package may depend on which. Changing
   the graph means updating it and recording why in DECISIONS.md.
 

@@ -28,11 +28,11 @@
 
 - **Active phase:** Phase 4: Motion
 - **Last updated:** 2026-11-24
-- **Next:** Phase 4's first item, visual regression tests. The suggestion-mode note is
-  done (D101): the timeline schema must follow its rules (§2). The Phase 3 gate is done: Motion replaces GSAP (D100); tables,
-  lines and arrows, a morph match key and toasts over dialogs were added to the plan.
-- **State:** `pnpm check` is green (906 tests, including real-Chromium lint, preview and editor
-  tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
+- **Next:** motion as a transform on top of a layer's rest position (Phase 4's second
+  item). Visual regression tests guard the renderer (D102); the timeline schema follows
+  D101 §2 (suggestion mode). Phase 3 gate: Motion replaces GSAP (D100).
+- **State:** `pnpm check` is green (912 tests, including real-Chromium lint, preview, editor
+  and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 9 (D96).
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
@@ -254,9 +254,8 @@ never undoes the agent's work.
 **The timeline schema follows D101 §2** (the suggestion-mode note), so the document-model
 changes below don't rule out reviewable agent edits later.
 
-- [ ] Visual regression tests first: reference decks rendered in CI and compared with
-      stored screenshots, so the renderer work below can't silently move a pixel in
-      existing decks
+- [x] Visual regression tests: 14 slides of frozen reference decks compared pixel by
+      pixel in CI; `pnpm test:visual:update` after a deliberate change (D102)
 - [ ] Motion is a transform on top of a layer's rest position, never width/height per frame;
       stacks get layout animations (FLIP); 2.5D is perspective and z on frames (D83 §5)
 - [ ] Toasts show over open dialogs: a modal `<dialog>` makes everything behind it inert, so

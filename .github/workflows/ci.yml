@@ -39,3 +39,12 @@ jobs:
       - run: pnpm test
         env:
           VELOCE_REQUIRE_BROWSER: "1"
+
+      # Visual regression failures leave the actual and diff images here (tests/visual).
+      - name: Upload visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-diffs
+          path: tests/visual/.output/
+          if-no-files-found: ignore

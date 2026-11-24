@@ -56,6 +56,9 @@ dependency licenses matter (check a library's license before adding it).
   them they skip locally. CI requires them (`VELOCE_REQUIRE_BROWSER=1`).
 - The render page runs the **built** editor: rebuild (`pnpm build:editor`) after renderer changes
   before trusting browser test results.
+- Visual regression (`tests/visual/`, D102): a deliberate visual change → look at the diffs in
+  `tests/visual/.output/`, then `pnpm test:visual:update` and commit the new screenshots with
+  the change. Never edit the reference decks to make a test pass.
 - New package/dependency between packages → update `scripts/architecture.test.ts` + DECISIONS.md.
 - Respect pnpm's minimum-release-age policy: never add `minimumReleaseAgeExclude`; pin an older version.
 - Plugins live in `plugins/<name>` as `@veloce/plugin-<name>`; every plugin test runs `checkElementConformance`.
