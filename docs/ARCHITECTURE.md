@@ -60,6 +60,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   `asset:<hash>`; never base64 in the document.
 - **Components and slide layouts** (D94, D95): named templates in the deck, inserted as
   plain copies (`use` / `with`), so the rest of the system never sees them.
+- **Morph match keys** (`morph.ts`, D109): a layer's key is its `matchKey`, else its ID;
+  `morphPairs` says which layers of two slides are the same thing (by key, then name and
+  type). Copies inherit their original's key.
 - **Fields, the footer and sections** (`fields.ts`, D97): a text run can be a field (slide
   number, date…) whose value depends on where the slide is; the footer is deck settings
   drawn over every slide; a section is a marker on its first slide.

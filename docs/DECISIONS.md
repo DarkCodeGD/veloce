@@ -2790,3 +2790,36 @@ decks showed dimmed behind it and couldn't be clicked.
    them still place against the window (already true for popups, D76).
 4. **Manage decks drops its own Undo bar:** the toast's Undo works over it now, the same as
    everywhere else.
+
+## D109 — Morph match keys: a layer's key is its `matchKey`, else its ID
+
+**Status:** Accepted (2026-11-24). The morph match key from Phase 4, the first part of
+format v3 (D103 §7).
+
+Morph moves a layer on one slide into "the same" layer on the next. Layer IDs are unique in
+the deck, and Duplicate slide gives fresh ones, so matching by ID never finds anything.
+
+1. **`matchKey` on every node** (optional, one line, up to 100 characters), and a layer's
+   key is **its `matchKey`, or its ID when it has none** (`matchKeyOf` in `core/morph.ts`).
+2. **Copies inherit their original's key unless the slide already uses it** (the editor's
+   `cloneWithNewIds`): Duplicate slide keys every copy by its original, so the two slides
+   pair with no key typed and the original slide untouched (one `slide.insert`, nothing to
+   undo there, no clash with an agent editing it). Duplicating the duplicate keeps the chain.
+   Pasting onto another slide keeps keys (a pasted logo morphs with the one it came from);
+   duplicating a layer, or pasting it, next to its original gives the copy no key. The slide's
+   root frame isn't a layer and never gets one.
+   **Why not write keys onto the originals:** Duplicate slide would also edit the slide it
+   copies, as a second op, on a slide an agent may be working on.
+3. **Pairing** (`morphPairs`): by key first, then, among layers still unpaired, by name and
+   type in tree order (PowerPoint's `!!name` idea without the prefix). Each layer pairs once;
+   a key used twice on a slide pairs its first layer, and lint warns
+   (`duplicate-match-key`), with the fix.
+4. **Everyone can set it:** the inspector's **Morph key** field (placeholder "Auto"), agents'
+   `matchKey` in `upsert_slide` and `apply_ops`, shown as `[key "…"]` in the deck summary.
+5. **Format v3, still open:** `FORMAT_VERSION` is 3 and the v2 → v3 migration changes
+   nothing (every v3 addition is optional; the number is what makes an older Veloce ask to
+   be updated). No release has shipped, so v3 keeps growing with the timeline, 2.5D, the
+   motion level and `$motion` tokens, and freezes when it ships.
+6. **The agent retest** (CLAUDE.md) happens with the morph transition, when the key has a
+   visible effect for an agent to check; scripted MCP tests cover the field, its errors,
+   the summary and the lint now.

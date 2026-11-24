@@ -5,6 +5,8 @@ import {
   type Deck,
   element,
   frame,
+  lintDeck,
+  morphPairs,
   type Node,
 } from "@veloce/core";
 import { describe, expect, it } from "vitest";
@@ -174,6 +176,33 @@ describe("clipboard", () => {
     const flowNode = node(inFlow.deck, inFlow.command.select?.[0]);
     expect(flowNode?.position).toBeUndefined();
     expect(flowNode?.anchor).toBeUndefined();
+  });
+
+  it("keeps match keys when pasting onto another slide, not next to the original (D109)", () => {
+    const deck = makeDeck();
+    const payload = copyNodes(indexOf(deck), ["card", "footer"]);
+    if (!payload) throw new Error("nothing copied");
+    // Same slide: the originals hold the keys, so the copies don't take them.
+    const here = paste(deck, ["footer"], payload).deck;
+    const copies = here.slides[0]?.root.children.slice(3) ?? [];
+    expect(copies.map((c) => c.matchKey)).toEqual([undefined, undefined]);
+
+    // Another slide: a logo pasted onto the next slide morphs with the one it came from.
+    const other = createSlide({ id: "s2", rootId: "root2", children: [text("x", "X")] });
+    const two = { ...deck, slides: [...deck.slides, other] };
+    const index = indexSlide(other);
+    const result = pasteNodes(index, payload, [], noAssets);
+    if (!result.ok) throw new Error(result.message);
+    const after = apply(two, result.command);
+    const pairs = morphPairs(after.slides[0] as never, after.slides[1] as never);
+    expect(pairs.map((p) => p.from.id)).toEqual(["card", "title", "body", "footer"]);
+
+    // Pasting the same layers there again: the keys are taken now, so the second copies
+    // have none, and the slide never ends up with a key twice.
+    const again = pasteNodes(indexSlide(after.slides[1] as never), payload, [], noAssets);
+    if (!again.ok) throw new Error(again.message);
+    const twice = apply(after, again.command);
+    expect(lintDeck(twice).filter((i) => i.rule === "duplicate-match-key")).toEqual([]);
   });
 
   it("cuts as one undoable removal", () => {

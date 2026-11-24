@@ -28,6 +28,7 @@ import {
   instantiateComponent,
   instantiateSlide,
   LayoutSchema,
+  MatchKeySchema,
   type Node,
   OpSchema,
   PaintSchema,
@@ -43,6 +44,9 @@ import { z } from "zod";
 const nodeCommon = {
   id: IdSchema.optional().describe("Optional; generated if omitted. Unique across the deck."),
   name: z.string().max(200).optional(),
+  matchKey: MatchKeySchema.optional().describe(
+    'Morph: layers with the same matchKey on two slides are the same thing, and the morph transition moves one into the other (e.g. "logo", "hero-title"). One per slide. Layers without one pair by name and type.',
+  ),
   hidden: z.boolean().optional(),
   locked: z.boolean().optional(),
   opacity: z.number().min(0).max(1).optional(),

@@ -5,6 +5,8 @@ import {
   type Deck,
   element,
   frame,
+  lintDeck,
+  morphPairs,
   type Op,
   type Slide,
 } from "@veloce/core";
@@ -120,6 +122,36 @@ describe("commands produce valid, undoable ops", () => {
     expect(children[2]).toBe("footer");
     expect(command?.select).toEqual([children[1], children[3]]);
     expect(new Set(children).size).toBe(5);
+    // The originals keep their keys on this slide, so the copies have none (D109).
+    const copies = after.slides[0]?.root.children.filter((c) => !["card", "footer"].includes(c.id));
+    expect(copies?.map((c) => c.matchKey)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("keys a duplicated slide's layers by their originals, so the two slides morph (D109)", () => {
+    let deck = makeDeck();
+    const keyed = indexSlide(deck.slides[0] as never).nodes.get("footer")?.node;
+    deck = apply(deck, [{ op: "node.update", id: keyed?.id ?? "", set: { matchKey: "foot" } }]);
+    const before = deck.slides[0] as Slide;
+    const duplicate = duplicateSlide(before, 0);
+    // The original isn't touched (its layers are keyed by their IDs already): one insert.
+    expect(duplicate.ops.map((o) => o.op)).toEqual(["slide.insert"]);
+    deck = apply(deck, duplicate.ops);
+    const [original, copy] = deck.slides;
+    expect(original).toBe(before);
+    const pairs = morphPairs(original as Slide, copy as Slide);
+    expect(pairs.map((p) => [p.from.id, p.by])).toEqual([
+      ["card", "key"],
+      ["title", "key"],
+      ["body", "key"],
+      ["footer", "key"],
+      ["locked", "key"],
+      ["inner", "key"],
+    ]);
+    expect(pairs.every((p) => p.to.id !== p.from.id)).toBe(true);
+    // An explicit key carries over as it is; the root frame isn't a layer and gets none.
+    expect(pairs.find((p) => p.from.id === "footer")?.to.matchKey).toBe("foot");
+    expect(copy?.root.matchKey).toBeUndefined();
+    expect(lintDeck(deck).filter((i) => i.rule === "duplicate-match-key")).toEqual([]);
   });
 
   it("reorders among siblings and clamps at the ends", () => {

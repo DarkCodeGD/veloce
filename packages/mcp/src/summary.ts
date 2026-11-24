@@ -153,7 +153,10 @@ function outline(node: Node, parent: Layout, depth: number, lines: string[]): vo
   const placed = isFreeLayer(node, parent) || node.anchor !== undefined;
   const free = node.positioning === "free" ? ` [free at ${at}]` : placed ? ` [at ${at}]` : "";
   const turned = node.rotation ? ` [rotated ${node.rotation}°]` : "";
-  const hidden = `${free}${turned}${node.hidden ? " [hidden]" : ""}`;
+  // A match key pairs the layer with others for morph (D109): on copies made by Duplicate
+  // slide it's the original's ID.
+  const key = node.matchKey === undefined ? "" : ` [key "${node.matchKey}"]`;
+  const hidden = `${free}${turned}${key}${node.hidden ? " [hidden]" : ""}`;
   if (node.kind === "frame") {
     lines.push(`${indent}- ${node.id}: frame (${layoutLabel(node)})${hidden}`);
     for (const child of node.children) outline(child, node.layout, depth + 1, lines);

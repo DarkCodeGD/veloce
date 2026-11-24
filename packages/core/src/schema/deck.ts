@@ -12,7 +12,7 @@ import { ThemeSchema } from "./theme.js";
  * Version of the document format. Bump it only together with a migration in
  * `@veloce/format`, so files from every older version keep opening.
  */
-export const FORMAT_VERSION = 2;
+export const FORMAT_VERSION = 3;
 
 /** A section's name: one line, no spaces at either end. */
 export const SectionNameSchema = z

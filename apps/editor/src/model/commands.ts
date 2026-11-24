@@ -3,7 +3,15 @@
  * The UI sends them with `client.transact(label, ops)`; the server validates and applies them
  * exactly like an agent's (golden rule #1), and each command is one undo step.
  */
-import { createId, createSlide, type Node, type Op, type Slide } from "@veloce/core";
+import {
+  createId,
+  createSlide,
+  matchKeyOf,
+  type Node,
+  type Op,
+  type Slide,
+  slideMatchKeys,
+} from "@veloce/core";
 import { nodeLabel, type SlideIndex, topmost } from "./slide-index.js";
 
 export interface Command {
@@ -15,10 +23,23 @@ export interface Command {
 
 const plural = (n: number, one: string) => (n === 1 ? one : `${n} ${one}s`);
 
-/** A deep copy with fresh IDs for every node, so it can live next to the original. */
-export function cloneWithNewIds<T extends Node>(node: T): T {
+/**
+ * A deep copy with fresh IDs for every node, so it can live next to the original. Each copy
+ * keeps its original's morph match key (D109: its `matchKey`, else its ID), so a duplicated
+ * slide or a layer pasted onto another slide morphs with the original, unless the slide it
+ * lands on already uses that key (`taken`, e.g. the original itself): then the copy has no
+ * key of its own, like any new layer. The keys it gives out are added to `taken`, so copies
+ * made one after another for the same slide never share one.
+ */
+export function cloneWithNewIds<T extends Node>(node: T, taken: Set<string>): T {
   const copy = structuredClone(node) as Node;
   const renew = (n: Node) => {
+    const key = matchKeyOf(n);
+    if (taken.has(key)) delete n.matchKey;
+    else {
+      n.matchKey = key;
+      taken.add(key);
+    }
     (n as { id: string }).id = createId("nd");
     if (n.kind === "frame") n.children.forEach(renew);
   };
@@ -50,7 +71,9 @@ export function duplicateNodes(index: SlideIndex, ids: readonly string[]): Comma
     // Insert from the last position backwards so earlier insertions don't shift later ones.
     .sort((a, b) => b.index - a.index);
   if (targets.length === 0) return null;
-  const copies = targets.map((t) => ({ ...t, copy: cloneWithNewIds(t.node) }));
+  // The originals stay on this slide with their keys, so the copies don't take them.
+  const taken = slideMatchKeys(index.slide);
+  const copies = targets.map((t) => ({ ...t, copy: cloneWithNewIds(t.node, taken) }));
   return {
     label: `Duplicate ${plural(copies.length, "layer")}`,
     ops: copies.map(({ parentId, index: i, copy }) => ({
@@ -103,7 +126,11 @@ export function addSlide(afterIndex: number): Command {
 export function duplicateSlide(slide: Slide, index: number): Command {
   // The copy joins the original's section (D97): it doesn't start one of its own.
   const { section: _section, ...fields } = structuredClone(slide);
-  const copy: Slide = { ...fields, id: createId("sl"), root: cloneWithNewIds(slide.root) };
+  // Every layer keeps its original's match key, so the two slides morph (D109). The root
+  // frame isn't a layer: it never morphs, so it gets no key it didn't have.
+  const root = cloneWithNewIds(slide.root, new Set());
+  if (slide.root.matchKey === undefined) delete root.matchKey;
+  const copy: Slide = { ...fields, id: createId("sl"), root };
   return {
     label: "Duplicate slide",
     ops: [{ op: "slide.insert", slide: copy, index: index + 1 }],

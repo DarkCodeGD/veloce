@@ -295,6 +295,24 @@ describe("migrations", () => {
     expect(Object.keys(text).indexOf("lead")).toBe(Object.keys(text).indexOf("body") - 1);
   });
 
+  it("opens a v2 file as v3 unchanged: everything v3 adds is optional (D103 §7, D109)", async () => {
+    const good = await writeVeloce(await bundleWithAsset(), { now: NOW });
+    const v2 = rezip(good, (e) => {
+      const manifest = JSON.parse(strFromU8(e["manifest.json"] as Uint8Array));
+      e["manifest.json"] = strToU8(JSON.stringify({ ...manifest, formatVersion: 2 }));
+      const doc = JSON.parse(strFromU8(e["document.json"] as Uint8Array));
+      e["document.json"] = strToU8(JSON.stringify({ ...doc, formatVersion: 2 }));
+    });
+    const original = await readVeloce(good);
+    const read = await readVeloce(v2);
+    expect(read.migratedFrom).toBe(2);
+    expect(read.deck).toEqual(original.deck);
+    expect(MIGRATIONS[2]?.({ formatVersion: 2, slides: [] })).toEqual({
+      formatVersion: 2,
+      slides: [],
+    });
+  });
+
   it("keeps a theme's own lead, and leaves themes without a body style alone", () => {
     const own = { font: "heading", size: 50 };
     const doc = (text: Record<string, unknown>) => ({ formatVersion: 1, theme: { text } });

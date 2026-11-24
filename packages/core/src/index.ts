@@ -19,6 +19,7 @@ export * from "./json.js";
 export * from "./layouts.js";
 export * from "./lint.js";
 export * from "./measure.js";
+export * from "./morph.js";
 export * from "./motion.js";
 export * from "./ops/apply.js";
 export * from "./ops/schema.js";

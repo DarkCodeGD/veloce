@@ -16,6 +16,7 @@ import {
   type Rect,
   type SlideMeasurement,
 } from "./measure.js";
+import { duplicateMatchKeys } from "./morph.js";
 import type { Deck, Slide } from "./schema/deck.js";
 import {
   type ElementNode,
@@ -48,6 +49,8 @@ export const LINT_RULES = {
     "A free (absolute) frame has padding, which does nothing: free layers are measured from the frame's edges.",
   "section-field":
     "Text shows the section's name where that's wrong: on a slide in no section (it's empty), or as the title of a slide that doesn't start the section it names.",
+  "duplicate-match-key":
+    "Two layers on one slide share a morph match key, so morph pairs only the first of them.",
 } as const;
 export type LintRule = keyof typeof LINT_RULES;
 
@@ -108,6 +111,7 @@ export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
       ...structuralRules(slide),
       ...sectionFieldRules(deck, slide, index),
       ...positionRules(slide),
+      ...matchKeyRules(slide),
       ...tokenRules(slide, deck.theme),
       ...visualRules(slide, options.measurements?.get(slide.id)),
       ...balanceRules(slide, options.measurements?.get(slide.id)),
@@ -270,6 +274,18 @@ function structuralRules(slide: Slide): LintIssue[] {
     });
   }
   return issues;
+}
+
+/** A match key twice on one slide: morph would pair only the first layer (D109). */
+function matchKeyRules(slide: Slide): LintIssue[] {
+  return [...duplicateMatchKeys(slide)].map(([key, ids]) => ({
+    rule: "duplicate-match-key",
+    severity: "warning",
+    slideId: slide.id,
+    nodeIds: ids,
+    message: `${ids.length} layers on slide "${slide.id}" share the match key "${key}" (${ids.map((id) => `"${id}"`).join(", ")}), so morph pairs only the first.`,
+    fix: 'Give each a different "matchKey", or remove the key from the ones that shouldn\'t morph ("matchKey": null).',
+  }));
 }
 
 /**

@@ -8,7 +8,8 @@
  * - nothing selected: on the slide (the end of its root frame);
  * - one frame selected (that isn't what was copied): inside it, at the end;
  * - otherwise: right after the (last) selected layer, in its frame.
- * Pasted layers get fresh IDs. In a free (absolute) frame they keep their position, shifted
+ * Pasted layers get fresh IDs, and keep their morph match keys where the slide doesn't use
+ * them yet (D109): a logo pasted onto the next slide morphs with the one it came from. In a free (absolute) frame they keep their position, shifted
  * by 20 px while it's taken (pasting twice doesn't stack copies invisibly); in a stack or
  * grid, `position` is dropped (it only means something in a free frame).
  *
@@ -26,6 +27,7 @@ import {
   NodeSchema,
   type Op,
   shiftAnchored,
+  slideMatchKeys,
   TextContentSchema,
   toPlainText,
 } from "@veloce/core";
@@ -183,7 +185,8 @@ export function pasteNodes(
     };
   }
   const target = pasteTarget(index, selection, new Set(payload.nodes.map((n) => n.id)));
-  const copies = payload.nodes.map((n) => cloneWithNewIds(n));
+  const taken = slideMatchKeys(index.slide);
+  const copies = payload.nodes.map((n) => cloneWithNewIds(n, taken));
   place(index, target.parentId, copies);
   const ops: Op[] = [
     ...assetAddOps(copied, assets),

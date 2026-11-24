@@ -425,6 +425,16 @@ function LayerSection({
         placeholder={nodeLabel(node)}
         onCommit={set("name", "Rename layer")}
       />
+      <TextField
+        label="Morph key"
+        value={node.matchKey}
+        placeholder="Auto"
+        // Same key on two slides: morph moves one layer into the other (D109). Spaces at the
+        // ends would be rejected, and mean nothing, so they're trimmed.
+        onCommit={(value) =>
+          set("matchKey", "Set morph key")(typeof value === "string" ? value.trim() || null : value)
+        }
+      />
       <SizingField
         label="Width"
         value={node.width}

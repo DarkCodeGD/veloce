@@ -38,8 +38,18 @@ function addLeadStyle(doc: RawDocument): RawDocument {
   return { ...doc, theme: { ...theme, text } };
 }
 
+/**
+ * v2 → v3: the motion release (D103 §7). Everything v3 adds is optional, so a v2 document is
+ * already a valid v3 one: the version number is what makes an older Veloce say "update
+ * Veloce" instead of failing on a field it doesn't know. v3 is unreleased while Phase 4
+ * builds it, so this migration may still grow (match keys, D109; then the timeline, 2.5D,
+ * the motion level and `$motion` tokens); it freezes when v3 ships.
+ */
+const motionRelease: Migration = (doc) => doc;
+
 export const MIGRATIONS: Readonly<Record<number, Migration>> = {
   1: addLeadStyle,
+  2: motionRelease,
 };
 
 export function migrateDocument(

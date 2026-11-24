@@ -120,6 +120,18 @@ export const AnchorSchema = z.strictObject({
 });
 export type Anchor = z.infer<typeof AnchorSchema>;
 
+/**
+ * A morph match key (D109): layers with the same key on two slides are the same thing, and
+ * the morph transition moves one into the other. One line, no spaces at either end.
+ */
+export const MatchKeySchema = z
+  .string()
+  .min(1, { error: 'A match key can\'t be empty. To remove it, set "matchKey": null' })
+  .max(100)
+  .regex(/^(?:\S(?:.*\S)?)?$/, {
+    error: 'Match keys are one line of text with no spaces at either end, e.g. "logo"',
+  });
+
 // ── Nodes ───────────────────────────────────────────────────────────────────────────
 
 /** Fields every node has. Omitted optional fields mean "use the default". */
@@ -127,6 +139,12 @@ const nodeCommon = {
   id: IdSchema,
   /** Human-friendly label (layers panel, AI summaries). */
   name: z.string().max(200).optional(),
+  /**
+   * Pairs this layer with the layer of the same key on another slide, for morph (D109).
+   * Without one, a layer's key is its ID, so Duplicate slide pairs every copy with its
+   * original by giving the copy the original's ID as its key.
+   */
+  matchKey: MatchKeySchema.optional(),
   hidden: z.boolean().optional(),
   /** Locked nodes can't be selected on the canvas (they can still be edited by ops). */
   locked: z.boolean().optional(),

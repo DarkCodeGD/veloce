@@ -188,6 +188,31 @@ describe("building a deck", () => {
     expect(summary).toContain("Footer: none.");
     expect(summary).not.toContain("no footer");
 
+    // Morph match keys (D109): shown in the summary, and one per slide (lint says so).
+    const keyed = await call("upsert_slide", {
+      slide: {
+        id: "keys",
+        children: [
+          { id: "k1", type: "text", matchKey: "logo", props: { content: "A" } },
+          { id: "k2", type: "text", matchKey: "logo", props: { content: "B" } },
+        ],
+      },
+    });
+    expect(keyed.text).toMatch(/- k1: text "A".* \[key "logo"\]/);
+    expect(keyed.text).toMatch(/\[warning\] duplicate-match-key · slide keys · k1, k2/);
+    const bad = await call("apply_ops", {
+      label: "Key",
+      ops: [{ op: "node.update", id: "k2", set: { matchKey: " logo" } }],
+    });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toMatch(/one line of text with no spaces at either end/);
+    const unkeyed = await call("apply_ops", {
+      label: "Unkey",
+      ops: [{ op: "node.update", id: "k2", set: { matchKey: null } }],
+    });
+    expect(unkeyed.text).not.toMatch(/duplicate-match-key/);
+    await call("apply_ops", { label: "Remove", ops: [{ op: "slide.remove", id: "keys" }] });
+
     // Replacing a slide keeps its position.
     await call("upsert_slide", {
       slide: { id: "second", children: [{ type: "text", props: { content: "Two" } }] },
