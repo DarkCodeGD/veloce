@@ -23,6 +23,7 @@ import {
   type ElementValidator,
   FrameStyleSchema,
   findComponent,
+  findSlide,
   IdSchema,
   instantiateComponent,
   instantiateSlide,
@@ -51,7 +52,7 @@ const nodeCommon = {
   ),
   height: SizingSchema.optional().describe('Pixels, "fill" or "hug".'),
   position: PointSchema.optional().describe(
-    'From the frame\'s content box. Used inside "absolute" frames, or with positioning: "free".',
+    'From the frame\'s outer edges: its padding doesn\'t apply (on a slide, { "x": 96, "y": 64 } sits inside the usual margin). Used inside "absolute" frames, or with positioning: "free".',
   ),
   anchor: AnchorSchema.optional().describe(
     'Which frame edges `position` is measured from (free layers): x "start" | "center" | "end", y the same. { x: "end" } + position.x 16 = 16px in from the right; "center" = offset from the middle. Default left/top. Pins badges to corners when sizes change.',
@@ -149,7 +150,7 @@ export const SlideInputSchema = z.strictObject({
   ),
   style: FrameStyleSchema.optional().describe("Style of the slide's root frame."),
   use: ComponentNameSchema.optional().describe(
-    'A slide layout to start from (D95), e.g. "Title and content" (see list_components). Its params go in `with`, and `children` fill its slot; leave out layout and style.',
+    'A slide layout to start from, e.g. "Title and content" (see list_components). Its params go in `with`, and `children` fill its slot; leave out layout and style.',
   ),
   with: WithSchema,
   children: z
@@ -201,6 +202,45 @@ export interface NormalizeContext {
   validateElement?: ElementValidator;
   /** IDs in use (filled from `deck` on first need): copies' inner IDs avoid them. */
   taken?: Set<string>;
+  /** Slides inserted earlier in this batch → their root frame's ID (a slide ID as parentId). */
+  slideRoots?: Map<string, string>;
+}
+
+/**
+ * Field runs may leave out `text` (D97): agents write `{ "field": "slideNumber" }`, and core
+ * keeps what a field last showed in `text`, so it's filled in as "" here. Only objects in a
+ * `runs` list count, so another plugin's own `field` key is left alone. Returns the same
+ * value when there's nothing to fill.
+ */
+export function withFieldText<T>(value: T, key?: string): T {
+  if (Array.isArray(value)) {
+    let changed = false;
+    const items = value.map((item) => {
+      let next = withFieldText(item);
+      if (
+        key === "runs" &&
+        next &&
+        typeof next === "object" &&
+        typeof (next as { field?: unknown }).field === "string" &&
+        !("text" in next)
+      ) {
+        next = { ...next, text: "" };
+      }
+      if (next !== item) changed = true;
+      return next;
+    });
+    return (changed ? items : value) as T;
+  }
+  if (!value || typeof value !== "object") return value;
+  let out: Record<string, unknown> | null = null;
+  for (const [k, v] of Object.entries(value)) {
+    const next = withFieldText(v, k);
+    if (next !== v) {
+      out ??= { ...(value as Record<string, unknown>) };
+      out[k] = next;
+    }
+  }
+  return (out ?? value) as T;
 }
 
 export function normalizeNode(input: NodeInput, ctx: NormalizeContext = {}, at = "node"): Node {
@@ -249,8 +289,8 @@ function expandUse(input: UseInput, ctx: NormalizeContext, at: string): Node {
   return { ...copy, ...fields };
 }
 
-export function normalizeSlide(input: SlideInput, ctx: NormalizeContext = {}, at = "slide"): Slide {
-  const { id, layout, style, children, use, with: values, ...fields } = input;
+export function normalizeSlide(raw: SlideInput, ctx: NormalizeContext = {}, at = "slide"): Slide {
+  const { id, layout, style, children, use, with: values, ...fields } = withFieldText(raw);
   const slideId = id ?? createId("sl");
   const nodes = (list: NodeInput[] | undefined) =>
     list?.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`));
@@ -269,14 +309,23 @@ export function normalizeSlide(input: SlideInput, ctx: NormalizeContext = {}, at
     const component = findComponent(deck, use);
     if (!component) throw componentNotFound(deck, use, `${at}.use`);
     ctx.taken ??= ctx.deck ? collectIds(ctx.deck) : new Set();
+    // Free layers (a corner label, a sticker) sit on the slide, measured from its edges, as
+    // a floating shape does in PowerPoint; the rest fill the slot. So a layout without a slot
+    // takes them too.
+    const given = nodes(children);
+    const free = given?.filter((n) => n.positioning === "free") ?? [];
+    const flow = given?.filter((n) => n.positioning !== "free");
     const slide = instantiateSlide(use, component, slideId, {
       with: values,
       taken: ctx.taken,
       validateElement: ctx.validateElement,
       at,
-      children: nodes(children),
+      children: flow?.length || !free.length ? flow : undefined,
     });
-    return { ...slide, ...fields };
+    const root = free.length
+      ? { ...slide.root, children: [...slide.root.children, ...free] }
+      : slide.root;
+    return { ...slide, root, ...fields };
   }
   if (values !== undefined) {
     throw new VeloceError("INVALID", "`with` needs `use`: params belong to a slide layout", {
@@ -297,12 +346,34 @@ export function normalizeSlide(input: SlideInput, ctx: NormalizeContext = {}, at
   };
 }
 
-export function normalizeOp(input: OpInput, ctx: NormalizeContext = {}, at = "ops[0]"): unknown {
-  if (input.op === "slide.insert" && "slide" in input && !("root" in input.slide)) {
-    return { ...input, slide: normalizeSlide(input.slide as SlideInput, ctx, `${at}.slide`) };
+export function normalizeOp(raw: OpInput, ctx: NormalizeContext = {}, at = "ops[0]"): unknown {
+  const input = withFieldText(raw);
+  ctx.slideRoots ??= new Map();
+  if (input.op === "slide.insert" && "slide" in input) {
+    const slide =
+      "root" in input.slide
+        ? (input.slide as Slide)
+        : normalizeSlide(input.slide as SlideInput, ctx, `${at}.slide`);
+    ctx.slideRoots.set(slide.id, slide.root.id);
+    return { ...input, slide };
   }
   if (input.op === "node.insert") {
-    return { ...input, node: normalizeNode(input.node as NodeInput, ctx, `${at}.node`) };
+    return {
+      ...input,
+      parentId: parentFrameId(input.parentId, ctx),
+      node: normalizeNode(input.node as NodeInput, ctx, `${at}.node`),
+    };
   }
+  if (input.op === "node.move") return { ...input, parentId: parentFrameId(input.parentId, ctx) };
   return input;
+}
+
+/**
+ * A slide's ID as a parent means its root frame: the root's ID is generated, and a slide
+ * inserted in the same batch has a root the agent can't know yet.
+ */
+function parentFrameId(id: string, ctx: NormalizeContext): string {
+  const inserted = ctx.slideRoots?.get(id);
+  if (inserted) return inserted;
+  return (ctx.deck && findSlide(ctx.deck, id)?.slide.root.id) ?? id;
 }

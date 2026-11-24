@@ -30,6 +30,11 @@ export const DEFAULT_THEME: Theme = {
     h1: { font: "heading", size: 80, weight: 700, lineHeight: 1.1, letterSpacing: -0.01 },
     h2: { font: "heading", size: 56, weight: 700, lineHeight: 1.15 },
     h3: { font: "heading", size: 40, weight: 600, lineHeight: 1.2 },
+    /**
+     * Large body text (format v2): bullets and short paragraphs that should fill a slide
+     * without the weight of a heading. 1.5× body, otherwise like it; the v1→v2 migration derives it the same way.
+     */
+    lead: { font: "body", size: 48, weight: 400, lineHeight: 1.4 },
     body: { font: "body", size: 32, weight: 400, lineHeight: 1.4 },
     small: { font: "body", size: 24, weight: 400, lineHeight: 1.4 },
     caption: { font: "body", size: 20, weight: 500, lineHeight: 1.3, letterSpacing: 0.02 },

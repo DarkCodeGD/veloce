@@ -30,7 +30,7 @@
 - **Last updated:** 2026-11-24
 - **Next:** Phase 3 is complete: run the phase gate before Phase 4 starts (its blocker, the
   GSAP license question, comes first).
-- **State:** `pnpm check` is green (882 tests, including real-Chromium lint, preview and editor
+- **State:** `pnpm check` is green (897 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 9 (D96).
@@ -50,7 +50,9 @@
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
     done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90); Preferences (D91); the command palette (D92); versions (D93).
   - Round 6: components, copied on insert, for agents and people (D94); slide layouts, built
-    in and the deck's own (D95); slide numbers, footers and sections (D97).
+    in and the deck's own (D95); slide numbers, footers and sections (D97), with the agent test's
+    fixes, retested by a spawned agent before the user's final test (D97 §8). A `lead` text style
+    and format v2, fuller content layouts (D98).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in

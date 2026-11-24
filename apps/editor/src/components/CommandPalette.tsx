@@ -22,9 +22,7 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { run } from "../actions.js";
 import { closePalette, paletteStore } from "../command-palette.js";
-import { slidePosition } from "../commands/context.js";
 import { openPreferences, type PreferencesTab } from "../dialogs.js";
 import {
   commandContext,
@@ -35,13 +33,13 @@ import {
   runCommand,
 } from "../editor-commands.js";
 import { insertComponent } from "../insert-actions.js";
-import { newSlideFromLayoutCommand } from "../model/components.js";
 import { deckLayers, type PaletteEntry, paletteSections, slideLabel } from "../model/palette.js";
 import { shortcutKeys } from "../model/shortcuts.js";
 import { nodeLabel } from "../model/slide-index.js";
 import { PLATFORM } from "../platform.js";
 import { loadRecent, noteRecent } from "../recent.js";
 import { changeSettings, settings, useSettings } from "../settings.js";
+import { newSlideFromLayout } from "./LayoutsDialog.js";
 
 const RECENT_KEY = "veloce.palette.recent";
 const RECENT_MAX = 5;
@@ -175,17 +173,7 @@ function paletteRows(deck: Deck | undefined, current: Settings): Row[] {
       detail: "New slide from layout",
       keywords: `new slide layout ${component.description ?? ""}`,
       icon: RectangleHorizontal,
-      run: () => {
-        const c = commandContext();
-        if (!c.deck) return;
-        const at = slidePosition(c);
-        const command = newSlideFromLayoutCommand(
-          c.deck,
-          name,
-          at === -1 ? c.deck.slides.length - 1 : at,
-        );
-        if (command) void run(command).then((ok) => ok && c.goToSlide(command.select?.[0] ?? ""));
-      },
+      run: () => void newSlideFromLayout(name),
     });
   }
   for (const { slideId, slideIndex, node } of deckLayers(deck)) {

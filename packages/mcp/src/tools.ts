@@ -19,6 +19,7 @@ import {
   type ComponentParam,
   collectIds,
   type Deck,
+  deckSections,
   findBuiltinTheme,
   findNode,
   findSlide,
@@ -27,6 +28,7 @@ import {
   formatIssues,
   getComponent,
   type HistoryEntry,
+  hasFieldRuns,
   IdSchema,
   MAX_ASSET_BYTES,
   type Node,
@@ -35,6 +37,8 @@ import {
   type Origin,
   ParamNameSchema,
   ParamTargetSchema,
+  type Slide,
+  sectionAt,
   slideLayouts,
   type Theme,
   ThemeSchema,
@@ -59,6 +63,7 @@ import {
   normalizeSlide,
   OpInputSchema,
   SlideInputSchema,
+  withFieldText,
 } from "./input.js";
 import { boundsTable, componentOutline, deckSummary, formatLint, slideOutline } from "./summary.js";
 
@@ -245,9 +250,50 @@ async function lintReport(
 }
 
 /** Slides that are new or changed between two versions (core copies only what changes). */
+/**
+ * Slides to lint after a change: the ones it changed, and the ones it moved into another
+ * section without touching them (D97): a slide move or a section ending can leave another
+ * slide's section field showing nothing or the wrong name, and only lint says so.
+ */
 function changedSlides(before: Deck, after: Deck): string[] {
   const old = new Set(before.slides);
-  return after.slides.filter((s) => !old.has(s)).map((s) => s.id);
+  const sectionBefore = new Map(before.slides.map((s, i) => [s.id, sectionAt(before, i)]));
+  return after.slides
+    .filter(
+      (s, i) =>
+        !old.has(s) ||
+        (sectionBefore.has(s.id) &&
+          sectionBefore.get(s.id) !== sectionAt(after, i) &&
+          hasFieldRuns(s.root)),
+    )
+    .map((s) => s.id);
+}
+
+/** Which section each slide is in, by the ID of the slide that starts it ("" for none). */
+function sectionKeys(deck: Deck): Map<string, string> {
+  const keys = new Map<string, string>();
+  for (const { name, key, slideIds } of deckSections(deck)) {
+    for (const id of slideIds) keys.set(id, name === null ? "" : key);
+  }
+  return keys;
+}
+
+/**
+ * Slides a change moved into another section (D97), as `s7 is now in "Results"`: a raw
+ * slide.move takes markers along, and ending a section regroups its slides, so the agent
+ * should see where they went. A rename keeps every slide in its section: nothing to say.
+ */
+function sectionMoves(before: Deck, after: Deck): string[] {
+  const was = sectionKeys(before);
+  const now = sectionKeys(after);
+  const moves: string[] = [];
+  after.slides.forEach((slide, i) => {
+    const from = was.get(slide.id);
+    if (from === undefined || from === now.get(slide.id)) return;
+    const name = sectionAt(after, i);
+    moves.push(`${slide.id} is now in ${name === null ? "no section" : `"${name}"`}`);
+  });
+  return moves.length > 8 ? [...moves.slice(0, 8), `${moves.length - 8} more`] : moves;
 }
 
 /** How a failed commit's error should read for the tool that made the ops. */
@@ -261,6 +307,27 @@ interface CommitErrors {
   asSlide?: boolean;
   /** The agent sent a component (save_component): paths point into what it sent. */
   asComponent?: boolean;
+}
+
+/** The "How to fix" for arguments that don't match a tool's schema: the likeliest mix-up first. */
+function invalidArgumentsHint(
+  tool: string,
+  message: string,
+  issues: readonly { path: readonly PropertyKey[] }[],
+): string {
+  // `{ "type": "frame", "layout", "children" }`: read as an element with stray keys.
+  if (/Unrecognized keys?: .*"(?:children|layout)"/.test(message)) {
+    return 'A frame has no "type" (that\'s for elements): write { "layout": { … }, "children": [ … ] }, optionally with "kind": "frame". See get_docs("layout").';
+  }
+  if (tool === "apply_ops") {
+    return issues.some((i) => i.path[2] === "footer")
+      ? 'footer is { "date"?: true, "text"?: "…", "slideNumber"?: true }, or null to remove it (get_docs("sections")).'
+      : 'Check each op against get_docs("ops").';
+  }
+  if (tool === "upsert_slide" && issues.some((i) => i.path.includes("children"))) {
+    return 'Nodes are { "type", "props" } elements or { "layout", "children" } frames; see get_docs("layout").';
+  }
+  return "Fix the field named above; this tool's input schema describes each one.";
 }
 
 /** Rewrites a core error into the terms of what the agent actually sent. */
@@ -492,7 +559,7 @@ const upsertSlide = defineTool({
     const saved = after.slides[position];
     return text(
       `${label}: done.`,
-      saved ? slideOutline(saved, position) : "",
+      saved ? slideOutline(saved, position, { footer: !!after.footer }) : "",
       await lintReport(ctx, open, [slide.id]),
     );
   },
@@ -554,9 +621,20 @@ const applyOps = defineTool({
       const node = (op as { op: string; node?: Node }).node;
       return node ? [...walkNodes(node)].map((n) => n.node.id) : [];
     });
+    // Slides made here: their root frame (generated) and the nodes inside, so the next call
+    // can edit them without a get_slide first.
+    const slides = ops.flatMap((op) => {
+      const slide = (op as { op: string; slide?: Slide }).slide;
+      if (!slide) return [];
+      const inner = [...walkNodes(slide.root)].slice(1).map((n) => n.node.id);
+      return [
+        `${slide.id} (root frame ${slide.root.id}${inner.length ? `; ${inner.join(", ")}` : ""})`,
+      ];
+    });
     const changed = changedSlides(before, after);
+    const regrouped = sectionMoves(before, after);
     return text(
-      `Applied "${label}" (${ops.length} op${ops.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}`,
+      `Applied "${label}" (${ops.length} op${ops.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}${slides.length ? ` New slides: ${slides.join("; ")}.` : ""}${regrouped.length ? ` Sections: ${regrouped.join("; ")}.` : ""}`,
       changed.length ? await lintReport(ctx, open, changed) : "",
     );
   },
@@ -689,7 +767,7 @@ const saveComponent = defineTool({
       }
     } else {
       template = normalizeNode(
-        node as NonNullable<typeof node>,
+        withFieldText(node as NonNullable<typeof node>),
         { deck: open.deck, validateElement: ctx.registry.validateElement },
         "node",
       );
@@ -1028,7 +1106,7 @@ const getDocsTool = defineTool({
   name: "get_docs",
   title: "Get docs",
   description:
-    'Reference docs. Topics: "layout" (frames, sizing, patterns), "design" (rules for good slides), "theme" (tokens), "ops" (apply_ops), "lint", "element/<type>" (e.g. "element/text").',
+    'Reference docs. Topics: "layout" (frames, sizing, patterns), "design" (rules for good slides), "theme" (tokens), "ops" (apply_ops), "components" (saved components and slide layouts), "sections" (sections, footer, slide numbers, live fields), "lint", "element/<type>" (e.g. "element/text").',
   input: z.strictObject({ topic: z.string() }),
   annotations: { readOnlyHint: true },
   async run({ topic }, ctx) {
@@ -1150,14 +1228,10 @@ export async function callTool(name: string, args: unknown, ctx: ToolContext): P
   }
   const parsed = tool.input.safeParse(args ?? {});
   if (!parsed.success) {
+    const message = formatIssues(parsed.error.issues);
     return errorResult({
-      message: `Invalid arguments: ${formatIssues(parsed.error.issues)}`,
-      hint:
-        name === "apply_ops"
-          ? 'Check each op against get_docs("ops").'
-          : name === "upsert_slide"
-            ? 'Nodes are { "type", "props" } elements or { "layout", "children" } frames; see get_docs("layout").'
-            : "Check the arguments against this tool's input schema.",
+      message: `Invalid arguments: ${message}`,
+      hint: invalidArgumentsHint(name, message, parsed.error.issues),
     });
   }
   let result: ToolResult;

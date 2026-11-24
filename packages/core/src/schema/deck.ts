@@ -12,13 +12,17 @@ import { ThemeSchema } from "./theme.js";
  * Version of the document format. Bump it only together with a migration in
  * `@veloce/format`, so files from every older version keep opening.
  */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
 /** A section's name: one line, no spaces at either end. */
 export const SectionNameSchema = z
   .string()
+  .min(1, { error: 'A section needs a name. To end a section at this slide, set "section": null' })
   .max(100)
-  .regex(/^\S(?:.*\S)?$/, { error: 'Section names are one line of text, e.g. "Results"' });
+  // Empty passes here: `min` above says what's wrong with that.
+  .regex(/^(?:\S(?:.*\S)?)?$/, {
+    error: 'Section names are one line of text with no spaces at either end, e.g. "Results"',
+  });
 
 /**
  * The deck's footer (D97), drawn along the bottom of every slide that doesn't hide it: the

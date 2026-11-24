@@ -20,6 +20,7 @@ import {
   type Node,
   PARAM_NAME_PATTERN,
   type Slide,
+  TextContentSchema,
   walkNodes,
 } from "@veloce/core";
 import type { Command } from "./commands.js";
@@ -173,12 +174,27 @@ export function componentPreviewDeck(deck: Deck, component: Component): Deck {
   return { ...deck, slides: [slide] };
 }
 
-/** A new slide from slide layout `name` (D95), after the slide at `afterIndex`; shown next. */
+/** True if the template shows the section's name live (a `section` field, D97). */
+export function showsSectionName(node: Node): boolean {
+  for (const { node: n } of walkNodes(node)) {
+    if (n.kind !== "element") continue;
+    const content = TextContentSchema.safeParse(n.props.content);
+    if (!content.success || typeof content.data === "string") continue;
+    if (content.data.some((p) => p.runs.some((r) => r.field === "section"))) return true;
+  }
+  return false;
+}
+
+/**
+ * A new slide from slide layout `name` (D95), after the slide at `afterIndex`; shown next.
+ * `nameSection`: its title is the section's name (Section header), so the editor asks for a
+ * new section's name right away; else it would show the name of the section it landed in.
+ */
 export function newSlideFromLayoutCommand(
   deck: Deck,
   name: string,
   afterIndex: number,
-): Command | null {
+): (Command & { nameSection: boolean }) | null {
   const layout = findComponent(deck, name);
   if (!layout?.slide) return null;
   const slide = instantiateSlide(name, layout, createId("sl"), { taken: collectIds(deck) });
@@ -186,6 +202,7 @@ export function newSlideFromLayoutCommand(
     label: `New slide from "${name}"`,
     ops: [{ op: "slide.insert", slide, index: afterIndex + 1 }],
     select: [slide.id],
+    nameSection: showsSectionName(layout.node),
   };
 }
 
@@ -193,5 +210,10 @@ export const LAYOUT_PREVIEW_ID = "layout-preview";
 
 /** A one-slide deck showing what a slide from layout `name` looks like in this deck. */
 export function layoutPreviewDeck(deck: Deck, name: string, layout: Component): Deck {
-  return { ...deck, slides: [instantiateSlide(name, layout, LAYOUT_PREVIEW_ID)] };
+  const slide = instantiateSlide(name, layout, LAYOUT_PREVIEW_ID);
+  // A sample name, so a Section header's live title isn't empty in its preview.
+  return {
+    ...deck,
+    slides: [showsSectionName(layout.node) ? { ...slide, section: "Section" } : slide],
+  };
 }

@@ -184,4 +184,13 @@ describe("slide layouts (D95)", () => {
     expect(preview.theme).toBe(deck.theme);
     expect(newSlideFromLayoutCommand(deck, "Nope", 0)).toBeNull();
   });
+
+  it("asks for a section's name after a Section header, and previews it with one (D97)", () => {
+    const deck = makeDeck();
+    expect(newSlideFromLayoutCommand(deck, "Section header", 0)?.nameSection).toBe(true);
+    expect(newSlideFromLayoutCommand(deck, "Quote", 0)?.nameSection).toBe(false);
+    const layout = slideLayoutsOf(deck).find((l) => l.name === "Section header")?.component;
+    if (!layout) throw new Error("no layout");
+    expect(layoutPreviewDeck(deck, "Section header", layout).slides[0]?.section).toBe("Section");
+  });
 });

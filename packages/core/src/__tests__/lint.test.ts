@@ -319,6 +319,58 @@ describe("lint: visual rules (with measurements)", () => {
     expect(lint({ a: box(96, 330, 800, 200), b: box(96, 560, 800, 190) })).toEqual([]);
   });
 
+  it("warns when a section field shows nothing or titles the wrong slide (D97)", () => {
+    const field = [{ runs: [{ text: "", field: "section" as const }] }];
+    const label = (id: string, style?: string) =>
+      element("text", { content: field, ...(style && { style }) }, { id });
+    const slides = [
+      createSlide({ id: "a", children: [label("lead")] }), // before any section
+      createSlide({
+        id: "b",
+        section: "Results",
+        children: [label("b-t", "$text.h1")],
+      }),
+      createSlide({ id: "c", children: [label("label", "$text.small")] }),
+      // A section header whose section was ended: its title names the one before.
+      createSlide({ id: "d", children: [label("d-t", "$text.h1")] }),
+    ];
+    const issues = lintDeck(createDeck({ title: "t", slides })).filter(
+      (i) => i.rule === "section-field",
+    );
+    expect(issues.map((i) => [i.slideId, i.nodeIds[0]])).toEqual([
+      ["a", "lead"],
+      ["d", "d-t"],
+    ]);
+    expect(issues[0]?.message).toMatch(/in no section: it shows nothing/);
+    expect(issues[1]?.message).toMatch(/"Results", which starts on slide 2, not here/);
+    expect(issues[1]?.fix).toMatch(/"section": "<name>"/);
+  });
+
+  it("points an empty band at the frame that fills the slide, as a hint (D97)", () => {
+    // A layout slide: a title, then a content slot that fills the rest (s3-content).
+    const slotted = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          rootId: "root",
+          children: [
+            text("title", "Title"),
+            frame({ id: "s-content", height: "fill", children: [text("body", "Body")] }),
+          ],
+        }),
+      ],
+    });
+    const nodes = { title: box(96, 96, 1600, 86), body: box(96, 220, 1600, 60) };
+    const [issue] = lintDeck(slotted, {
+      measurements: new Map([["s", measured("s", nodes)]]),
+    }).filter((i) => i.rule === "empty-space");
+    expect(issue?.nodeIds).toEqual(["s-content"]);
+    expect(issue?.fix).toMatch(/"s-content", which fills the slide/);
+    expect(issue?.fix).not.toMatch(/justify: "center" on/);
+    expect(issue?.fix).toMatch(/only a hint/);
+  });
+
   it("leaves a centred short slide alone, and ignores free layers when measuring bands", () => {
     const titled = createDeck({
       title: "t",

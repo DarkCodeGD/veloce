@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   assetRef,
   createDeck,
@@ -12,7 +13,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import type { DeckBundle } from "../bundle.js";
 import { FormatError } from "../errors.js";
-import { migrateDocument } from "../migrations.js";
+import { MIGRATIONS, migrateDocument } from "../migrations.js";
 import { readVeloce } from "../read.js";
 import { writeVeloce } from "../write.js";
 
@@ -272,6 +273,38 @@ describe("migrations", () => {
       old: undefined,
       added: true,
     });
+  });
+
+  it("opens a v1 file with the lead style added, from its own body style (v2, D98)", async () => {
+    const fixture = (name: string) =>
+      readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+    const good = await writeVeloce(await bundleWithAsset(), { now: NOW });
+    const v1 = rezip(good, (e) => {
+      const manifest = JSON.parse(strFromU8(e["manifest.json"] as Uint8Array));
+      e["manifest.json"] = strToU8(JSON.stringify({ ...manifest, formatVersion: 1 }));
+      e["document.json"] = strToU8(fixture("v1-document.json"));
+      e["theme.json"] = strToU8(fixture("v1-theme.json"));
+      for (const name of Object.keys(e)) if (name.startsWith("assets/")) delete e[name];
+    });
+    const read = await readVeloce(v1);
+    expect(read.migratedFrom).toBe(1);
+    expect(read.deck.formatVersion).toBe(FORMAT_VERSION);
+    const text = read.deck.theme.text;
+    // Paper's body: Lora (the body font), 32px at line height 1.5. Lead: 48px, the rest alike.
+    expect(text.lead).toEqual({ font: "body", size: 48, weight: 400, lineHeight: 1.5 });
+    expect(Object.keys(text).indexOf("lead")).toBe(Object.keys(text).indexOf("body") - 1);
+  });
+
+  it("keeps a theme's own lead, and leaves themes without a body style alone", () => {
+    const own = { font: "heading", size: 50 };
+    const doc = (text: Record<string, unknown>) => ({ formatVersion: 1, theme: { text } });
+    expect(MIGRATIONS[1]?.(doc({ lead: own, body: { size: 32 } }))).toEqual(
+      doc({ lead: own, body: { size: 32 } }),
+    );
+    expect(MIGRATIONS[1]?.(doc({ h1: { size: 80 } }))).toEqual(doc({ h1: { size: 80 } }));
+    expect(MIGRATIONS[1]?.(doc({ body: { size: 30, weight: 300 } }))).toEqual(
+      doc({ lead: { size: 45, weight: 300 }, body: { size: 30, weight: 300 } }),
+    );
   });
 
   it("fails loudly on gaps and on newer documents", () => {

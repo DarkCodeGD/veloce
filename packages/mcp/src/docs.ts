@@ -29,10 +29,11 @@ Rules:
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
 - Something repeats (cards, tiles, badges, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
 - Slide layouts (Title, Title and content, Two columns, Section header, Big number, Quote, and the deck's own) start a slide: upsert_slide { "slide": { "use": "Title and content", "with": { "title": "…" }, "children": [ … ] } }.
+- Sections, slide numbers and footers: "section" on a slide starts a named section; the deck's footer (date, text, slide number on every slide) is one deck.setFooter op; live text like "Slide 3 of 12" uses field runs. See get_docs("sections").
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 - Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
-Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("element/text").`;
+Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("element/text").`;
 
 const LAYOUT = `# Layout
 
@@ -86,14 +87,14 @@ Slide with a title on top and content below: set the slide \`layout\` to \`{ "mo
 const DESIGN = `# Design rules
 
 - **One idea per slide.** The title states the takeaway ("Revenue doubled in Q3"), not the topic ("Revenue").
-- **Hierarchy:** one dominant element per slide. Use $text.display/h1 for the main point, $text.body/small for support, $color.muted for secondary text.
+- **Hierarchy:** one dominant element per slide. Use $text.display/h1 for the main point, $text.lead for bullets on a content slide (large, not bold: h2/h3 are bold headings), $text.body/small for denser support, $color.muted for secondary text.
 - **Brevity:** ≤ 6 bullets, ≤ ~12 words each; ≤ ~40 words of body text per slide. Put detail in speaker notes (\`notes\`).
 - **Whitespace:** keep the slide padding; prefer $space tokens for gaps. Don't fill every pixel.
 - **Consistency:** same layout for slides of the same kind; same title position across content slides.
 - **Color:** text on $color.background or $color.surface uses $color.text/$color.muted; text on $color.primary uses $color.on-primary. Accent colors for emphasis only.
 - **Translucent color:** add an opacity in percent to a color token: "$color.primary/15" for a tinted card, "$color.secondary/30" for a glow or glass layer. It follows theme switches; a hex with alpha doesn't.
 - **Icons:** there is no icon element yet. Don't use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font. Use shapes, numbers or short words instead.
-- **Structure:** in a longer deck, start each part with \`section: "<name>"\` on its first slide (upsert_slide), often a Section header slide. Slide numbers and a footer line come from the deck's footer, set once with deck.setFooter (get_docs("ops")), never drawn by hand on each slide; Title and Section header slides leave it off.
+- **Structure:** in a longer deck, start each part with \`section: "<name>"\` on its first slide (upsert_slide), often a Section header slide. Slide numbers and a footer line come from the deck's footer, set once with deck.setFooter (get_docs("sections")), never drawn by hand on each slide; Title and Section header slides leave it off.
 - **Numbers:** show a big number ($text.display, $color.primary) with a short caption instead of a sentence.
 - **Check your work:** fix every lint error; run render_preview on slides with images, many elements or custom layouts.`;
 
@@ -119,7 +120,9 @@ and \`params\`. A param maps one value to fields inside the template, as
 
 **Insert** with \`{ "use": "<name>", "with": { <param>: <value> } }\` anywhere a node goes:
 upsert_slide children, frame children, or a node.insert op. Params left out keep the
-template's value; \`null\` removes the field. The copy's own fields (\`id\`, \`width\`,
+template's value; \`null\` removes the field. A value is anything its field takes: a text
+param takes rich text too, e.g. a bold heading line over plain ones:
+\`[{ "runs": [{ "text": "Plan", "bold": true }] }, { "runs": [{ "text": "$3.9M" }] }]\`. The copy's own fields (\`id\`, \`width\`,
 \`position\`, \`name\`…) can be set next to \`use\`.
 
 \`\`\`json
@@ -141,9 +144,19 @@ given with \`use\` go there, in place of the template's placeholder.
 # Slide layouts
 
 A slide layout is a component for a whole slide: \`use\` it as the slide in upsert_slide (or a
-slide.insert op). Params go in \`with\`; \`children\` fill its slot; the slide's own \`id\`,
-\`name\`, \`notes\`, \`background\` and \`hidden\` sit next to \`use\` (not \`layout\` or \`style\`:
-those come from the layout). Inner IDs start with the slide's: \`s3-title\`.
+slide.insert op). Params go in \`with\`; \`children\` fill its slot, except free layers
+(\`positioning: "free"\`), which sit on the slide itself, so any layout takes a corner label or
+a sticker; the slide's own \`id\`,
+\`name\`, \`notes\`, \`background\`, \`hidden\`, \`section\` and \`hideFooter\` sit next to \`use\` (not
+\`layout\` or \`style\`: those come from the layout). Inner IDs start with the slide's:
+\`s3-title\`. The root frame's ID is generated: to add a node to the slide itself, give the
+slide's ID as \`parentId\` (node.insert takes it, even for a slide inserted earlier in the same
+apply_ops).
+
+The content slot (\`s3-content\` in Title and content, \`s3-columns\` in Two columns) fills
+the slide under the title (\`height: "fill"\`), and its children start at its top, under the
+title, as in PowerPoint. A short list leaves space below: fill it (larger styles, cards with
+\`height: "fill"\`, a visual), rather than centering the list away from its title.
 
 \`\`\`json
 { "slide": { "id": "s3", "use": "Title and content", "with": { "title": "Three reasons" },
@@ -151,19 +164,69 @@ those come from the layout). Inner IDs start with the slide's: \`s3-title\`.
 \`\`\`
 
 Built in (they follow the deck's theme): **Title** (title, subtitle), **Title and content**
-(title, body; slot: content), **Two columns** (title, left, right), **Section header** (title,
+(title, body; slot: content), **Two columns** (title, left, right; both set their text in
+\`$text.lead\`: give your own children \`"style": "$text.lead"\` to match), **Section header** (title,
 subtitle; on the primary color), **Big number** (number, caption), **Quote** (quote, author).
+Leave out Title's \`title\` and it shows the deck's title live; leave out Section header's and
+it shows its section's name live (start the section on that slide with \`section\`). Both
+leave the footer off. The Quote layout adds no quote marks: put them in \`quote\`.
 Save a slide of your own as a layout with save_component \`{ "name": "…", "from": "<slide id>" }\`;
 one named like a built-in replaces it in this deck.`;
+
+const SECTIONS = `# Sections, footer and fields
+
+**Sections** group slides (the editor's slide list shows them as headers). Put
+\`"section": "<name>"\` on the slide that starts one (upsert_slide, or slide.update): it runs to
+the next slide that starts a section. Slides before the first section are in none.
+**Rename** a section: slide.update its first slide's \`section\` (its slides and section
+fields follow). **End** one at a slide: slide.update \`{ "section": null }\` (its slides join
+the section before; a Section header slide there would then show that section's name: give
+it a section of its own, or remove it).
+The summary marks starts as \`[section "Results"]\`, and the slides before the first section
+as \`[no section: slides 1–3]\`. A raw slide.move or slide.remove takes the
+marker with that slide: moving a section's first slide moves where the section starts, and
+a slide moved above the first section is in none. slide.move's \`index\` is 0-based: the
+slide's position once it's moved (index 2 = the 3rd slide). apply_ops says which slides a
+change moved into another section ("Sections: s7 is now in no section") and lints them.
+
+**The footer** is set once for the whole deck:
+\`{ "op": "deck.setFooter", "footer": { "date": true, "text": "Acme · Confidential", "slideNumber": true } }\`
+(apply_ops; \`"footer": null\` removes it). It's drawn along the bottom of every slide inside its
+margin: the date left, the text centered, the number right, small and muted. It takes no
+room in the layout, so keep content above the bottom margin. A slide leaves it off with
+\`"hideFooter": true\` (\`false\` shows it again); Title and Section header slides do already. Never draw slide numbers
+by hand.
+
+**Fields** are live values inside any text, as runs: \`{ "field": "slideNumber" }\`, with
+\`"slideCount"\`, \`"date"\` (today, long form, in the deck's language), \`"deckTitle"\` or
+\`"section"\` (the name of the section the slide is in; empty before the first section). They
+stay right when slides move, the deck is renamed or a section is renamed. "Slide 3 of 12":
+\`{ "content": [{ "runs": [{ "text": "Slide " }, { "field": "slideNumber" }, { "text": " of " }, { "field": "slideCount" }] }] }\`
+Summaries show them as \`{slideNumber}\`. Lint warns when a section field shows nothing (a
+slide in no section) or titles a slide that doesn't start the section it names (a section
+header whose section was ended).
+
+**A small label on any slide** (the section's name in a corner), even a layout with no slot:
+a free layer anchored to a corner, in the slide's \`children\` (with \`use\` too: free layers
+go on the slide, not in the slot), or node.insert into the slide later. Free positions are
+measured from the slide's edges (its padding doesn't apply; the stage is 1920×1080):
+\`{ "op": "node.insert", "parentId": "<slide id>", "node": { "type": "text", "width": "hug", "positioning": "free", "anchor": { "x": "end" }, "position": { "x": 96, "y": 40 }, "props": { "content": [{ "runs": [{ "field": "section" }] }], "style": "$text.small", "color": "$color.muted" } } }\`.
+At y 40 the label sits in the top margin, above the title (which starts at the slide's padding,
+96px). Keep it clear of the footer, which sits along the bottom; content stays clear of the
+footer by staying inside the slide's padding.
+
+**On many slides, save it once:** save_component \`{ "name": "Section label", "node": <that
+label node> }\`, then put \`{ "use": "Section label" }\` in each slide's \`children\` (it's free,
+so with \`use\` it goes on the slide, not the slot), even on Big number or Quote.`;
 
 const OPS = `# Ops (apply_ops)
 
 All edits are ops applied as one atomic transaction (all or nothing), undoable with undo_agent_changes.
 
 - \`{ "op": "slide.insert", "slide": <slide like upsert_slide>, "index"? }\`
-- \`{ "op": "slide.remove", "id" }\`, \`{ "op": "slide.move", "id", "index" }\`
+- \`{ "op": "slide.remove", "id" }\`, \`{ "op": "slide.move", "id", "index" }\` (index 0-based: the slide's position after the move)
 - \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"?, "section"?, "hideFooter"? } }\` (\`"section": null\` ends a section there)
-- \`{ "op": "node.insert", "parentId": <frame id>, "node": <node>, "index"? }\` (index omitted = last). The node is written as in upsert_slide: \`kind\` and \`id\` are optional (new IDs are returned).
+- \`{ "op": "node.insert", "parentId": <frame id, or a slide id for its root frame>, "node": <node>, "index"? }\` (index omitted = last). The node is written as in upsert_slide: \`kind\` and \`id\` are optional (new IDs are returned).
 - \`{ "op": "node.remove", "id" }\`
 - \`{ "op": "node.move", "id", "parentId", "index"? }\`
 - \`{ "op": "node.update", "id", "set": { … } }\`: JSON Merge Patch. Objects merge, \`null\` deletes a field.
@@ -257,6 +320,7 @@ export function docTopics(registry: PluginRegistry): string[] {
     "theme",
     "ops",
     "components",
+    "sections",
     "lint",
     ...registry.types().map((t) => `element/${t}`),
   ];
@@ -277,6 +341,13 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
       return OPS;
     case "components":
       return COMPONENTS;
+    case "sections":
+    case "section":
+    case "footer":
+    case "fields":
+    case "field":
+    case "slide numbers":
+      return SECTIONS;
     case "theme":
       return themeDocs(deck);
     case "lint":

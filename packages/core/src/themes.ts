@@ -110,6 +110,7 @@ export const PAPER_THEME: Theme = {
     display: { font: "heading", size: 120, weight: 700, lineHeight: 1.05, letterSpacing: -0.02 },
     h1: { font: "heading", size: 80, weight: 650, lineHeight: 1.1, letterSpacing: -0.01 },
     h2: { font: "heading", size: 56, weight: 600, lineHeight: 1.15 },
+    lead: { font: "body", size: 48, weight: 400, lineHeight: 1.5 },
     body: { font: "body", size: 32, weight: 400, lineHeight: 1.5 },
   },
   radius: { sm: 4, md: 8, lg: 16, full: 9999 },

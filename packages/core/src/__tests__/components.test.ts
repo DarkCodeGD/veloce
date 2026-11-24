@@ -163,6 +163,17 @@ describe("saving and removing components (D94)", () => {
 });
 
 describe("inserting a copy", () => {
+  it("names a copy without an ID after its component, numbered when taken", () => {
+    const taken = new Set(["card", "card-title"]);
+    expect(ids(instantiateComponent("Card", CARD, { taken }))).toEqual([
+      "card-2",
+      "card-2-title",
+      "card-2-body",
+    ]);
+    expect(instantiateComponent("Über Karte", CARD).id).toBe("uber-karte");
+    expect(instantiateComponent("★", CARD).id).toMatch(/^nd_/); // nothing readable left
+  });
+
   it("is a plain node with readable fresh IDs, the params written in", () => {
     const copy = instantiateComponent("Card", CARD, {
       id: "c1",

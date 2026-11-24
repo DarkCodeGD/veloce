@@ -1,0 +1,39 @@
+{
+  "id": "v1deck",
+  "formatVersion": 1,
+  "meta": {
+    "title": "A v1 deck"
+  },
+  "stage": {
+    "width": 1920,
+    "height": 1080
+  },
+  "slides": [
+    {
+      "id": "s1",
+      "root": {
+        "id": "s1-root",
+        "kind": "frame",
+        "layout": {
+          "mode": "stack",
+          "direction": "column",
+          "gap": "$space.md",
+          "padding": "$space.xl",
+          "justify": "center"
+        },
+        "children": [
+          {
+            "id": "t",
+            "kind": "element",
+            "type": "text",
+            "props": {
+              "content": "Written by format v1",
+              "style": "$text.body"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "assets": {}
+}

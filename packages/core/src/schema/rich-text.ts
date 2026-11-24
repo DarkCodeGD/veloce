@@ -25,7 +25,14 @@ export type FieldName = z.infer<typeof FieldNameSchema>;
 
 export const TextRunSchema = z.strictObject({
   /** For a field run: the value it showed when it was written (search, copy, fallback). */
-  text: z.string().max(100_000),
+  text: z
+    .string({
+      error: (issue) =>
+        issue.input === undefined
+          ? 'A run needs "text" (or a "field" for a live value, e.g. { "field": "slideNumber" })'
+          : undefined,
+    })
+    .max(100_000),
   /** Draws this field's current value instead of `text` (D97). */
   field: FieldNameSchema.optional(),
   bold: z.boolean().optional(),

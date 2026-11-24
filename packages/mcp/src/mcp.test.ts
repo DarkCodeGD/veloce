@@ -13,6 +13,7 @@ import {
 } from "@veloce/core";
 import { type ImageOptimizer, type RenderService, Workspace } from "@veloce/doc-server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { INSTRUCTIONS } from "./docs.js";
 import { agentOrigin, VeloceMcp } from "./server.js";
 import { TOOLS, toolInputSchema } from "./tools.js";
 
@@ -184,7 +185,8 @@ describe("building a deck", () => {
     );
     const summary = (await call("get_deck_summary")).text;
     expect(summary).toMatch(/headline: text "ACME"/);
-    expect(summary).not.toMatch(/foot/);
+    expect(summary).toContain("Footer: none.");
+    expect(summary).not.toContain("no footer");
 
     // Replacing a slide keeps its position.
     await call("upsert_slide", {
@@ -929,5 +931,255 @@ describe("slide layouts (D95)", () => {
     expect(noSlot.text).toMatch(/takes no children/);
     const typo = await call("upsert_slide", { slide: { use: "Titel" } });
     expect(typo.text).toMatch(/Did you mean "Title"/);
+  });
+});
+
+describe("sections, footer and fields (D97)", () => {
+  it("adds to a slide made in the same batch through its slide ID, and lists what it made", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    const result = await call("apply_ops", {
+      label: "Big number with a label",
+      ops: [
+        { op: "slide.insert", slide: { id: "big", use: "Big number", with: { number: "3×" } } },
+        {
+          op: "node.insert",
+          parentId: "big", // the slide: its root frame's ID is generated
+          node: { id: "label", type: "text", props: { content: "Onboarding" } },
+        },
+      ],
+    });
+    expect(result.isError).toBe(false);
+    expect(result.text).toMatch(/New node IDs: label\./);
+    expect(result.text).toMatch(/New slides: big \(root frame nd_\w+; big-number, big-caption\)/);
+    const open = await workspace.get(workspace.activeDeckId as string);
+    expect(open.deck.slides[0]?.root.children.at(-1)?.id).toBe("label");
+    // An existing slide's ID works too, for node.move as well.
+    const moved = await call("apply_ops", {
+      label: "Move it back",
+      ops: [{ op: "node.move", id: "label", parentId: "big", index: 0 }],
+    });
+    expect(moved.isError).toBe(false);
+  });
+
+  it("takes field runs without text, and shows fields by name in outlines", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    const made = await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        section: "Intro",
+        children: [
+          {
+            id: "where",
+            type: "text",
+            props: {
+              content: [
+                { runs: [{ text: "Slide " }, { field: "slideNumber" }, { field: "section" }] },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    expect(made.isError).toBe(false);
+    const summary = (await call("get_deck_summary")).text;
+    expect(summary).toContain('[section "Intro"] 1. slide s1');
+    expect(summary).not.toContain("[no section]");
+    expect(summary).toContain('where: text "Slide {slideNumber}{section}"');
+    const open = await workspace.get(workspace.activeDeckId as string);
+    expect(open.deck.slides[0]?.root.children[0]).toMatchObject({
+      props: { content: [{ runs: [{ text: "Slide " }, { text: "", field: "slideNumber" }, {}] }] },
+    });
+
+    // node.update: the same shorthand, and a run with neither says what a run needs.
+    const update = (runs: unknown[]) =>
+      call("apply_ops", {
+        label: "Number",
+        ops: [{ op: "node.update", id: "where", set: { props: { content: [{ runs }] } } }],
+      });
+    expect((await update([{ field: "slideCount" }])).isError).toBe(false);
+    expect((await update([{ bold: true }])).text).toMatch(
+      /A run needs "text" \(or a "field" for a live value/,
+    );
+
+    const empty = await call("apply_ops", {
+      label: "Bad section",
+      ops: [{ op: "slide.update", id: "s1", set: { section: "" } }],
+    });
+    expect(empty.text).toMatch(/A section needs a name\. To end a section at this slide/);
+    // Not a node problem: no hint about nodes.
+    const twoLines = await call("upsert_slide", { slide: { id: "s2", section: "A\nB" } });
+    expect(twoLines.text).toMatch(/one line of text/);
+    expect(twoLines.text).not.toMatch(/Nodes are/);
+
+    // A slide before the first section is marked once.
+    await call("upsert_slide", { slide: { id: "s0" }, index: 0 });
+    expect((await call("get_deck_summary")).text).toContain("[no section: slide 1] 1. slide s0");
+  });
+
+  it("lints a slide a move knocked out of its section, though the move didn't name it", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    const label = { type: "text", props: { content: [{ runs: [{ field: "section" }] }] } };
+    await call("upsert_slide", { slide: { id: "a" } });
+    await call("upsert_slide", { slide: { id: "b", section: "Results" } });
+    await call("upsert_slide", { slide: { id: "c", children: [{ id: "lbl", ...label }] } });
+    // Moving b (where Results starts) last leaves c before the first section.
+    const moved = await call("apply_ops", {
+      label: "Move b last",
+      ops: [{ op: "slide.move", id: "b", index: 2 }],
+    });
+    expect(moved.text).toMatch(/section-field.*"lbl".*in no section/s);
+    // Where slides went is said outright, for slides without a field too.
+    expect(moved.text).toContain("Sections: c is now in no section."); // b still starts Results
+    // A rename keeps every slide in its section: nothing to report.
+    const renamed = await call("apply_ops", {
+      label: "Rename",
+      ops: [{ op: "slide.update", id: "b", set: { section: "Q3 Results" } }],
+    });
+    expect(renamed.text).not.toContain("Sections:");
+    // Paragraphs stay apart in outlines.
+    await call("upsert_slide", {
+      slide: {
+        id: "d",
+        children: [{ id: "agenda", type: "text", props: { content: "One\nTwo" } }],
+      },
+    });
+    expect((await call("get_deck_summary")).text).toContain('agenda: text "One / Two"');
+  });
+
+  it("puts a layout slide's free layers on the slide, even with no slot", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    const corner = {
+      id: "tag",
+      type: "text",
+      width: "hug",
+      positioning: "free",
+      anchor: { x: "end" },
+      position: { x: 96, y: 40 },
+      props: { content: [{ runs: [{ field: "section" }] }] },
+    };
+    const big = await call("upsert_slide", {
+      slide: {
+        id: "n",
+        section: "Results",
+        use: "Big number",
+        with: { number: "3×" },
+        children: [corner],
+      },
+    });
+    expect(big.isError).toBe(false);
+    const listed = await call("upsert_slide", {
+      slide: {
+        id: "t",
+        use: "Title and content",
+        with: { title: "Why" },
+        children: [
+          { id: "body", type: "text", props: { content: "Faster" } },
+          { ...corner, id: "tag2" },
+        ],
+      },
+    });
+    expect(listed.isError).toBe(false);
+    const open = await workspace.get(workspace.activeDeckId as string);
+    const [n, t] = open.deck.slides;
+    expect(n?.root.children.at(-1)?.id).toBe("tag");
+    expect(t?.root.children.map((c) => c.id)).toEqual(["t-title", "t-content", "tag2"]);
+    expect(t?.root.children[1]).toMatchObject({ children: [{ id: "body" }] });
+  });
+
+  it("saves a corner label once and puts it on any layout slide with one line (docs flow)", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    const saved = await call("save_component", {
+      name: "Section label",
+      node: {
+        type: "text",
+        width: "hug",
+        positioning: "free",
+        anchor: { x: "end" },
+        position: { x: 96, y: 40 },
+        props: { content: [{ runs: [{ field: "section" }] }], style: "$text.small" },
+      },
+    });
+    expect(saved.isError).toBe(false);
+    const label = { use: "Section label" };
+    for (const slide of [
+      { id: "a", section: "Results", use: "Big number", with: { number: "3×" }, children: [label] },
+      {
+        id: "b",
+        use: "Title and content",
+        with: { title: "Why" },
+        children: [
+          { id: "pt", type: "text", props: { content: "Faster", style: "$text.lead" } },
+          label,
+        ],
+      },
+    ]) {
+      expect((await call("upsert_slide", { slide })).isError).toBe(false);
+    }
+    const open = await workspace.get(workspace.activeDeckId as string);
+    const [a, b] = open.deck.slides;
+    expect(a?.root.children.at(-1)).toMatchObject({ positioning: "free", type: "text" });
+    expect(b?.root.children.map((c) => c.kind)).toEqual(["element", "frame", "element"]);
+    expect(b?.root.children[1]).toMatchObject({ id: "b-content", children: [{ id: "pt" }] });
+    // The layouts' own text is lead, which every theme has (v2).
+    expect(b?.root.children[0]).toMatchObject({ props: { style: "$text.h1" } });
+    expect(open.deck.theme.text.lead).toBeDefined();
+  });
+
+  it("tells a frame written as an element how to write it, and names copies after their component", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    const frame = await call("apply_ops", {
+      label: "Cards",
+      ops: [
+        {
+          op: "slide.insert",
+          slide: {
+            id: "s",
+            children: [{ type: "frame", layout: { mode: "stack" }, children: [] }],
+          },
+        },
+      ],
+    });
+    expect(frame.text).toMatch(/How to fix: A frame has no "type"/);
+
+    await call("save_component", {
+      name: "Section label",
+      node: { type: "text", props: { content: "x" } },
+    });
+    const made = await call("upsert_slide", {
+      slide: { id: "s", children: [{ use: "Section label" }, { use: "Section label" }] },
+    });
+    expect(made.text).toContain("section-label: text");
+    expect(made.text).toContain("section-label-2: text");
+  });
+
+  it("names the footer's keys, and says 'no footer' only when there's one", async () => {
+    await connect();
+    await call("create_deck", { title: "Review" });
+    await call("upsert_slide", { slide: { id: "a", hideFooter: true } });
+    expect((await call("get_deck_summary")).text).not.toContain("no footer");
+    const typo = await call("apply_ops", {
+      label: "Footer",
+      ops: [{ op: "deck.setFooter", footer: { slideNum: true } }],
+    });
+    expect(typo.text).toMatch(/"slideNumber"\?: true/);
+    await call("apply_ops", {
+      label: "Footer",
+      ops: [{ op: "deck.setFooter", footer: { slideNumber: true } }],
+    });
+    expect((await call("get_deck_summary")).text).toContain("no footer");
+  });
+
+  it("finds its docs under every name an agent tries, and the instructions point there", async () => {
+    await connect();
+    for (const topic of ["sections", "footer", "fields", "slide numbers"]) {
+      expect((await call("get_docs", { topic })).text).toMatch(/^# Sections, footer and fields/);
+    }
+    expect(INSTRUCTIONS).toContain('get_docs("sections")');
   });
 });

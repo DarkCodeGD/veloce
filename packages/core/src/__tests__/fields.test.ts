@@ -173,6 +173,19 @@ describe("the footer", () => {
     expect(made("Title and content")).not.toHaveProperty("hideFooter");
   });
 
+  it("titles title and section header slides live until a param replaces them", () => {
+    const title = (name: string, values?: Record<string, unknown>) => {
+      const layout = BUILTIN_LAYOUTS[name];
+      if (!layout) throw new Error(name);
+      const slide = instantiateSlide(name, layout, "s9", values ? { with: values } : {});
+      const node = slide.root.children[0];
+      return node?.kind === "element" ? node.props.content : undefined;
+    };
+    expect(title("Title")).toEqual([{ runs: [{ text: "Title", field: "deckTitle" }] }]);
+    expect(title("Section header")).toEqual([{ runs: [{ text: "Section", field: "section" }] }]);
+    expect(title("Title", { title: "Typed" })).toBe("Typed");
+  });
+
   it("comes back with a version, and only changes when it differs", () => {
     const saved = { ...fixtureDeck(), footer: { slideNumber: true } };
     const now = fixtureDeck();

@@ -48,10 +48,10 @@ const AI_DOCS = `# text
 Headings, body copy, captions and bullet lists. Size and font come from theme text styles. Use \`style\` and avoid raw font sizes.
 
 **Props**
-- \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [...], list?: "bullet" | "number", level?: 0–5, align?, style? }]\` (a paragraph \`style\` overrides the layer's for that paragraph)
-  - a run: \`{ text, bold?, italic?, underline?, strike?, code?, color?, link? }\` (\`code\`: inline monospace; \`link\`: https/mailto, drawn in the text's color, underlined)
-  - a field run draws a live value: \`{ "text": "", "field": "slideNumber" | "slideCount" | "date" | "deckTitle" | "section" }\`, e.g. "Slide 3 of 12" is \`[{ "text": "Slide " }, { "text": "", "field": "slideNumber" }, { "text": " of " }, { "text": "", "field": "slideCount" }]\`. For a number on every slide, set the deck's footer instead (deck.setFooter in get_docs("ops")).
-- \`style\`: \`"$text.display" | "$text.h1" | "$text.h2" | "$text.h3" | "$text.body" | "$text.small" | "$text.caption" | "$text.code"\` (default body). Each style's font (heading or body), size, weight and case (caption may be UPPERCASE) are listed in get_docs("theme").
+- \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [...], list?: "bullet" | "number", level?: 0–8, align?, style? }]\` (a paragraph \`style\` overrides the layer's for that paragraph)
+  - a run: \`{ text, bold?, italic?, underline?, strike?, code?, color?, link? }\`: every run has \`text\`, except a field run, which has \`field\` instead (\`code\`: inline monospace; \`link\`: https/mailto, drawn in the text's color, underlined)
+  - a field run draws a live value: \`{ "field": "slideNumber" | "slideCount" | "date" | "deckTitle" | "section" }\`, e.g. "Slide 3 of 12" is \`[{ "text": "Slide " }, { "field": "slideNumber" }, { "text": " of " }, { "field": "slideCount" }]\`. For a number on every slide, set the deck's footer instead (get_docs("sections")).
+- \`style\`: \`"$text.display" | "$text.h1" | "$text.h2" | "$text.h3" | "$text.lead" | "$text.body" | "$text.small" | "$text.caption" | "$text.code"\` (default body). Headings (display, h1–h3) are bold; \`"$text.lead"\` is large regular-weight body text, for bullets and short paragraphs that fill a content slide (the layouts' text uses it). Each style's font (heading or body), size, weight and case (caption may be UPPERCASE) are listed in get_docs("theme").
 - \`color\`: a color token such as \`"$color.muted"\` (default \`"$color.text"\`)
 - \`align\`: \`"left" | "center" | "right" | "justify"\`; \`verticalAlign\`: \`"top" | "middle" | "bottom"\`
 - Overrides of the style, used sparingly: \`fontSize\`, \`fontWeight\`, \`font\` (\`"$font.heading"\`…), \`italic\`, \`lineHeight\`
@@ -151,7 +151,9 @@ export function renderParagraphs(content: TextContent, fields?: FieldValues | nu
     if (!top || top.level < level) {
       const list = document.createElement(paragraph.list === "number" ? "ol" : "ul");
       list.style.margin = "0";
-      list.style.paddingLeft = "1.2em";
+      // Markers hang in the padding: "1." is twice a bullet's width, so numbers get more room
+      // (else they sit flush with the frame's edge while bullets are indented).
+      list.style.paddingLeft = paragraph.list === "number" ? "1.8em" : "1.2em";
       if (top) (top.list.lastElementChild ?? top.list).append(list);
       else out.push(list);
       top = { list, type: paragraph.list, level };

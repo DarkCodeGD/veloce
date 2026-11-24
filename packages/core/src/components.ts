@@ -248,6 +248,9 @@ export function instantiateComponent(
   }
   return withFreshIds(copy, {
     rootId: options.id,
+    // A copy without an ID is named after its component (`section-label`, `-2`…), so lint
+    // and Layers read like the deck; a slide's inner IDs come from the slide's instead.
+    readable: options.prefix === undefined ? idSlug(name) : undefined,
     prefix: options.prefix,
     taken: options.taken ?? new Set(),
     slot:
@@ -388,8 +391,25 @@ function located(error: VeloceError, at: string): VeloceError {
   });
 }
 
+/**
+ * A component name as an ID stem: "Section label" → "section-label". Short, so derived inner
+ * IDs (`section-label-2-title`) stay under the 64-character limit. Empty when nothing's left.
+ */
+function idSlug(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // accents: "Über" → "uber", not "u-ber"
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+    .replace(/-+$/, "");
+}
+
 interface Renaming {
   rootId: string | undefined;
+  /** Stem for a root without `rootId`, numbered while taken; "" or undefined: generated. */
+  readable?: string | undefined;
   prefix: string | undefined;
   taken: Set<string>;
   /** The slot's template ID and what fills it (kept as given: they have their own IDs). */
@@ -397,14 +417,19 @@ interface Renaming {
 }
 
 /** Re-IDs the copy (see the module comment), recording every new ID in `taken`. */
-function withFreshIds(copy: Node, { rootId, prefix, taken, slot }: Renaming): Node {
+function withFreshIds(copy: Node, { rootId, readable, prefix, taken, slot }: Renaming): Node {
   const fresh = (): string => {
     let id = createId("nd");
     while (taken.has(id)) id = createId("nd");
     return id;
   };
+  const numbered = (stem: string): string => {
+    let id = stem;
+    for (let n = 2; taken.has(id); n++) id = `${stem}-${n}`;
+    return id;
+  };
   const templateRoot = copy.id;
-  const root = rootId ?? fresh();
+  const root = rootId ?? (readable ? numbered(readable) : fresh());
   taken.add(root);
   const idFor = (templateId: string): string => {
     if (templateId === templateRoot) return root;

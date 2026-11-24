@@ -6,6 +6,8 @@
  * Every issue names the nodes involved and says how to fix it, so an agent can repair a
  * slide without guessing (or looking at a screenshot).
  */
+
+import { sectionAt } from "./fields.js";
 import {
   contrastRatio,
   flattenLayers,
@@ -44,6 +46,8 @@ export const LINT_RULES = {
     'A layer has a `position` its frame ignores (a stack/grid child that isn\'t `positioning: "free"`).',
   "ignored-padding":
     "A free (absolute) frame has padding, which does nothing: free layers are measured from the frame's edges.",
+  "section-field":
+    "Text shows the section's name where that's wrong: on a slide in no section (it's empty), or as the title of a slide that doesn't start the section it names.",
 } as const;
 export type LintRule = keyof typeof LINT_RULES;
 
@@ -79,6 +83,12 @@ export const LINT_LIMITS = {
   tolerance: 2,
   /** Share of the slide height left empty above or below all content before we mention it. */
   emptyBand: 0.4,
+  /**
+   * The same inside a frame that fills the slide under its title (a layout's content area):
+   * a short list at the top of it is the usual slide, so only a bare one is mentioned (one
+   * line under a title).
+   */
+  emptyBandInArea: 0.7,
   /** Empty bands above and below closer than this (share of the height) are centred, not bunched. */
   balancedBands: 0.1,
   /** A painted frame this tall (share of the slide) is a backdrop, not content, for balance. */
@@ -92,10 +102,11 @@ const SEVERITY_ORDER: Record<LintSeverity, number> = { error: 0, warning: 1, inf
 export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
   const only = options.slideIds ? new Set(options.slideIds) : null;
   const issues: LintIssue[] = [];
-  for (const slide of deck.slides) {
-    if (only && !only.has(slide.id)) continue;
+  deck.slides.forEach((slide, index) => {
+    if (only && !only.has(slide.id)) return;
     const slideIssues = [
       ...structuralRules(slide),
+      ...sectionFieldRules(deck, slide, index),
       ...positionRules(slide),
       ...tokenRules(slide, deck.theme),
       ...visualRules(slide, options.measurements?.get(slide.id)),
@@ -103,7 +114,7 @@ export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
     ];
     slideIssues.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
     issues.push(...slideIssues);
-  }
+  });
   return issues;
 }
 
@@ -142,6 +153,51 @@ function textOf(node: ElementNode): string | null {
 }
 
 const countWords = (text: string) => text.split(/\s+/).filter(Boolean).length;
+
+// ── Section fields (D97) ─────────────────────────────────────────────────────────────
+
+/** Title-sized text styles: a title showing the section's name is a section header's. */
+const TITLE_STYLES = new Set(["$text.display", "$text.h1", "$text.h2"]);
+
+function showsSection(node: ElementNode): boolean {
+  const content = TextContentSchema.safeParse(node.props.content);
+  if (!content.success || typeof content.data === "string") return false;
+  return content.data.some((p) => p.runs.some((r) => r.field === "section"));
+}
+
+/**
+ * A `section` field is live, so it can go quietly wrong: before the first section it shows
+ * nothing, and a section header whose section was ended (or that was moved) shows the name
+ * of the section before it, as its title.
+ */
+function sectionFieldRules(deck: Deck, slide: Slide, index: number): LintIssue[] {
+  const issues: LintIssue[] = [];
+  const name = sectionAt(deck, index);
+  for (const { node } of visibleNodes(slide)) {
+    if (node.kind !== "element" || !showsSection(node)) continue;
+    if (name === null) {
+      issues.push({
+        rule: "section-field",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [node.id],
+        message: `${describe(node)} shows the section's name, but slide "${slide.id}" is in no section: it shows nothing.`,
+        fix: `Start a section on this slide or one before it (slide.update with "section": "<name>"), or take the field out.`,
+      });
+    } else if (slide.section === undefined && TITLE_STYLES.has(String(node.props.style))) {
+      const start = deck.slides.findLastIndex((s, i) => i < index && s.section !== undefined);
+      issues.push({
+        rule: "section-field",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [node.id],
+        message: `${describe(node)} is a title showing the section's name, "${name}", which starts on slide ${start + 1}, not here.`,
+        fix: `If this slide opens a new section, start it here (slide.update { "id": "${slide.id}", "set": { "section": "<name>" } }). Otherwise type the title, or remove the slide.`,
+      });
+    }
+  }
+  return issues;
+}
 
 // ── Structural rules (document only) ───────────────────────────────────────────────────
 
@@ -367,18 +423,26 @@ function balanceRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[
   const below = (height - bottom) / height;
   const above = top / height;
   const band = Math.max(above, below);
-  if (band <= LINT_LIMITS.emptyBand) return [];
+  // A frame that fills the slide's column (a layout's content slot, s3-content) holds the
+  // content, from its top: space under a short list there is the usual look.
+  const filler = slide.root.children.find(
+    (c) => c.kind === "frame" && !c.hidden && c.height === "fill",
+  );
+  if (band <= (filler ? LINT_LIMITS.emptyBandInArea : LINT_LIMITS.emptyBand)) return [];
   // Equal space above and below is a centred slide (a title slide), not content at one edge.
   if (Math.abs(above - below) < LINT_LIMITS.balancedBands) return [];
   const where = below >= above ? "bottom" : "top";
+  const ignore = "It's only a hint: leave it if the space is meant to be there.";
   return [
     {
       rule: "empty-space",
       severity: "info",
       slideId: slide.id,
-      nodeIds: [slide.root.id],
+      nodeIds: [filler?.id ?? slide.root.id],
       message: `The ${where} ${Math.round(band * 100)}% of slide "${slide.id}" is empty.`,
-      fix: 'Center the content (justify: "center" on the slide), let cards grow (height: "fill"), use larger styles, or add a visual. Check with render_preview.',
+      fix: filler
+        ? `The content is in "${filler.id}", which fills the slide under the title, and it's nearly empty: add points or a visual, use "$text.lead" for the text, or use a layout made for one line (Big number, Quote, Section header). Don't center it there: content floating mid-slide under a top title looks unfinished. ${ignore} Check with render_preview.`
+        : `Center the content (justify: "center" on the slide), let cards grow (height: "fill"), use larger styles, or add a visual. ${ignore} Check with render_preview.`,
     },
   ];
 }

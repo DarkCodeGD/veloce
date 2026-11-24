@@ -2361,3 +2361,61 @@ message is something else, so code and UI say "versions").
 7. **Later:** sections in presenter view come with presenter view (Phase 4); a footer
    overlapping a free layer isn't linted yet; numbering that skips hidden slides or starts
    at another number waits for a user who needs it.
+8. **After the first agent test:** the Title layout's title is a `deckTitle` field and the
+   Section header's a `section` field until a param replaces them, so they follow renames
+   (the editor asks for the new section's name when a Section header is added, and its
+   preview shows a sample). A slide's ID works as `parentId` for node.insert/node.move
+   (its root frame's ID is generated, and unknowable for a slide made in the same batch),
+   and apply_ops lists new slides' root and inner IDs. Field runs may leave out `text`
+   (MCP fills `""`); outlines show them as `{slideNumber}`. The empty-space hint points at
+   a frame that fills the slide (a layout's content slot) and says it can be left. A
+   `get_docs("sections")` topic covers all of it. **Why:** an agent building a sectioned
+   deck hit each of these; none showed up in scripted tests. The retest added a
+   `section-field` lint (a section field on a slide in no section shows nothing; a title
+   showing the name of a section that started earlier is a stale section header), a
+   `[no section]` mark in the summary, a "a run needs text or field" error, and a worked
+   example of a corner label as a free layer (free positions ignore the frame's padding,
+   which the schema description had wrong). Round 2: apply_ops also lints slides a change
+   moved into another section without naming them (a section field there may now be
+   wrong); numbered lists get room for their markers (1.8em, bullets 1.2em); and the
+   empty-space hint no longer says to center a layout's slot, which floats the content away
+   from its title. Round 3: free layers among a layout slide's `children` go on the slide,
+   not in the slot (a corner label in one call, even on a layout with no slot); a bad
+   footer key's hint names the footer's keys; the summary says "no footer" only when the
+   deck has one. Round 4 found no bugs; apply_ops now also says which slides a change
+   moved into another section, and outlines keep paragraphs apart (" / ").
+
+## D98 — A `lead` text style, format v2, and layouts that fill the slide
+
+Four agent test rounds (D97 §8) hit the same three things: the built-in Title and content
+and Two columns layouts set short text in `$text.body` and look empty, every such slide drew
+an empty-space hint, and agents reached for `$text.h2`/`h3` to make bullets bigger, which are
+bold headings.
+
+1. **`$text.lead`:** large body text, regular weight, in the body font: 1.5× `body`,
+   otherwise like it (48px in the built-in themes; PowerPoint's 28pt body is ~56px on this
+   stage, so `body` at 32 reads small for bullets). Like Keynote's and Google Slides' large
+   body styles. The two layouts also put `$space.lg` between title and content. The two content layouts set their text in it, and the docs steer bullets
+   to it.
+2. **Format v2:** themes live inside each deck, so a deck from before has no `lead`. The
+   v1→v2 migration (the first) adds it, derived from that deck's own `body` the same way,
+   so a theme with its own fonts keeps them; a theme that already has one keeps it.
+   **Why a migration, not a lookup fallback:** `theme.text` is read directly (theme CSS,
+   the style picker, the theme dialog, the theme docs); filling it once at load keeps every
+   reader simple, and an older Veloce refusing a v2 file is right, since it would show
+   `$text.lead` as missing. The migration's logic is its own, not core's, so it never
+   changes after release. Fixture: `packages/format/src/__tests__/fixtures/v1-*.json`.
+3. **Empty space in a content area:** a short list at the top of a frame that fills the
+   slide under its title is the usual slide (PowerPoint anchors content to the top), so
+   the hint there waits for 70% empty instead of 40%: one line under a title, not three
+   bullets. Elsewhere it's unchanged.
+4. **A label on many slides:** the sections docs show saving the corner label once with
+   save_component and adding `{ "use": "Section label" }` to each slide; with D97 §8's
+   routing it lands on the slide, even on a layout with no slot.
+5. **From the agent retest of this:** a copy inserted without an ID is named after its
+   component (`section-label`, `section-label-2`), not `nd_…`, so lint messages and Layers
+   read like the deck (slide layouts keep the slide's prefix); a frame written with
+   `"type": "frame"` gets a hint saying frames have no `type`; and the summary says
+   `Footer: none.` when there's none, so a removed footer isn't mistaken for a hidden line.
+   The summary's `[no section: slides 1–3]` says how far the slides before the first section
+   run, and the sections docs say how to rename one.

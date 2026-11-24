@@ -5,7 +5,8 @@
  * with the same name wins: saving a slide as "Title" restyles that deck's title slides.
  *
  * Title and Section header slides leave the deck's footer off (D97), as title slides do in
- * PowerPoint.
+ * PowerPoint, and their titles are fields until a param replaces them: the deck's title and
+ * the section's name, live.
  *
  * Template IDs are short words (`title`, `content`): a slide `s3` made from one gets
  * `s3-title`, `s3-content`.
@@ -14,9 +15,20 @@ import { element, frame } from "./builders.js";
 import type { Component } from "./schema/component.js";
 import type { Deck } from "./schema/deck.js";
 import type { Layout } from "./schema/node.js";
+import type { FieldName, TextContent } from "./schema/rich-text.js";
 
-const text = (id: string, content: string, style: string, extra: Record<string, unknown> = {}) =>
-  element("text", { content, style: `$text.${style}`, ...extra }, { id, name: label(id) });
+const text = (
+  id: string,
+  content: TextContent,
+  style: string,
+  extra: Record<string, unknown> = {},
+) => element("text", { content, style: `$text.${style}`, ...extra }, { id, name: label(id) });
+
+/**
+ * A field as a layout's placeholder (D97): it shows the live value until a param replaces
+ * it, so a title slide follows the deck's renames. `shown` is its stored text.
+ */
+const live = (field: FieldName, shown: string): TextContent => [{ runs: [{ text: shown, field }] }];
 
 /** "subtitle" → "Subtitle": layer names people see in Layers. */
 const label = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
@@ -39,14 +51,14 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
   Title: {
     description: "Opening slide: a big title and a subtitle, centered",
     params: {
-      title: target("title", "The deck's title"),
+      title: target("title", "Leave out to show the deck's title live (it follows renames)"),
       subtitle: target("subtitle", "One line under it"),
     },
     node: frame({
       id: "root",
       layout: column({ align: "center", gap: "$space.sm" }),
       children: [
-        text("title", "Title", "display", { align: "center" }),
+        text("title", live("deckTitle", "Title"), "display", { align: "center" }),
         text("subtitle", "Subtitle", "h3", { align: "center", color: "$color.muted" }),
       ],
     }),
@@ -60,7 +72,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
     },
     node: frame({
       id: "root",
-      layout: column({ justify: "start" }),
+      layout: column({ justify: "start", gap: "$space.lg" }),
       children: [
         text("title", "Title", "h1"),
         frame({
@@ -68,7 +80,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
           name: "Content",
           height: "fill",
           layout: { mode: "stack", gap: "$space.md" },
-          children: [text("body", "Content", "body")],
+          children: [text("body", "Content", "lead")],
         }),
       ],
     }),
@@ -84,7 +96,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
     },
     node: frame({
       id: "root",
-      layout: column({ justify: "start" }),
+      layout: column({ justify: "start", gap: "$space.lg" }),
       children: [
         text("title", "Title", "h1"),
         frame({
@@ -92,7 +104,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
           name: "Columns",
           height: "fill",
           layout: { mode: "grid", columns: 2, gap: "$space.lg" },
-          children: [text("left", "Left column", "body"), text("right", "Right column", "body")],
+          children: [text("left", "Left column", "lead"), text("right", "Right column", "lead")],
         }),
       ],
     }),
@@ -101,14 +113,17 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
   "Section header": {
     description: "Opens a part of the talk: a section title on the primary color",
     params: {
-      title: target("title", "The section's name"),
+      title: target(
+        "title",
+        'Leave out to show the section\'s name live: start the section here with "section"',
+      ),
       subtitle: target("subtitle", "One line about it"),
     },
     node: frame({
       id: "root",
       layout: column({ gap: "$space.sm" }),
       children: [
-        text("title", "Section", "h1", { color: "$color.on-primary" }),
+        text("title", live("section", "Section"), "h1", { color: "$color.on-primary" }),
         text("subtitle", "What this part covers", "h3", { color: "$color.on-primary" }),
       ],
     }),
@@ -133,7 +148,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
   Quote: {
     description: "A quote and who said it",
     params: {
-      quote: target("quote", "The words, without quote marks"),
+      quote: target("quote", "The words, with the quote marks you want: “…”"),
       author: target("author", "Who said it"),
     },
     node: frame({

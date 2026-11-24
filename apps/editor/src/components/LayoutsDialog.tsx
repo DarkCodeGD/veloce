@@ -9,6 +9,7 @@ import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { run } from "../actions.js";
 import { slidePosition } from "../commands/context.js";
+import { openSectionDialog } from "../dialogs.js";
 import { commandContext } from "../editor-commands.js";
 import {
   LAYOUT_PREVIEW_ID,
@@ -18,6 +19,27 @@ import {
 } from "../model/components.js";
 import { Dialog } from "./Dialog.js";
 import { SlideCanvas } from "./SlideCanvas.js";
+
+/**
+ * Add a slide from layout `name` after the one on screen and go there (this dialog and the
+ * command palette). A Section header's title is the section's name (D97), so the Add section
+ * dialog opens next for it; Cancel leaves the slide in the section it landed in.
+ */
+export async function newSlideFromLayout(name: string): Promise<boolean> {
+  const c = commandContext();
+  if (!c.deck) return false;
+  const at = slidePosition(c);
+  const command = newSlideFromLayoutCommand(
+    c.deck,
+    name,
+    at === -1 ? c.deck.slides.length - 1 : at,
+  );
+  if (!command || !(await run(command))) return false;
+  const id = command.select?.[0] ?? "";
+  c.goToSlide(id);
+  if (command.nameSection) openSectionDialog({ slideId: id, rename: false });
+  return true;
+}
 
 export function LayoutsDialog({
   deck,
@@ -30,14 +52,10 @@ export function LayoutsDialog({
 }) {
   const layouts = slideLayouts(deck);
 
-  const add = async (name: string) => {
-    const c = commandContext();
-    const at = slidePosition(c);
-    const command = newSlideFromLayoutCommand(deck, name, at === -1 ? deck.slides.length - 1 : at);
-    if (command && (await run(command))) {
-      onClose();
-      c.goToSlide(command.select?.[0] ?? "");
-    }
+  // Close first: the section dialog may open next, and only one dialog shows at a time.
+  const add = (name: string) => {
+    onClose();
+    void newSlideFromLayout(name);
   };
 
   return (
@@ -64,7 +82,7 @@ export function LayoutsDialog({
             builtin={builtin}
             deck={deck}
             deckId={deckId}
-            onPick={() => void add(name)}
+            onPick={() => add(name)}
           />
         ))}
       </ul>

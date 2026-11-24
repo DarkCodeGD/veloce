@@ -12,6 +12,7 @@ import {
   type Slide,
   type SlideMeasurement,
   slideLayouts,
+  type TextContent,
   TextContentSchema,
   toPlainText,
 } from "@veloce/core";
@@ -38,15 +39,19 @@ export function deckSummary(deck: Deck): string {
     `Slide layouts: ${layouts.join(", ")}. Start a slide with { "use": name, "with": { … } } in upsert_slide.`,
   );
   const footer = footerLine(deck.footer);
-  if (footer) lines.push(footer);
+  // Said either way (3 tokens): "none" tells a removed footer from one left out of the outline.
+  lines.push(footer ?? "Footer: none.");
   if (deck.slides.length === 0) lines.push("(no slides yet: add some with upsert_slide)");
+  // Slides before the first section are in none (D97): say so once, with how far that runs.
+  const firstSection = deck.slides.findIndex((s) => s.section !== undefined);
   deck.slides.forEach((slide, i) => {
-    lines.push("", slideOutline(slide, i));
+    const noSection = i === 0 && firstSection > 0 ? firstSection : 0;
+    lines.push("", slideOutline(slide, i, { noSection, footer: footer !== null }));
   });
   return lines.join("\n");
 }
 
-/** What the footer shows (D97), or null without one (get_docs teaches deck.setFooter). */
+/** What the footer shows (D97), or null without one. */
 function footerLine(footer: Deck["footer"]): string | null {
   const parts = [
     footer?.date && "date",
@@ -74,8 +79,8 @@ function metaLines(meta: Deck["meta"]): string[] {
 }
 
 /** One slide: its header line, then its node tree. */
-export function slideOutline(slide: Slide, index: number): string {
-  const lines = [slideHeader(slide, index)];
+export function slideOutline(slide: Slide, index: number, marks: HeaderMarks = {}): string {
+  const lines = [slideHeader(slide, index, marks)];
   for (const child of slide.root.children) outline(child, slide.root.layout, 1, lines);
   return lines.join("\n");
 }
@@ -98,16 +103,32 @@ export function componentOutline(name: string, component: Component, note?: stri
   return lines.join("\n");
 }
 
-export function slideHeader(slide: Slide, index: number): string {
+export interface HeaderMarks {
+  /** How many slides before the first section start here: `[no section: slides 1–3]`. */
+  noSection?: number;
+  /** The deck has a footer: say which slides leave it off. Default true. */
+  footer?: boolean;
+}
+
+export function slideHeader(
+  slide: Slide,
+  index: number,
+  { noSection = 0, footer = true }: HeaderMarks = {},
+): string {
   const name = slide.name ? ` "${slide.name}"` : "";
   const flags = [
     slide.hidden && "hidden",
     slide.notes && "has notes",
-    slide.hideFooter && "no footer",
+    footer && slide.hideFooter && "no footer",
   ]
     .filter(Boolean)
     .join(", ");
-  const section = slide.section !== undefined ? `[section "${slide.section}"] ` : "";
+  const section =
+    slide.section !== undefined
+      ? `[section "${slide.section}"] `
+      : noSection
+        ? `[no section: ${noSection === 1 ? "slide 1" : `slides 1–${noSection}`}] `
+        : "";
   return `${section}${index + 1}. slide ${slide.id}${name} · root frame ${slide.root.id} (${layoutLabel(slide.root)})${flags ? ` · ${flags}` : ""}`;
 }
 
@@ -141,7 +162,7 @@ function outline(node: Node, parent: Layout, depth: number, lines: string[]): vo
   const text = TextContentSchema.safeParse(node.props.content);
   const style = typeof node.props.style === "string" ? ` ${node.props.style}` : "";
   const detail = text.success
-    ? ` "${snippet(toPlainText(text.data))}"${style}`
+    ? ` "${snippet(outlineText(text.data).replace(/\s*\n\s*/g, " / "))}"${style}`
     : typeof node.props.shape === "string"
       ? ` ${node.props.shape}`
       : typeof node.props.alt === "string"
@@ -155,6 +176,17 @@ function layoutLabel(node: Extract<Node, { kind: "frame" }>): string {
   if (l.mode === "stack") return `stack ${l.direction ?? "column"}`;
   if (l.mode === "grid") return `grid ${l.columns} cols`;
   return "absolute";
+}
+
+/** Text as agents read it in outlines: a field run as `{slideNumber}` (D97), not its stored text. */
+function outlineText(content: TextContent): string {
+  if (typeof content === "string") return content;
+  return toPlainText(
+    content.map((p) => ({
+      ...p,
+      runs: p.runs.map((r) => (r.field ? { text: `{${r.field}}` } : r)),
+    })),
+  );
 }
 
 function snippet(text: string): string {

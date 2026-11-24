@@ -34,6 +34,7 @@ export const RULE_NAMES: Record<LintRule, string> = {
   "empty-space": "Unbalanced layout",
   "ignored-position": "Position has no effect",
   "ignored-padding": "Padding has no effect",
+  "section-field": "Section name shows wrong",
 };
 
 /**
