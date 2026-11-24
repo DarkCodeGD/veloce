@@ -2,7 +2,7 @@
  * SlideView = StageView + SlideRenderer: "show this slide of this deck in that box".
  * What the editor uses for its main canvas and its slide thumbnails.
  */
-import type { Deck, SlideMeasurement } from "@veloce/core";
+import type { Deck, MotionState, SlideMeasurement } from "@veloce/core";
 import { SlideRenderer, type SlideRendererOptions } from "./slide-renderer.js";
 import { type Camera, StageView, type StageViewOptions } from "./stage.js";
 
@@ -50,6 +50,11 @@ export class SlideView {
 
   seek(time: number): void {
     this.#renderer.seek(time);
+  }
+
+  /** Draw layers away from their rest position (see `SlideRenderer.setMotion`). */
+  setMotion(motion: ReadonlyMap<string, MotionState>): void {
+    this.#renderer.setMotion(motion);
   }
 
   ready(): Promise<void> {

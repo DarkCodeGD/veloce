@@ -18,8 +18,10 @@ import {
   type FrameNode,
   isFreeLayer,
   type Layout,
+  type MotionState,
   type Node,
   type Padding,
+  resolveMotion,
   type Sizing,
   type Space,
 } from "@veloce/core";
@@ -112,66 +114,114 @@ export function frameStyleCss(node: FrameNode, assetUrl: AssetUrlResolver): CssR
 /**
  * Size and placement of a node inside its parent. `parent` is the parent frame's layout,
  * or `null` for a slide's root frame (which always fills the stage).
+ *
+ * `motion` draws the node away from that rest position (D83 §5, D103): it only changes the
+ * node's `transform`, `opacity` and `filter` (see `drawnCss`), never its layout.
  */
 export function nodeBoxCss(
   node: Node,
   parent: Layout | null,
   size: { width: ResolvedSizing; height: ResolvedSizing },
+  motion?: MotionState,
 ): CssRecord {
   const css: CssRecord = { "box-sizing": "border-box", "min-width": "0", "min-height": "0" };
   if (node.hidden) css.display = "none";
-  if (node.opacity !== undefined && node.opacity < 1) css.opacity = String(node.opacity);
-  if (node.rotation) css.transform = `rotate(${node.rotation}deg)`;
+  /** A centred anchor's shift back by half the box's own size, if any. */
+  let shift: string | null = null;
 
   if (parent === null) {
-    return { ...css, position: "absolute", left: "0", top: "0", width: "100%", height: "100%" };
-  }
-  css.position = "relative";
-
-  // Free layers (every child of an absolute frame, `positioning: "free"` ones in stacks and
-  // grids) sit at their own position. Absolutely positioned children don't take part in
-  // flexbox or grid placement, so the flow closes up around them.
-  // Measured from the frame's edges, not its padding (which only spaces the flow), with
-  // `anchor` picking the edge on each axis (core's anchor.ts): start → left/top,
-  // end → right/bottom (inward), center → from the frame's middle.
-  if (isFreeLayer(node, parent)) {
+    Object.assign(css, {
+      position: "absolute",
+      left: "0",
+      top: "0",
+      width: "100%",
+      height: "100%",
+    });
+  } else if (isFreeLayer(node, parent)) {
+    // Free layers (every child of an absolute frame, `positioning: "free"` ones in stacks and
+    // grids) sit at their own position. Absolutely positioned children don't take part in
+    // flexbox or grid placement, so the flow closes up around them.
+    // Measured from the frame's edges, not its padding (which only spaces the flow), with
+    // `anchor` picking the edge on each axis (core's anchor.ts): start → left/top,
+    // end → right/bottom (inward), center → from the frame's middle.
     const x = node.position?.x ?? 0;
     const y = node.position?.y ?? 0;
     css.position = "absolute";
     const h = anchorCss(node.anchor?.x ?? "start", x, ["left", "right"]);
     const v = anchorCss(node.anchor?.y ?? "start", y, ["top", "bottom"]);
     Object.assign(css, h.css, v.css);
-    // Centring shifts the box back by half its own size; that composes with its rotation
-    // (the translate applies in the frame's axes, the rotation about the box's centre).
     if (h.center || v.center) {
-      const shift = `translate(${h.center ? "-50%" : "0"}, ${v.center ? "-50%" : "0"})`;
-      css.transform = css.transform ? `${shift} ${css.transform}` : shift;
+      shift = `translate(${h.center ? "-50%" : "0"}, ${v.center ? "-50%" : "0"})`;
     }
     css.width = absoluteSize(size.width, h.inset, "max-content");
     css.height = absoluteSize(size.height, v.inset, "auto");
-    return css;
-  }
-
-  switch (parent.mode) {
-    case "stack": {
-      const row = (parent.direction ?? "column") === "row";
-      const [main, cross] = row ? (["width", "height"] as const) : (["height", "width"] as const);
-      const align = parent.align ?? "stretch";
-      Object.assign(css, mainAxis(main, size[main]), crossAxis(cross, size[cross], align));
-      // Main-axis "auto"/"hug" items may still shrink to fit (down to their min-content size).
-      if (size[main] === "hug" || size[main] === "auto") css[`min-${main}`] = "auto";
-      return css;
+  } else {
+    css.position = "relative";
+    switch (parent.mode) {
+      case "stack": {
+        const row = (parent.direction ?? "column") === "row";
+        const [main, cross] = row ? (["width", "height"] as const) : (["height", "width"] as const);
+        const align = parent.align ?? "stretch";
+        Object.assign(css, mainAxis(main, size[main]), crossAxis(cross, size[cross], align));
+        // Main-axis "auto"/"hug" items may still shrink to fit (down to their min-content size).
+        if (size[main] === "hug" || size[main] === "auto") css[`min-${main}`] = "auto";
+        break;
+      }
+      case "grid":
+        Object.assign(
+          css,
+          gridAxis("width", size.width, parent.justify ?? "stretch"),
+          gridAxis("height", size.height, parent.align ?? "stretch"),
+        );
+        break;
+      case "absolute":
+        break; // unreachable: every child of an absolute frame is free (handled above)
     }
-    case "grid":
-      Object.assign(
-        css,
-        gridAxis("width", size.width, parent.justify ?? "stretch"),
-        gridAxis("height", size.height, parent.align ?? "stretch"),
-      );
-      return css;
-    case "absolute":
-      return css; // unreachable: every child of an absolute frame is free (handled above)
   }
+  return Object.assign(css, drawnCss(node, shift, motion));
+}
+
+/** The properties motion may change (`SlideRenderer.setMotion` rewrites only these). */
+export const MOTION_PROPERTIES = ["transform", "opacity", "filter"] as const;
+
+/**
+ * How a node is drawn on top of its layout: its rotation, a centred anchor's `shift`, its
+ * opacity, and its motion. Only properties that aren't at their default are returned, so a
+ * node at rest gets exactly the CSS it had before motion existed.
+ *
+ * The transform reads right to left (the rightmost function applies first, all about the
+ * box's centre): scale and the 3D flips act along the layer's own axes, then its rotation
+ * (its own plus the motion's), then the motion's move along the frame's axes, then the
+ * anchor's shift, a plain translate. So a rotated sticker moves where you'd expect, scales
+ * along its own edges and stays centred on its anchor, the order motion tools use.
+ */
+export function drawnCss(node: Node, shift: string | null, motion?: MotionState): CssRecord {
+  const m = resolveMotion(motion);
+  const css: CssRecord = {};
+  const parts: string[] = [];
+  if (shift) parts.push(shift);
+  if (m.z !== 0) parts.push(`translate3d(${num(m.x)}px, ${num(m.y)}px, ${num(m.z)}px)`);
+  else if (m.x !== 0 || m.y !== 0) parts.push(`translate(${num(m.x)}px, ${num(m.y)}px)`);
+  // Values from the document alone stay exact (a node at rest gets the CSS it always had).
+  const rotation = (node.rotation ?? 0) + m.rotate;
+  if (rotation !== 0) parts.push(`rotate(${m.rotate === 0 ? rotation : num(rotation)}deg)`);
+  if (m.rotateY !== 0) parts.push(`rotateY(${num(m.rotateY)}deg)`);
+  if (m.rotateX !== 0) parts.push(`rotateX(${num(m.rotateX)}deg)`);
+  const sx = m.scale * m.scaleX;
+  const sy = m.scale * m.scaleY;
+  if (sx !== 1 || sy !== 1)
+    parts.push(sx === sy ? `scale(${num(sx)})` : `scale(${num(sx)}, ${num(sy)})`);
+  if (parts.length > 0) css.transform = parts.join(" ");
+
+  const opacity = (node.opacity ?? 1) * m.opacity;
+  if (opacity < 1) css.opacity = m.opacity === 1 ? String(opacity) : num(opacity);
+  if (m.blur > 0) css.filter = `blur(${num(m.blur)}px)`;
+  return css;
+}
+
+/** A number for CSS: at most 4 decimals, so strings stay short and stable across frames. */
+function num(value: number): string {
+  return String(Math.round(value * 10_000) / 10_000);
 }
 
 /** One axis of a free layer's placement for its anchor edge. */

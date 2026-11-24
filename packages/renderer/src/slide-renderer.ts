@@ -14,6 +14,11 @@
  * moved, the deck was renamed), so every render compares them and re-draws the elements that
  * use fields. The deck's footer is drawn over the slide from core's `footerNode`, through the
  * same code as the slide's own nodes, and is click-through: it isn't a layer.
+ *
+ * Motion (D83 §5, D103): `setMotion` draws layers away from their rest position (move,
+ * turn, scale, fade, blur) without touching layout. The renderer is the only writer of a
+ * layer's `transform`, `opacity` and `filter`: it combines the motion with the layer's own
+ * rotation, anchor and opacity, and keeps it when an edit restyles the layer mid-playback.
  */
 import {
   type Deck,
@@ -25,11 +30,14 @@ import {
   footerNode,
   hasFieldRuns,
   isFooterId,
+  isRestMotion,
   type Layout,
+  type MotionState,
   type Node,
   type Slide,
   type SlideMeasurement,
   sameFieldValues,
+  sameMotion,
   walkNodes,
 } from "@veloce/core";
 import type { ElementContext, ElementInstance, PluginRegistry } from "@veloce/plugin-api";
@@ -38,6 +46,7 @@ import {
   applyCss,
   frameLayoutCss,
   frameStyleCss,
+  MOTION_PROPERTIES,
   nodeBoxCss,
   type ResolvedSizing,
 } from "./layout.js";
@@ -69,6 +78,8 @@ export class SlideRenderer {
   readonly #options: SlideRendererOptions;
   readonly #ctx: ElementContext;
   readonly #mounted = new Map<string, Mounted>();
+  /** Layers drawn away from their rest position, by node ID (only ones not at rest). */
+  #motion = new Map<string, MotionState>();
   #slide: Slide | null = null;
   #theme: Deck["theme"] | null = null;
   #fields: FieldValues | null = null;
@@ -168,6 +179,25 @@ export class SlideRenderer {
     }
   }
 
+  /**
+   * Draw layers away from their rest position: `motion` maps node IDs to their motion now;
+   * every layer not in it is drawn at rest. Replaces the previous call's motion, so the clock
+   * passes everything that moves on each frame. Only layers whose motion changed are
+   * touched, and only their `transform`, `opacity` and `filter`: no layout, no plugin calls.
+   * IDs not on this slide are kept, so a layer an edit adds later starts where it should.
+   */
+  setMotion(motion: ReadonlyMap<string, MotionState>): void {
+    const previous = this.#motion;
+    const next = new Map<string, MotionState>();
+    for (const [id, state] of motion) if (!isRestMotion(state)) next.set(id, state);
+    this.#motion = next;
+    for (const [id, m] of this.#mounted) {
+      const before = previous.get(id);
+      const after = next.get(id);
+      if (!sameMotion(before, after)) this.#applyMotion(m, after);
+    }
+  }
+
   /** Resolves when fonts and images on the stage have loaded, so measurements are final. */
   async ready(): Promise<void> {
     const doc = this.#stage.ownerDocument;
@@ -176,7 +206,10 @@ export class SlideRenderer {
     await Promise.all(images.map((img) => (img.complete ? null : img.decode().catch(() => {}))));
   }
 
-  /** Bounds, overflow and text colors of every visible node (needs a real browser layout). */
+  /**
+   * Bounds, overflow and text colors of every visible node (needs a real browser layout).
+   * Bounds are where layers are drawn, motion included: clear it first for the rest layout.
+   */
   measure(): SlideMeasurement | null {
     if (!this.#slide) return null;
     const els = new Map<string, HTMLElement>();
@@ -194,6 +227,7 @@ export class SlideRenderer {
 
   #clear(): void {
     for (const [id, mounted] of this.#mounted) this.#disposeOne(id, mounted);
+    this.#motion = new Map();
     this.#slide = null;
     this.#footer = null;
     this.#footerFrom = { footer: undefined, slide: null };
@@ -252,7 +286,7 @@ export class SlideRenderer {
 
   #style(m: Mounted, node: Node, parentLayout: Layout | null): void {
     const size = this.#sizeOf(node);
-    const css = nodeBoxCss(node, parentLayout, size);
+    const css = nodeBoxCss(node, parentLayout, size, this.#motion.get(node.id));
     if (node.kind === "frame") {
       Object.assign(css, frameLayoutCss(node.layout), frameStyleCss(node, this.#ctx.assetUrl));
     }
@@ -260,6 +294,16 @@ export class SlideRenderer {
     applyCss(m.el, css);
     m.el.className =
       node.kind === "frame" ? "v-frame" : `v-element v-type-${node.type.replaceAll(".", "-")}`;
+  }
+
+  /** Rewrite only the properties motion changes (a frame's own style never sets them). */
+  #applyMotion(m: Mounted, motion: MotionState | undefined): void {
+    const css = nodeBoxCss(m.node, m.parentLayout, this.#sizeOf(m.node), motion);
+    for (const property of MOTION_PROPERTIES) {
+      const value = css[property];
+      if (value === undefined) m.el.style.removeProperty(property);
+      else m.el.style.setProperty(property, value);
+    }
   }
 
   #sizeOf(node: Node): { width: ResolvedSizing; height: ResolvedSizing } {

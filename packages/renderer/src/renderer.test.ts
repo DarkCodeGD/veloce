@@ -487,3 +487,142 @@ describe("fields and the footer (D97)", () => {
     renderer.dispose();
   });
 });
+
+describe("motion: drawn on top of the rest position (D83 §5, D103)", () => {
+  const size = { width: 200, height: 100 } as const;
+  const stack = { mode: "stack" as const };
+
+  it("leaves a node at rest with exactly the CSS it had before motion existed", () => {
+    const centred = element(
+      "text",
+      {},
+      {
+        id: "c",
+        rotation: 12.345678,
+        opacity: 1 / 3,
+        positioning: "free",
+        anchor: { x: "center", y: "center" },
+        position: { x: 0, y: 0 },
+      },
+    );
+    const css = nodeBoxCss(centred, stack, size);
+    expect(css.transform).toBe("translate(-50%, -50%) rotate(12.345678deg)");
+    expect(css.opacity).toBe(String(1 / 3)); // document values stay exact
+    expect(css.filter).toBeUndefined();
+    expect(nodeBoxCss(centred, stack, size, {})).toEqual(css);
+    expect(nodeBoxCss(centred, stack, size, { x: 0, scale: 1, opacity: 1 })).toEqual(css);
+    expect(nodeBoxCss(element("text", {}, { id: "p" }), stack, size).transform).toBeUndefined();
+  });
+
+  it("orders the transform: anchor shift, move, rotation, own-axis flips, scale", () => {
+    const sticker = element(
+      "text",
+      {},
+      {
+        id: "s",
+        rotation: 30,
+        positioning: "free",
+        anchor: { x: "center" },
+        position: { x: 0, y: 0 },
+      },
+    );
+    const css = nodeBoxCss(sticker, stack, size, {
+      x: 40,
+      y: -10,
+      rotate: 15,
+      rotateX: 20,
+      rotateY: 45,
+      scale: 2,
+      scaleY: 0.5,
+    });
+    expect(css.transform).toBe(
+      "translate(-50%, 0) translate(40px, -10px) rotate(45deg) rotateY(45deg) rotateX(20deg) scale(2, 1)",
+    );
+    expect(nodeBoxCss(sticker, stack, size, { z: 30 }).transform).toBe(
+      "translate(-50%, 0) translate3d(0px, 0px, 30px) rotate(30deg)",
+    );
+    expect(nodeBoxCss(sticker, stack, size, { scale: 1.5 }).transform).toBe(
+      "translate(-50%, 0) rotate(30deg) scale(1.5)",
+    );
+  });
+
+  it("multiplies opacity, adds blur, and rounds animated values for short, stable strings", () => {
+    const faded = element("text", {}, { id: "f", opacity: 0.5 });
+    expect(nodeBoxCss(faded, stack, size, { opacity: 0.5 }).opacity).toBe("0.25");
+    expect(nodeBoxCss(faded, stack, size, { blur: 8 }).filter).toBe("blur(8px)");
+    expect(nodeBoxCss(faded, stack, size, { x: 1 / 3 }).transform).toBe("translate(0.3333px, 0px)");
+    // A hidden node stays hidden whatever its motion.
+    const hidden = element("text", {}, { id: "h", hidden: true });
+    expect(nodeBoxCss(hidden, stack, size, { opacity: 1, x: 5 }).display).toBe("none");
+  });
+
+  it("draws motion on the layers given, leaves the rest alone, and restores rest exactly", () => {
+    const stage = document.createElement("div");
+    const renderer = new SlideRenderer(stage, { registry: registry(), assetUrl: () => "" });
+    renderer.render(deck(), "one");
+    const a = byId(stage, "a");
+    const title = byId(stage, "title");
+    const restA = a?.style.cssText;
+    const restTitle = title?.style.cssText;
+    calls.length = 0;
+
+    renderer.setMotion(new Map([["a", { y: 24, opacity: 0.5, blur: 4 }]]));
+    expect(a?.style.transform).toBe("translate(0px, 24px)");
+    expect(a?.style.opacity).toBe("0.5");
+    expect(a?.style.filter).toBe("blur(4px)");
+    expect(title?.style.cssText).toBe(restTitle);
+    expect(calls).toEqual([]); // no plugin calls: motion never re-renders elements
+
+    renderer.setMotion(new Map());
+    expect(a?.style.cssText).toBe(restA);
+    renderer.dispose();
+  });
+
+  it("keeps a layer's motion when an edit restyles it mid-playback", () => {
+    const stage = document.createElement("div");
+    const renderer = new SlideRenderer(stage, { registry: registry(), assetUrl: () => "" });
+    let d = deck();
+    renderer.render(d, "one");
+    renderer.setMotion(new Map([["b", { x: 100, rotate: 10 }]]));
+
+    // The edit restyles "b" (applyCss clears the element's inline style first).
+    d = edit(d, [{ op: "node.update", id: "b", set: { rotation: 5, opacity: 0.8 } }]);
+    renderer.render(d, "one");
+    const b = byId(stage, "b");
+    expect(b?.style.transform).toBe("translate(100px, 0px) rotate(15deg)");
+    expect(b?.style.opacity).toBe("0.8");
+
+    // A layer an edit adds starts with the motion the clock already gave it.
+    renderer.setMotion(new Map([["late", { x: 7 }]]));
+    d = edit(d, [
+      {
+        op: "node.insert",
+        parentId: "row",
+        node: element("probe", { label: "late" }, { id: "late" }),
+      },
+    ]);
+    renderer.render(d, "one");
+    expect(byId(stage, "late")?.style.transform).toBe("translate(7px, 0px)");
+    renderer.dispose();
+  });
+
+  it("only touches layers whose motion changed", () => {
+    const stage = document.createElement("div");
+    const view = new SlideView(stage, { registry: registry(), assetUrl: () => "" });
+    view.render(deck(), "one");
+    view.setMotion(new Map([["a", { x: 10 }]]));
+    const a = byId(stage, "a");
+    let writes = 0;
+    const style = a?.style as CSSStyleDeclaration;
+    const setProperty = style.setProperty.bind(style);
+    style.setProperty = (...args: Parameters<CSSStyleDeclaration["setProperty"]>) => {
+      writes++;
+      setProperty(...args);
+    };
+    view.setMotion(new Map([["a", { x: 10, y: 0 }]])); // draws the same: no writes
+    expect(writes).toBe(0);
+    view.setMotion(new Map([["a", { x: 11 }]]));
+    expect(writes).toBeGreaterThan(0);
+    view.dispose();
+  });
+});
