@@ -14,7 +14,7 @@ interface Host {
 /**
  * The settings file: $VELOCE_SETTINGS if set, else the platform's usual place for app
  * settings: %APPDATA%\Veloce on Windows, ~/Library/Application Support/Veloce on macOS,
- * $XDG_CONFIG_HOME/veloce (default ~/.config/veloce) elsewhere. Electron (Phase 6) uses the
+ * $XDG_CONFIG_HOME/veloce (default ~/.config/veloce) elsewhere. Electron (Phase 7) uses the
  * same folders, so both share one file.
  */
 export function settingsFile({ platform, env, home }: Host): string {

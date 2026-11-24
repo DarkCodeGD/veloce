@@ -34,7 +34,7 @@ Plugins add element types, effects, transitions, themes and importers/exporters,
 tween engines. **Why:** GSAP/anime.js/Framer Motion overlap ~90%; several engines confuse the AI,
 fight over the timeline and break seeking/export. Animations are stored as intent (`fadeUp 400ms`),
 and GSAP is just the default driver behind an `AnimationDriver` interface. (The driver is
-Motion since D100.)
+Motion since D100; since D105 the timeline is our own, in core, and libraries only draw.)
 Kept: Lottie and Rive (they play designer-made assets, a different job), Three.js, charts, code, math.
 Dropped: anime.js. Optional: Matter.js only with deterministic stepping or pre-baking.
 
@@ -333,7 +333,7 @@ Claude Code built a 5-slide deck and reported five hiccups. Each one now has a r
    (farthest-corner), glows were cut off with a hard edge. `closest-side` was rejected because it
    collapses to nothing when the center is on a corner. This changes how existing radial fills
    render, which is acceptable before the file format is frozen.
-4. **No icon glyphs until the `icon` plugin lands (Phase 5).** The design docs tell agents not to
+4. **No icon glyphs until the `icon` plugin lands (Phase 6).** The design docs tell agents not to
    use symbol characters as icons. **Why:** the bundled fonts cover text only, so symbols fall
    back to a mismatched system font. Bundling symbol fonts would be the wrong fix; icons should
    be vector elements.
@@ -889,7 +889,7 @@ Preferences. Figma's **easy panels**, with the important options always in reach
 5. **Preferences are app settings, not document content.** They're stored in a user settings
    file owned by the server, outside `.veloce` files and outside ops. Deck-level settings
    (stage size, theme) stay in the deck. GPU choice is a launch switch, so it arrives with
-   Electron (Phase 6) and needs a restart.
+   Electron (Phase 7) and needs a restart.
 6. **The app shell comes before Motion** (Phase 3, round 5). **Why:** Phase 4 then lands as
    the Animate and Present workspaces instead of being squeezed into today's screen and
    rebuilt later.
@@ -1066,7 +1066,7 @@ it was intended, so the final lint run never came back clean.
 3. **This also applies to Free (absolute) frames.** Every child there is free, so they never
    report overflow. A fixed-size Free frame is a canvas you place things on, as in Figma,
    where content past a frame is shown unless the frame clips.
-4. **Marking any finding as intentional** is a separate, wider feature (Phase 8), so it isn't
+4. **Marking any finding as intentional** is a separate, wider feature (Phase 9), so it isn't
    bolted onto this rule.
 
 ## D60 — Canvas zoom and pan: a camera on the stage, as view state
@@ -1370,7 +1370,7 @@ each photo can lose before it shows.
    in tests and dev (Node 22.18+, where stripping is on by default: `engines` says so). The
    `ImageData` stand-in the codecs need is installed only when
    they load, so it lives in the worker and the server's globals stay untouched.
-8. **Packaging (Phase 6):** the Electron build must ship `@jsquash/*`'s `.wasm` files and
+8. **Packaging (Phase 7):** the Electron build must ship `@jsquash/*`'s `.wasm` files and
    `@veloce/images/dist/worker.js` as real files (unpacked from asar, not bundled into
    one file), because the worker is started from its own URL.
 
@@ -2058,7 +2058,7 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
 5. **Clipboard from the menu:** Cut and Copy run `execCommand`, which fires the same copy
    event the keys do, so layers reach the system clipboard. Browsers never let a page read
    the clipboard from a click, so Paste from the menu shows a toast naming Ctrl+V (Google
-   Docs does the same). The desktop app (Phase 6) can paste from the menu for real.
+   Docs does the same). The desktop app (Phase 7) can paste from the menu for real.
 6. **Narrow windows:** below 1600 px the undo/redo buttons go (the Edit menu and Ctrl+Z
    remain); below 1280 px the menu bar folds into one ☰ menu with each menu's name as a
    heading, scrolling if it's taller than the window. **Why:** at 1440 px (the common
@@ -2114,7 +2114,7 @@ column sat at the column's left: a 200px logo couldn't be centred in its cell.
    don't change it. **Why:** they're how this person works, not the deck (D53 §5); the
    server already owns every file, and Electron will use the same folders.
 2. **No setting ships that does nothing.** The Interface tab (UI scale, light/dark) waits
-   for Phase 6: CSS `zoom` on the page moved every popover (the View menu opened 27 px off
+   for Phase 7: CSS `zoom` on the page moved every popover (the View menu opened 27 px off
    its button at 125 %), while Electron's zoom factor scales everything consistently; and
    there's no light token set yet. A tab with nothing in it would be an empty tab (D53 §3).
 3. **One Zod schema in core** (`SettingsSchema`) serves the file, the sync protocol and the
@@ -2206,7 +2206,7 @@ message is something else, so code and UI say "versions").
 6. **Kept out for now:** agents saving versions (an MCP tool, or a version made
    automatically before an agent's first change of a session), renaming, and comparing
    versions. **Privacy:** a shared file carries its versions, old content included.
-   Delete version clears them; Phase 7 adds "Save a copy without versions", and exports
+   Delete version clears them; Phase 8 adds "Save a copy without versions", and exports
    never include them.
 
 ## D94 — Components: saved subtrees, inserted as plain copies
@@ -2308,8 +2308,8 @@ message is something else, so code and UI say "versions").
    architecture is settled and the project is big (8 packages, 95 decisions); a map pays
    off at once for every session and contributor, and it barely goes stale. CLAUDE.md
    asks that a change that makes it wrong updates it in the same change.
-2. **Before 1.0, not after:** the user guide, plugin developer docs (Phase 8) and the
-   `.veloce` format spec (Phase 9). **Why:** 1.0 is the public launch: it promises
+2. **Before 1.0, not after:** the user guide, plugin developer docs (Phase 9) and the
+   `.veloce` format spec (Phase 10). **Why:** 1.0 is the public launch: it promises
    third-party plugins and a stable file format, and an app people install needs a guide.
    **Why not now:** half the UI (Animate, Present, desktop, export) doesn't exist yet, so
    walkthroughs and screenshots written today would be rewritten before launch.
@@ -2453,14 +2453,15 @@ palette) takes the open deck away; a toast offers **Undo**, as for other destruc
 
 ## D100 — Motion is the animation driver; GSAP isn't shipped
 
-**Status:** Accepted (2026-11-24), at the Phase 3 → 4 gate. Supersedes D14.
+**Status:** Accepted (2026-11-24), at the Phase 3 → 4 gate. Supersedes D14. §1 superseded by
+D105 (our own timeline in core; Motion optional).
 
 1. **Motion** (motion.dev, MIT) is the only `AnimationDriver` Veloce bundles. GSAP isn't
    shipped, not even as an optional plugin. **Why (new information since D14):** GSAP's
    Standard "No Charge" License (Webflow, 2025-04-30) has a "Prohibited Uses" clause: no use
    in tools that let people build visual animations without code in a way that competes with
    Webflow's visual animation builder. Veloce's Animate workspace is a no-code visual
-   animation builder, and Phase 7 exports animated standalone HTML: at best a gray area, and
+   animation builder, and Phase 8 exports animated standalone HTML: at best a gray area, and
    "competing" is the licensor's call. On top of that, the license isn't OSI-approved (no
    GPL forks, no Debian main). Motion has none of these limits.
 2. **Nothing else changes:** decks store animation intent (D5), the driver sits behind
@@ -2564,3 +2565,153 @@ can't silently move a pixel in existing decks.
    deliberate visual change: look at the diffs, run `pnpm test:visual:update`, and commit the
    new screenshots with the change, so the review shows the before and after. Stored
    screenshots of slides that no longer exist fail the test. 14 screenshots are ~0.9 MB.
+
+## D103 — The motion slot: the renderer draws motion on top of the rest position
+
+**Status:** Accepted (2026-11-24). Phase 4's foundation, implementing D83 §5's rule
+"layout is where a layer rests; motion is a transform on top".
+
+1. **`MotionState` in core** (`motion.ts`): offsets from rest (`x`, `y`, `z`, `rotate`,
+   `rotateX`, `rotateY`, `scale`, `scaleX`, `scaleY`, `opacity`, `blur`), all optional.
+   Not document data: the timeline will produce it for a moment on the one clock, and
+   nothing stores it. `resolveMotion` clamps it (opacity 0–1, no negative blur or scale,
+   non-finite values at rest), so a plugin effect or an easing overshoot can't produce
+   invalid CSS or a mirrored layer. It's in core because the clock that produces it will be.
+2. **The renderer is the only writer** of a layer's `transform`, `opacity` and `filter`:
+   `SlideRenderer.setMotion(map)` (and `SlideView.setMotion`) keeps each layer's motion and
+   `nodeBoxCss` composes it with the layer's rotation, anchor shift and opacity
+   (`drawnCss`). **Why:** `applyCss` clears an element's inline style on every restyle, so
+   motion written by anyone else would vanish when an edit lands mid-playback; and the
+   rotation and anchor centering already live in `transform`, so a second writer would
+   overwrite them.
+3. **Composed directly, not through CSS variables.** **Why:** custom properties inherit, so
+   a parent's motion variables would reach every child without its own and move it twice.
+4. **Transform order** (right to left, about the box's centre): scale and the 3D flips act
+   along the layer's own axes, then its rotation (its own plus the motion's), then the move
+   along the frame's axes, then a centred anchor's shift. So a rotated sticker moves where
+   you point, stretches along its own edges and stays centred on its anchor, as in After
+   Effects. Proven by real-Chromium geometry (`tests/integration/phase4-motion.test.ts`),
+   which fails when the order is broken.
+5. **At rest nothing changes:** a layer without motion gets byte-identical CSS (document
+   values are never rounded; animated ones round to 4 decimals for short, stable strings),
+   and the visual regression tests (D102) showed 0 changed pixels.
+6. **Cheap per frame:** `setMotion` replaces the whole map each call (the clock passes
+   everything that moves), touches only layers whose motion changed (compared by value),
+   writes only those three properties, and never calls plugins or re-runs layout. IDs not
+   on the slide are kept, so a layer an edit adds mid-playback starts where it should.
+   `measure()` reports where layers are drawn, motion included: lint measures at rest.
+   No `will-change` yet: promoting every animated layer to its own GPU layer costs memory;
+   decide with the Phase 10 performance budget, measured.
+7. **What it means for the rest of Phase 4:** FLIP layout animations need the clock and the
+   timeline (they animate between two layouts), so they move after them. 2.5D needs new
+   document fields (perspective on frames), so it lands with the other schema changes.
+   The morph match key, the timeline, 2.5D, the motion level and `$motion` tokens (D104)
+   ship together as **one** format version (v3), one migration and one "this file needs a
+   newer Veloce" step for users, not several.
+
+## D104 — Motion levels, motion tokens and choreography: animation-heavy without lag
+
+**Status:** Accepted (2026-11-24). The user's product direction: Veloce is animation-heavy
+and unique in it, not a copy of other apps, and never lags the device. The user (or an
+agent, on the user's word) chooses between a simple deck with simple animations and a
+heavy deck with an absurd amount of them.
+
+1. **A motion level, set by the user or an agent:** `calm`, `subtle`, `lively`, `intense`,
+   `absurd`, on the deck, with per-slide overrides (a wild intro, calm data slides).
+   Stored in the deck (format v3), so every agent and person sees the same setting
+   (golden rule 1), and set from the New deck dialog, the Animate workspace and MCP.
+   **Why a level, not a list of effects:** "make it calm" or "go absurd" is how people
+   describe motion, and one setting keeps a whole deck coherent.
+2. **`$motion` tokens in themes,** next to `$color`, `$text` and `$space`: easing family,
+   durations, stagger rhythm and signature transitions. A theme gives a deck a motion
+   personality; the level scales it. **Why:** it's what makes Veloce's motion its own, and
+   it fits the structured model (agents pick tokens, not milliseconds).
+3. **Choreography from intent:** a rule-based engine turns an intent ("reveal the points one
+   by one, punch the number") into ordinary animations, from each layer's role (title,
+   body, number, visual), reading order, the slide's level and the theme's tokens. MCP
+   exposes it (few tools, high leverage: a tiny payload buys a whole sequence), and the
+   editor's "Animate this slide" calls the same engine with no AI key. Its output is
+   plain, editable animations. **Why:** parity (golden rule 1) and the unique part no
+   other tool has.
+4. **No lag, by design and by measurement:**
+   - Layers animate only through the motion slot (D103): transform and opacity, which the
+     browser composites cheaply; layout never runs per frame.
+   - **A performance test comes first in Phase 4:** 300+ animated layers, with blur, on a
+     modest machine, played by main-thread `setMotion` and by the browser's compositor (Web
+     Animations API, which can also seek). The numbers decide how presenting plays; seeking
+     for scrubbing and export stays frame-exact either way.
+   - **Performance lint:** the render worker measures frame times, and agents and people
+     get "this slide will drop frames: 40 blurred layers" with a fix, so "absurd" stays
+     smooth by rule, not by luck.
+   - **Reduce motion:** a viewer whose OS asks for less motion gets the deck's calm
+     version, in presenter mode and the HTML export.
+5. **Taste still matters:** the design docs and lint keep `calm` to `lively` tasteful by
+   default; `intense` and `absurd` are opt-in.
+
+## D105 — Our own timeline in core; proven libraries draw. Motion-graphics scope
+
+**Status:** Accepted (2026-11-24). Supersedes D100 §1 (Motion as the only animation
+driver); D100 §2 (GSAP isn't shipped) stands.
+
+**New information:** the user wants 2D animation at motion-graphics level (After Effects,
+not PowerPoint), and three constraints rule out handing the timeline to a library: core
+depends on nothing (D2) and the clock lives there; `seek(t)` must give the same frame
+every time (MP4 export, the determinism test, golden rule 3), while libraries run their own
+playback loop; and the timeline is saved in `.veloce` files, so a library's internal data
+can't be the file format.
+
+1. **We write the timeline evaluator** (core, pure, no dependencies): keyframe tracks,
+   cubic-Bézier easing, springs, stagger, seeded randomness and motion paths, evaluated at a
+   time `t` into `MotionState`s and property values. Well-known math, a few hundred lines,
+   heavily tested. **Any number or color in an element's Zod schema can be a keyframe
+   track** (golden rule 5): chart values, gradient stops, a plugin's props.
+2. **Proven technology draws**, per kind of layer: the browser's DOM and compositor for
+   text, layout and images (through the motion slot, D103); SVG for vector motion
+   graphics (path morphing, draw-on strokes, masks); **PixiJS** (MIT) in a built-in
+   plugin for particles, glow, displacement and shader transitions; **dotLottie** (MIT)
+   for designers' After Effects files. **Motion** (MIT) is optional: its spring and easing
+   math, or compositor playback, if the performance test (D104 §4) shows it pays.
+   Licenses are checked again when each one is added (CLAUDE.md). Not used: Theatre.js
+   (its studio is AGPL) and Remotion (its company license isn't open source).
+3. **Motion-graphics scope becomes its own phase**, Phase 5, after the motion core: a curve
+   editor, motion paths, a vector element (paths, polygons, stars, lines and arrows, with
+   a strict path-data validator) with draw-on strokes and shape morphing, text animators
+   (per character, word or line), animated masks and mattes, blend modes, the WebGL
+   effects plugin, a camera (zoom, pan, parallax over 2.5D) and animated components.
+   Lines and arrows move there from the plugins phase, and path shapes from After 1.0.
+   **Phases renumbered** (2026-11-24): Plugins 5 → 6, Desktop 6 → 7, Export 7 → 8, AI
+   knowledge 8 → 9, Launch prep 9 → 10. References in this log, the docs and the code were
+   updated to the new numbers.
+4. **The cost, said plainly:** the evaluator is the small part; the timeline and curve
+   editors, presets, text animators, morphing and performance work are the large part, and
+   they'd exist with any library.
+
+## D106 — Animation UI: three depths, no mode switch
+
+**Status:** Accepted (2026-11-24).
+
+Animating has to be easy for everyone, yet whatever an agent can do over MCP, a person can
+do in the editor (golden rule 1). A Simple/Advanced switch was considered and not chosen.
+
+1. **One UI with three depths, all writing the same animations:**
+   - **Depth 1, one click:** the motion level slider; **Animate this slide** (the
+     choreography engine, D104 §3); a preset gallery that **previews live on hover**;
+     transitions as thumbnails. Also in Design: right-click → Animate…, and a badge on
+     animated layers.
+   - **Depth 2, tune:** the steps list (on click, with previous, after previous; drag to
+     reorder) and a few plain controls per effect: speed, direction, intensity, delay.
+   - **Depth 3, full control:** the timeline panel, collapsed at the bottom of the Animate
+     workspace: keyframes, the curve editor, motion paths, text animators and masks,
+     everything MCP can do.
+     **Why not modes:** a global switch hides features ("where did that go?"), means two
+     UIs to build and keep in step, and its "Advanced" side becomes a junk drawer simple
+     users never discover. The workspaces already separate _what_ you're doing (D53);
+     depth separates _how much_ you control.
+2. **Hover previews are free:** they're temporary `setMotion` calls (D103), never ops, so
+   nothing enters the document or undo until a click applies the preset.
+3. **Your own presets:** Save as preset keeps a tuned animation in the deck, like
+   components (D94); agents use it by name and it follows the motion level.
+4. **Nothing is locked:** animation an agent built at depth 3 shows at depth 1 as
+   "Custom", with its live preview, so a simple user can still keep, tweak or remove it.
+5. **Remembered, not moded:** whether the timeline panel is open is panel state, stored per
+   workspace (D90), not a setting that changes what the app can do.

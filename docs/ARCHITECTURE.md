@@ -122,6 +122,10 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
   that throws only breaks its own box. It hands elements the slide's field values and
   re-draws the ones that show them when those change, and draws the deck's footer over
   the slide (click-through, not a layer).
+  **Motion** (D103) is drawn on top of layout: `setMotion` moves, turns, scales, fades and
+  blurs layers from their rest position (core's `MotionState`) without re-running layout,
+  and the renderer is the only writer of `transform`, `opacity` and `filter`. The timeline that
+  produces motion will be our own evaluator in core; proven libraries only draw (D105).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
   `update`, `seek`, `dispose`, and `aiDocs` for agents) and registers them in a registry that
   core uses to validate props. Every plugin passes the conformance kit. The built-in ones
@@ -137,7 +141,7 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
 - **Commands** (`src/commands/`, D81, D89): every menu item, tool, shortcut and palette entry
   is one registry command with an `enabled` check, so the menu bar, the keymap and the
   command palette (D92) can't disagree. Third-party plugins will add commands to the same
-  registry (Phase 5, D79).
+  registry (Phase 6, D79).
 - **Edits are optimistic previews, committed as transactions**: a drag shows on the canvas
   only (`preview.ts`) and sends one transaction when it ends, so one gesture is one undo step.
 

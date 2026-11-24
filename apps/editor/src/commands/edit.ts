@@ -19,7 +19,7 @@ import { type EditorCommand, hasSelection, onlySelected, onSlide } from "./conte
  * Cut, copy and paste from the menu: the same clipboard events the keys fire (useClipboard
  * handles both), so the system clipboard carries layers either way. Browsers let a click
  * copy but never read the clipboard (Google Docs has the same limit): then the toast names
- * the key. The desktop app (Phase 6) pastes from the menu too.
+ * the key. The desktop app (Phase 7) pastes from the menu too.
  */
 function clipboard(action: "cut" | "copy" | "paste", shortcut: string): void {
   let done = false;

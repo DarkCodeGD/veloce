@@ -13,7 +13,8 @@ Runs on Linux, Windows and macOS. Decks are saved as `.veloce` files.
   you can watch an agent build a deck live, edit alongside it, and undo only your own changes.
 - **Structure, not pixels:** slides are frames that lay themselves out (stacks and grids), so
   edits reflow instead of overlapping, and a theme restyles everything at once.
-- **Animated by design:** one deterministic timeline drives everything (coming in Phase 4).
+- **Animated by design:** motion-graphics animation, from calm to absurd, without lag; you or
+  your agent pick the level, and one deterministic timeline drives everything (Phases 4–5).
 - **Extensible:** element types come from plugins that follow one public contract.
 - **Your own format:** `.veloce` files are open, versioned zips you can keep and share.
 
@@ -88,13 +89,13 @@ the import or (if the architecture changed on purpose) update it and record a de
 | `packages/format`     | `.veloce` file read/write, assets, migrations, versions                  |
 | `packages/plugin-api` | Plugin contract, registry, conformance kit                               |
 | `packages/builtins`   | The built-in plugin set (text, shape, image)                             |
-| `packages/renderer`   | Deck → DOM rendering, layout, measurement                                |
+| `packages/renderer`   | Deck → DOM rendering, layout, motion, measurement                        |
 | `packages/images`     | Image optimization on import                                             |
 | `packages/doc-server` | Document ownership, transactions, sync, autosave                         |
 | `packages/mcp`        | MCP tools and docs for AI agents                                         |
 | `apps/editor`         | The editor web app                                                       |
 | `apps/server`         | Standalone doc-server + MCP + headless render worker                     |
-| `apps/desktop`        | Electron desktop app (placeholder until Phase 6)                         |
+| `apps/desktop`        | Electron desktop app (placeholder until Phase 7)                         |
 | `plugins/*`           | Element-type plugins                                                     |
 
 ## License

@@ -4,7 +4,7 @@
 > first unchecked item in the active phase, tick boxes as items land, and update "Current status"
 > before the session ends. Decisions and their reasons live in [DECISIONS.md](DECISIONS.md).
 >
-> **Phases 0–9 hold only what ships in 1.0.** Everything else waits in "After 1.0" at the
+> **Phases 0–10 hold only what ships in 1.0.** Everything else waits in "After 1.0" at the
 > bottom: don't start those items before 1.0 ships unless the user moves one up.
 
 ## Veloce 1.0 (the shipping line)
@@ -15,8 +15,12 @@
   with Figma-clean panels, an app menu bar, a command palette and Preferences (D53).
 - Decks are built and edited by hand **and** by AI: over MCP (Claude Code and other clients)
   and with the built-in assistant (bring your own key).
-- Decks animate (steps, effects, transitions, morph) and present well (presenter view,
-  second screen, laser pointer).
+- Decks animate at **motion-graphics level**, far past PowerPoint: steps, effects,
+  transitions, morph, keyframes on any property, motion paths, shape morphing, text
+  animators, masks, particles and camera moves. From `calm` to `absurd` (the user or an
+  agent picks), at 60fps without lagging the device (D104, D105). Easy for everyone,
+  complete for experts (D106).
+- Decks present well (presenter view, second screen, laser pointer).
 - Reuse: components and slide layouts; slide numbers, footers and sections.
 - The core plugins (table, chart, icon, code, math, video, Lottie) pass conformance.
 - Third-party plugins, sandboxed like Figma, add commands, panels and element types, and
@@ -26,15 +30,17 @@
 
 ## Current status
 
-- **Active phase:** Phase 4: Motion
+- **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-24
-- **Next:** motion as a transform on top of a layer's rest position (Phase 4's second
-  item). Visual regression tests guard the renderer (D102); the timeline schema follows
-  D101 §2 (suggestion mode). Phase 3 gate: Motion replaces GSAP (D100).
-- **State:** `pnpm check` is green (912 tests, including real-Chromium lint, preview, editor
+- **Next:** the performance test (D104 §4), then toasts over dialogs, the morph match key
+  and the timeline schema (format v3). Done in Phase 4: visual regression tests (D102), the
+  motion slot (D103). The animation direction is set: motion levels and choreography
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106);
+  phases after 4 were renumbered when Motion graphics became Phase 5.
+- **State:** `pnpm check` is green (926 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
-  true when the architecture changes. User guide and references come in Phase 9 (D96).
+  true when the architecture changes. User guide and references come in Phase 10 (D96).
 - **Done so far** (the why lives in [DECISIONS.md](DECISIONS.md)):
   - Phases 0–2: monorepo, schema, ops, file format, plugin API, renderer, doc-server, lint,
     MCP and a view-only editor. The first real Claude Code runs' issues are fixed (D37, D38).
@@ -59,7 +65,7 @@
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
   the README; Electron will start the server automatically.
-- **Still open:** the "current slide ±1" plugin-mount policy (Phase 5); `desktop` is a
+- **Still open:** the "current slide ±1" plugin-mount policy (Phase 6); `desktop` is a
   placeholder.
 
 ---
@@ -107,7 +113,8 @@ veloce/
 │   └── mcp/             MCP tools/resources/instructions, mounted inside doc-server's process
 ├── plugins/
 │   ├── text/ shape/ image/            (built-in, Phase 1–3)
-│   └── chart/ lottie/ rive/ code/ math/ icon/ video/ three/ …   (Phase 5)
+│   ├── vector/ effects/                (motion graphics, Phase 5)
+│   └── chart/ lottie/ rive/ code/ math/ icon/ video/ three/ …   (Phase 6)
 └── docs/                ROADMAP.md, DECISIONS.md, generated reference docs
 ```
 
@@ -117,7 +124,7 @@ new version → broadcast to all clients → `renderer` re-renders → measureme
 ## Stack
 
 TypeScript (strict) · pnpm workspaces · Vite · React (editor UI only) · Zod · Vitest · Playwright ·
-fflate (zip) · TipTap (rich text) · own transform handles (D43) · Motion (MIT, the animation driver, D100) ·
+fflate (zip) · TipTap (rich text) · own transform handles (D43) · own timeline in core (D105), PixiJS for WebGL effects, Motion optional ·
 `@modelcontextprotocol/sdk` (Streamable HTTP) · Electron + electron-builder + electron-updater ·
 plain Three.js inside the 3D plugin (plugins are framework-agnostic).
 
@@ -217,7 +224,7 @@ Animate and Present workspaces instead of being squeezed into today's screen.
 - [x] Preferences (File → Preferences, Ctrl+,): a user settings file owned by the server,
       live in every tab. Editing (snapping, nudge, undo steps, lint and its rules), Files
       (decks folder, autosave), Keymap (searchable), AI (Follow AI, port, connect command).
-      Interface waits for Phase 6 (D91)
+      Interface waits for Phase 7 (D91)
 - [x] Command palette (Ctrl/Cmd+K, View): every command with its keys, the settings, the
       slides and layers in one search, best match first, recent commands on top (D92)
 - [x] Versions: File → Save version (named), File → Versions (list, read-only preview,
@@ -249,15 +256,19 @@ menu bar and the command palette, and Preferences persist; an agent can define a
 and reuse it across the deck; human and agent edit concurrently without conflicts; Ctrl+Z
 never undoes the agent's work.
 
-## Phase 4 — Motion
+## Phase 4 — Motion core
 
-**The timeline schema follows D101 §2** (the suggestion-mode note), so the document-model
-changes below don't rule out reviewable agent edits later.
+The engine, the everyday effects and presenting. **The timeline schema follows D101 §2**
+(suggestion mode stays possible). The morph match key, the timeline, 2.5D, the motion level
+and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 
 - [x] Visual regression tests: 14 slides of frozen reference decks compared pixel by
       pixel in CI; `pnpm test:visual:update` after a deliberate change (D102)
-- [ ] Motion is a transform on top of a layer's rest position, never width/height per frame;
-      stacks get layout animations (FLIP); 2.5D is perspective and z on frames (D83 §5)
+- [x] Motion slot: the renderer draws motion (move, turn, flip, scale, fade, blur) on top of
+      a layer's rest position, never width/height per frame (D83 §5, D103)
+- [ ] Performance test first: 300+ animated layers with blur on a modest machine, played by
+      main-thread `setMotion` and by the browser's compositor (Web Animations API); the
+      numbers decide how presenting plays, recorded as a decision (D104 §4)
 - [ ] Toasts show over open dialogs: a modal `<dialog>` makes everything behind it inert, so
       an error from a dialog's action (Save version failing) is dimmed and can't be
       clicked. Manage decks works around it with its own Undo bar (D99 §4); fix it once,
@@ -267,25 +278,86 @@ changes below don't rule out reviewable agent edits later.
       finds anything; Duplicate slide fills the key from the original node, agents set it
       themselves, and morph falls back to name and type (like PowerPoint's `!!name`).
       Decided and in the schema before the timeline schema
-- [ ] Timeline schema: per-slide steps (click triggers); animations `{ target, effect | keyframes, trigger: onClick | withPrevious | afterPrevious, delay, duration, easing }`.
-      Each animation has an ID and its own ops (not one patched array); removing a node
-      removes its animations in the same op (D101 §2)
-- [ ] Core clock: `seek(slideId, step, t)`; plugins driven via `seek(t)`
-- [ ] `AnimationDriver` interface, with Motion as the driver (D100)
-- [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), extensible by plugins
+- [ ] Timeline schema: per-slide steps (click triggers) and animations (`target`, an effect
+      or keyframe tracks, `trigger: onClick | withPrevious | afterPrevious`, delay,
+      duration, easing). Each animation has an ID and its own ops (not one patched array);
+      removing a node removes its animations in the same op (D101 §2). Keyframe tracks can
+      target any number or color in an element's schema (D105 §1)
+- [ ] Motion level (`calm` → `absurd`) on the deck with per-slide overrides, and `$motion`
+      tokens in themes (easing family, durations, stagger, signature transitions) (D104)
+- [ ] 2.5D: perspective on frames and depth (`z`) on layers; the motion slot already draws
+      `z`, `rotateX` and `rotateY` (D83 §5, D103 §7)
+- [ ] Format v3: one migration for all of the above, with fixtures and a visual reference
+      deck that animates
+- [ ] Timeline evaluator in core: keyframes, cubic-Bézier easing, springs, stagger, seeded
+      randomness; pure and deterministic, no dependencies (D105 §1)
+- [ ] Core clock: `seek(slideId, step, t)` drives the motion slot and plugins' `seek(t)`;
+      playback as the performance test decided (D104 §4, D105 §2)
+- [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), shaped by
+      the motion level and `$motion` tokens, extensible by plugins; Save as preset keeps
+      your own in the deck (D106 §3)
+- [ ] Layout animations in stacks (FLIP: measure both layouts, animate the difference
+      through the motion slot) and staggering in reading order (D83 §5, D103 §7)
+- [ ] Choreography from intent: a rule-based engine turns an intent into animations from
+      each layer's role, reading order, the level and the tokens; the editor's "Animate
+      this slide" and MCP call the same engine (D104 §3)
 - [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key)
+- [ ] Performance lint: the render worker measures frame times; agents and people get
+      "this slide will drop frames" with a fix (D104 §4)
 - [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
-      synced, laser pointer; its slide overview grouped by sections (D97)
-- [ ] Animate workspace (timeline, steps, effect and transition pickers) and Present
-      workspace (rehearse in presenter view), both on the round 5 shell
-- [ ] MCP: `set_animations(slideId, steps)`, `render_preview` at a step/time
+      synced, laser pointer; its slide overview grouped by sections (D97); reduce motion
+      plays the calm version (D104 §4)
+- [ ] Animate workspace with three depths, no mode switch (D106): one click (level slider,
+      Animate this slide, presets previewed live on hover, transition thumbnails), tune
+      (the steps list and a few plain controls), full control (the timeline panel, with
+      keyframes); the quick way in from Design (right-click → Animate…, a badge on
+      animated layers). Present workspace: rehearse in presenter view. Both on the round 5
+      shell
+- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent, the motion level,
+      `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide
 - [ ] Determinism test: seek to the same step/time twice → identical screenshots
 
-**Done when:** decks animate in presenter mode and every frame is reproducible by seeking.
+**Done when:** decks animate in presenter mode at every motion level from `calm` to
+`absurd`, smoothly on the reference machine; every frame is reproducible by seeking; a
+person (one click) and an agent (one call) can each animate a whole slide from intent.
 
-## Phase 5 — Plugins
+## Phase 5 — Motion graphics
+
+After Effects-level 2D, on the Phase 4 engine: everything here is keyframes and tracks on
+the one clock, drawn by proven technology (D105 §2), and reachable at depth 3 of the
+Animate workspace and over MCP (D106).
+
+- [ ] Curve editor: keyframes on any schema property, Bézier handles, springs, copy and
+      paste of keyframes
+- [ ] Motion paths: draw a path on the canvas; the layer follows it, optionally turning
+      along it
+- [ ] `vector` element (SVG): paths, polygons, stars, chevrons, block arrows, **lines and
+      arrows** (two ends, a stroke and arrowheads, drawn with a tool and dragged by their
+      ends), with a strict path-data validator. Motivation: shapes are only rect and
+      ellipse, so flows, timelines and callouts use `→` characters. (Connectors that stay
+      attached to shapes wait for after 1.0)
+- [ ] Draw-on strokes (trim paths) and **shape morphing** between any two vector shapes
+- [ ] Text animators: per character, word or line; stagger, scramble, cascade, seeded
+      randomness; still selectable, accessible text
+- [ ] Masks and mattes (animated), blend modes
+- [ ] `effects` plugin on WebGL (PixiJS): particles, glow, displacement, shader
+      transitions; a WebGL context budget (under 16 live contexts) and a fallback picture
+      where WebGL is missing
+- [ ] Camera: zoom, pan and parallax across the slide's 2.5D depth
+- [ ] Animated components: a component keeps its own timeline, so an animated card is
+      reused everywhere (D94)
+- [ ] `absurd` reference decks hold the frame budget: performance tests in CI on relative
+      measures (frame time, style recalcs), so a regression fails the build
+- [ ] MCP and docs for all of the above, generated from the schemas; retested with a real
+      agent (CLAUDE.md)
+
+**Done when:** a person and an agent can each build a motion-graphics slide (morphing
+shapes, a drawn-on path, animated text, particles, a camera move), it plays smoothly at
+`absurd` on the reference machine, and it exports frame-exact.
+
+## Phase 6 — Plugins
 
 Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes. Security: SVG
 assets (icons, logos) load only through `<img>`, never inlined, so scripts in an SVG can't run.
@@ -294,10 +366,6 @@ assets (icons, logos) load only through `<img>`, never inlined, so scripts in an
 - [ ] `table`: rows and columns of rich-text cells, a header row, column widths and theme
       styles; agents send a 2D array. Motivation: comparison, pricing and feature slides
       are faked today with grids of frames: heavy MCP payloads, awkward to edit by hand
-- [ ] Lines and arrows: a `line` shape with two endpoints, a stroke and arrowheads at
-      either end, drawn with a tool and dragged by its ends. Motivation: shapes are only
-      rect and ellipse, so flows, timelines and callouts use `→` characters. (Connectors
-      that stay attached to shapes wait for after 1.0)
 - [ ] `chart` (ECharts): bar/line/pie/area/scatter, data in props, animated entry
 - [ ] `lottie` (dotLottie): play/seek, segment control
 - [ ] `code` (Shiki): syntax highlight, line highlight steps
@@ -333,7 +401,7 @@ assets (icons, logos) load only through `<img>`, never inlined, so scripts in an
 and a panel, edits the deck as one undoable step under its own name, can't reach the
 network or disk without permission, and disabling it removes every trace.
 
-## Phase 6 — Desktop app (Electron)
+## Phase 7 — Desktop app (Electron)
 
 - [ ] Main process hosts doc-server + MCP; window loads the editor
 - [ ] Render worker (previews, lint measurements) in a hidden BrowserWindow instead of
@@ -357,7 +425,7 @@ network or disk without permission, and disabling it removes every trace.
 
 **Done when:** installs on all 3 OSes, double-clicking a `.veloce` opens it, and Claude Code connects.
 
-## Phase 7 — Export
+## Phase 8 — Export
 
 - [ ] PDF (printToPDF / Playwright), one page per slide (option: per step)
 - [ ] PNG/JPEG per slide
@@ -369,7 +437,7 @@ network or disk without permission, and disabling it removes every trace.
 **Done when:** a deck can be shared with someone who doesn't have Veloce: as a PDF, images,
 a self-contained HTML file that plays the animations, or a video.
 
-## Phase 8 — AI knowledge and the built-in assistant
+## Phase 9 — AI knowledge and the built-in assistant
 
 - [ ] Reference docs generated from Zod schemas + plugin `aiDocs` (no hand-written API docs)
 - [ ] MCP `instructions` + `get_docs` topics finalized
@@ -394,7 +462,7 @@ a self-contained HTML file that plays the animations, or a video.
 **Done when:** a fresh agent with only the MCP (no skill) can make a decent deck, and with
 the skill makes a great one; someone with only an API key can do the same inside the app.
 
-## Phase 9 — Launch prep
+## Phase 10 — Launch prep
 
 - [ ] Code signing: Apple Developer + notarization; Windows signing certificate
 - [ ] Opt-in crash reporting & telemetry
@@ -404,9 +472,9 @@ the skill makes a great one; someone with only an API key can do the same inside
 - [ ] Trademark check for "Veloce", dependency license audit
 - [ ] `.veloce` format spec and stability promise (what 1.x will always open), plus fuzz tests
       for the reader: files from the internet are untrusted
-- [ ] User guide on the docs site (with Phase 8's plugin docs): getting started, connecting
+- [ ] User guide on the docs site (with Phase 9's plugin docs): getting started, connecting
       an agent, each workspace, components and layouts, presenting, exporting. Written once
-      the UI has settled (after Phases 4–6) (D96)
+      the UI has settled (after Phases 4–7) (D96)
 - [ ] Generated reference pages on the docs site: keyboard shortcuts from the command
       registry, element props from their schemas, MCP tools, lint rules, so they can't drift
       from the app (D96)
@@ -426,13 +494,12 @@ user moves one into a phase.
 
 - 3D workspace (with the `three` plugin)
 - Custom workspace layouts (split any area, Blender-style) and keymap rebinding
-- Translated UI (strings are already centralized in Phase 9)
+- Translated UI (strings are already centralized in Phase 10)
 
 **Editing**
 
 - Find and replace across the deck; auto-fit text (shrink to fit its box)
 - Right-to-left and CJK text layout
-- `path`/`polygon` shapes for custom silhouettes, with a strict path-data validator
 - Connectors: lines that stay attached to shapes and reroute when they move
 - Apply a layout to an existing slide, mapping its content into the layout's slots (D95 §7)
 - Frame style presets in the theme (`$style.card`), decided together with components
@@ -448,8 +515,6 @@ user moves one into a phase.
     layer, followed in presenter mode and the HTML export (agenda and "back to menu" slides)
   - Copy and paste slides between decks, like Google's Import slides and PowerPoint's Reuse
     slides (the clipboard already carries images between decks)
-  - More shape types: triangle, polygon, star, chevron and block arrows, as built-in shapes
-    with a few settings (no user-supplied path data)
   - Flip horizontal and vertical (fits with Phase 4's transform on top of the rest position)
   - Superscript, subscript and highlight color in text
   - Format painter: copy one layer's style onto others
@@ -489,7 +554,7 @@ user moves one into a phase.
 
 - Spell-check suggestions in Electron: a right-click menu with the suggestions (Electron
   shows none without one) and the dictionary language set from the deck's language (D76).
-  Small; worth pulling into Phase 6
+  Small; worth pulling into Phase 7
 
 ---
 
@@ -497,8 +562,8 @@ user moves one into a phase.
 
 - [x] **Project license:** Apache-2.0 (decided 2026-11-18).
 - [x] **GSAP license:** its 2025 license forbids no-code visual animation tools that compete
-      with Webflow, and isn't OSI-approved: Motion (MIT) is the driver, GSAP isn't shipped
-      (2026-11-24, D100).
+      with Webflow, and isn't OSI-approved: GSAP isn't shipped (2026-11-24, D100). The
+      timeline is our own, in core; proven libraries draw (D105).
 - [ ] **Name:** trademark search for "Veloce" in the software class.
 - [x] **Extension:** `.veloce` confirmed by the user (2026-11-18).
 - [x] **Suggestion mode (after 1.0, but check now):** it fits without a format break, held
