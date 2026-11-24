@@ -523,14 +523,10 @@
       "description": "A number and what it means",
       "params": {
         "value": {
-          "targets": [
-            "card-value.props.content"
-          ]
+          "targets": ["card-value.props.content"]
         },
         "label": {
-          "targets": [
-            "card-label.props.content"
-          ]
+          "targets": ["card-label.props.content"]
         }
       },
       "node": {
