@@ -3,8 +3,10 @@ import { Play, Redo2, Undo2 } from "lucide-react";
 import { useEffect } from "react";
 import { redo, undo } from "../actions.js";
 import { isCommandEnabled, runCommand } from "../editor-commands.js";
+import { setWorkspace, useLayout } from "../layout.js";
 import { originName } from "../model/history.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
+import { WORKSPACES } from "../model/workspace.js";
 import { shortcutAttrs } from "../platform.js";
 import type { ConnectionStatus, LastChange } from "../sync-client.js";
 import { MenuBar } from "./MenuBar.js";
@@ -86,6 +88,7 @@ export function TopBar({
             <Redo2 size={16} />
           </button>
         </div>
+        <WorkspaceSwitcher />
       </div>
 
       <ToolBar />
@@ -123,5 +126,29 @@ export function TopBar({
         </button>
       </div>
     </header>
+  );
+}
+
+/**
+ * Blender's workspace tabs (D53, D90 §2, D118): Design and Animate, each its own panels over
+ * the same deck. Shown once there's more than one.
+ */
+function WorkspaceSwitcher() {
+  const { workspace } = useLayout();
+  if (WORKSPACES.length < 2) return null;
+  return (
+    <div className="workspace-switcher" role="tablist" aria-label="Workspace">
+      {WORKSPACES.map((w) => (
+        <button
+          key={w.id}
+          type="button"
+          role="tab"
+          aria-selected={workspace === w.id}
+          onClick={() => setWorkspace(w.id)}
+        >
+          {w.label}
+        </button>
+      ))}
+    </div>
   );
 }

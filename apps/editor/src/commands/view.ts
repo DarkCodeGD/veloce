@@ -5,11 +5,17 @@
 import { Play } from "lucide-react";
 import { type CameraControls, cameraControls } from "../camera-controls.js";
 import { openPalette } from "../command-palette.js";
-import { panel as layoutPanel, setPanelCollapsed, togglePanel } from "../layout.js";
+import {
+  panel as layoutPanel,
+  layoutState,
+  setPanelCollapsed,
+  setWorkspace,
+  togglePanel,
+} from "../layout.js";
 import { zoomKeyDirection } from "../model/camera.js";
 import { presentedSlides } from "../model/presentation.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
-import type { PanelId } from "../model/workspace.js";
+import { type PanelId, WORKSPACES } from "../model/workspace.js";
 import { startPresenting } from "../present.js";
 import type { CommandContext, EditorCommand, Panel } from "./context.js";
 
@@ -103,6 +109,19 @@ export function viewCommands(): EditorCommand[] {
         // The tab on show: none while the left panel is collapsed.
         checked: (c) => c.panel === panel && !layoutPanel("left").collapsed,
         run: (c) => c.showPanel(panel),
+      }),
+    ),
+    // The top bar's workspace tabs, also in View and the palette (D118).
+    ...WORKSPACES.map(
+      (w): EditorCommand => ({
+        id: `view.workspace.${w.id}`,
+        label: `${w.label} workspace`,
+        keywords: "workspace switch tab mode animation animate design",
+        group: "view",
+        menu: "view",
+        section: "workspace",
+        checked: () => layoutState().workspace === w.id,
+        run: () => setWorkspace(w.id),
       }),
     ),
     showPanel("left", "Left panel"),

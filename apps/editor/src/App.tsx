@@ -21,6 +21,7 @@ import {
 import { revertAgentChanges, run } from "./actions.js";
 import type { Panel } from "./commands/context.js";
 import { AddMenu } from "./components/AddMenu.js";
+import { AnimatePanel } from "./components/AnimatePanel.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { ComponentsPanel } from "./components/ComponentsPanel.js";
 import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
@@ -395,12 +396,22 @@ export function App() {
               style={panelStyle(layout.workspace, "inspector", inspector)}
               data-collapsed={inspector.collapsed || undefined}
             >
-              <Inspector
-                deck={deck}
-                slide={current}
-                selection={selection}
-                onSelect={setSelection}
-              />
+              {layout.workspace === "animate" ? (
+                <AnimatePanel
+                  deck={deck}
+                  slide={current}
+                  index={slideIndex}
+                  selection={selection}
+                  onSelect={setSelection}
+                />
+              ) : (
+                <Inspector
+                  deck={deck}
+                  slide={current}
+                  selection={selection}
+                  onSelect={setSelection}
+                />
+              )}
             </div>
           </>
         ) : (

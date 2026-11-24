@@ -1813,6 +1813,11 @@ html[data-resizing="y"] * {
   pointer-events: none;
 }
 
+/* Playing animation (D118): the motion on its own, no outlines or handles over it. */
+.editor-canvas.is-playing .overlay {
+  visibility: hidden;
+}
+
 .outline {
   position: absolute;
 }
@@ -5005,4 +5010,177 @@ html.is-scrubbing * {
 
 .decks-none {
   margin: 8px 0;
+}
+
+/* ── Workspaces and the Animate panel (D118) ─────────────────────────────────────────── */
+
+/* Blender's workspace tabs, as a segmented control in the top bar. */
+.workspace-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+
+.workspace-switcher button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition:
+    background var(--fast),
+    color var(--fast);
+}
+
+.workspace-switcher button:hover {
+  color: var(--text);
+}
+
+.workspace-switcher button[aria-selected="true"] {
+  background: var(--panel-raised);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+}
+
+.animate-play {
+  height: 26px;
+  padding: 0 10px;
+}
+
+/* The steps list: one group per step, a row per animation. */
+.animate-steps {
+  display: grid;
+  gap: 14px;
+}
+
+.animate-step ul {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.animate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.animate-row:hover {
+  background: var(--hover);
+}
+
+.animate-row.is-selected {
+  background: var(--accent-soft);
+}
+
+.animate-kind {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.animate-kind.is-entrance {
+  color: var(--live);
+}
+
+.animate-kind.is-emphasis {
+  color: var(--warn);
+}
+
+.animate-kind.is-exit {
+  color: var(--danger);
+}
+
+.animate-kind.is-missing {
+  color: var(--warn);
+}
+
+.animate-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.animate-row-layer {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.animate-row-effect {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.animate-trigger {
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* Preview, then move earlier / later and remove, at the right. */
+.animate-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.animate-actions .button {
+  height: 28px;
+  margin-right: auto;
+}
+
+.animate-actions .icon-button:disabled {
+  opacity: 0.35;
+}
+
+/* Effects as tiles, two or three to a row; resting on one previews it on the canvas. */
+.effect-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.effect-tile {
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background var(--fast),
+    border-color var(--fast);
+}
+
+.effect-tile:hover {
+  background: var(--hover);
+  border-color: var(--accent);
 }

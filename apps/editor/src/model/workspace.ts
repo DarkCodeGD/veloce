@@ -4,8 +4,9 @@
  * workspace used. Blender's idea with Figma's restraint: no splitting areas into any editor.
  *
  * Pure: no DOM, no storage. `layout.ts` keeps the state and persists it; the splitter and
- * App read it. Phase 4 adds Animate and Present here as more presets, and the workspace
- * switcher appears once there's more than one (D53 §3: no empty tabs).
+ * App read it. Design and Animate (D118) share the panels' places; in Animate the right
+ * panel shows the animation of the slide instead of the inspector. The top bar's switcher
+ * shows once there's more than one workspace (D90 §2).
  */
 
 /** The panels a workspace can show around the canvas. */
@@ -56,27 +57,50 @@ export interface LayoutState {
   panels: Readonly<Record<string, Readonly<Partial<Record<PanelId, PanelLayout>>>>>;
 }
 
+const LEFT: PanelSpec = {
+  id: "left",
+  label: "Left panel",
+  size: { axis: "x", initial: 248, min: 180, max: 400, maxShare: 0.2 },
+};
+// Grows with its text; collapsed, its "Speaker notes" header stays to reopen it.
+const NOTES: PanelSpec = { id: "notes", label: "Speaker notes" };
+
 /** The workspaces that exist in this version, in switcher order. */
 export const WORKSPACES: readonly WorkspaceSpec[] = [
   {
     id: "design",
     label: "Design",
     panels: [
-      {
-        id: "left",
-        label: "Left panel",
-        size: { axis: "x", initial: 248, min: 180, max: 400, maxShare: 0.2 },
-      },
+      LEFT,
       {
         id: "inspector",
         label: "Inspector",
         size: { axis: "x", initial: 300, min: 260, max: 480, maxShare: 0.26 },
       },
-      // Grows with its text; collapsed, its "Speaker notes" header stays to reopen it.
-      { id: "notes", label: "Speaker notes" },
+      NOTES,
+    ],
+  },
+  {
+    id: "animate",
+    label: "Animate",
+    panels: [
+      LEFT,
+      // The Animate panel: the steps list, the effect gallery and the selected animation.
+      {
+        id: "inspector",
+        label: "Inspector",
+        size: { axis: "x", initial: 320, min: 260, max: 480, maxShare: 0.28 },
+      },
+      NOTES,
     ],
   },
 ];
+
+/** The state on another workspace, its panels as they were left there. */
+export const withWorkspace = (state: LayoutState, workspace: string): LayoutState =>
+  state.workspace === workspace || !WORKSPACES.some((w) => w.id === workspace)
+    ? state
+    : { ...state, workspace };
 
 export const DEFAULT_LAYOUT: LayoutState = { workspace: "design", panels: {} };
 

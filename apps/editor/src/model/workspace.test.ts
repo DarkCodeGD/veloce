@@ -10,16 +10,28 @@ import {
   type SizeSpec,
   WORKSPACES,
   withPanel,
+  withWorkspace,
   workspaceSpec,
 } from "./workspace.js";
 
 const LEFT: SizeSpec = { axis: "x", initial: 248, min: 180, max: 400, maxShare: 0.2 };
 
 describe("workspaces (D90)", () => {
-  it("starts on Design, today's editor, as the only workspace until Phase 4", () => {
-    expect(WORKSPACES.map((w) => w.id)).toEqual(["design"]);
+  it("starts on Design; Animate is the second workspace (D118)", () => {
+    expect(WORKSPACES.map((w) => w.id)).toEqual(["design", "animate"]);
     expect(DEFAULT_LAYOUT.workspace).toBe("design");
-    expect(workspaceSpec("animate").id).toBe("design"); // a newer version's workspace
+    expect(workspaceSpec("present").id).toBe("design"); // a newer version's workspace
+  });
+
+  it("switches workspace, each keeping its own panel sizes", () => {
+    let state = withPanel(DEFAULT_LAYOUT, "inspector", { size: 400 });
+    state = withWorkspace(state, "animate");
+    expect(panelLayout(state, "inspector").size).toBe(320); // Animate's own preset
+    state = withPanel(state, "inspector", { size: 360 });
+    state = withWorkspace(state, "design");
+    expect(panelLayout(state, "inspector").size).toBe(400);
+    expect(withWorkspace(state, "present")).toBe(state); // not in this version
+    expect(parseLayout(withWorkspace(state, "animate")).workspace).toBe("animate");
   });
 
   it("gives every panel its preset until it's changed", () => {
@@ -53,7 +65,7 @@ describe("workspaces (D90)", () => {
     expect(parseLayout(null)).toEqual(DEFAULT_LAYOUT);
     expect(parseLayout("left=300")).toEqual(DEFAULT_LAYOUT);
     const parsed = parseLayout({
-      workspace: "animate", // not in this version
+      workspace: "present", // not in this version
       panels: {
         design: {
           left: { size: 10, collapsed: true }, // clamped up to its minimum
@@ -61,7 +73,7 @@ describe("workspaces (D90)", () => {
           notes: { collapsed: true }, // sizes itself: only collapsed matters
           timeline: { size: 200 }, // not a Design panel
         },
-        animate: { left: { size: 300 } },
+        present: { left: { size: 300 } }, // nor this
       },
     });
     expect(parsed).toEqual({

@@ -16,6 +16,7 @@ import {
   panelLayout,
   parseLayout,
   withPanel,
+  withWorkspace,
 } from "./model/workspace.js";
 
 const STORAGE_KEY = "veloce.layout";
@@ -66,6 +67,9 @@ const subscribe = (listener: () => void) => {
 };
 
 export const layoutState = (): LayoutState => state;
+
+/** Switches workspace (D53, D118); each keeps its own panel sizes. */
+export const setWorkspace = (workspace: string): void => set(withWorkspace(state, workspace));
 
 /** One panel of the current workspace, as it is now. */
 export const panel = (id: PanelId): PanelLayout => panelLayout(state, id);

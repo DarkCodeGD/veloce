@@ -17,9 +17,16 @@
  * picture to pan it, drag the layer's edges to trim, drag the picture's corners to scale it. Enter, Esc, a double-click or a click elsewhere leaves.
  */
 import { type Deck, fieldValues, type TextContent } from "@veloce/core";
-import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
+import { NODE_ID_ATTR, SlidePlayer, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { openAddMenu } from "../add-menu.js";
+import {
+  CanvasPlayback,
+  playbackChanged,
+  setCanvasPlayback,
+  stopOnCanvas,
+  useCanvasPlayback,
+} from "../canvas-playback.js";
 import { enterCrop, exitCrop, pictureOf, useCropping } from "../crop-mode.js";
 import { assetUrl, registry } from "../editor-context.js";
 import { useGradientSession } from "../gradient-edit.js";
@@ -136,11 +143,19 @@ export function EditorCanvas({
       assetUrl: (id) => assetUrl(deckIdRef.current, id),
     });
     view.current.stage.classList.add("slide-surface");
+    // The Animate panel's Play and previews play here, on this view (D118).
+    const player = new SlidePlayer(view.current, { effects: registry.resolveEffect });
+    const playback = new CanvasPlayback(player, playbackChanged);
+    setCanvasPlayback(playback);
     return () => {
+      playback.stop();
+      setCanvasPlayback(null);
+      player.dispose();
       view.current?.dispose();
       view.current = null;
     };
   }, []);
+  const playing = useCanvasPlayback();
 
   // ── Outline geometry ────────────────────────────────────────────────────────────
   // Rotations come from the shown deck, so outlines turn with a rotate preview.
@@ -202,6 +217,11 @@ export function EditorCanvas({
     selectionRect,
     onChange: measure,
   });
+
+  // Another slide, or the document changed under a preview: back to the slide at rest
+  // first, so the render below draws the new document, not the preview's.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stop whenever either changes
+  useLayoutEffect(() => stopOnCanvas(), [deck, slideId]);
 
   useLayoutEffect(() => {
     view.current?.render(deck, slideId);
@@ -364,6 +384,7 @@ export function EditorCanvas({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    stopOnCanvas(); // a press on the canvas ends Play or a preview, like PowerPoint's
     if (camera.startPan(e)) return; // Space + drag, the middle button, or the Hand tool
     if (cropId) exitCrop(); // a press off the picture leaves crop mode
     if (inTextEditor(e.target)) return; // placing the caret, selecting text
@@ -525,6 +546,7 @@ export function EditorCanvas({
         active ? GESTURE_CLASS[active] : "",
         camera.panning ? "is-panning" : handUp ? "can-pan" : "",
         isDrawTool(tool) ? "is-tool-draw" : "",
+        playing ? "is-playing" : "",
       ]
         .filter(Boolean)
         .join(" ")}

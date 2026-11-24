@@ -3182,3 +3182,53 @@ version, v3, for the morph key, the timeline, motion levels and tokens, and 2.5D
    which no agent doc teaches yet; the new effect errors follow the MCP standard (what's
    wrong, and the fix). Effect docs, the gallery for agents and the real-agent retest come
    with the MCP animation item, which changes those tools anyway.
+
+## D118 — The Animate workspace's first slice, pulled forward
+
+**Status:** Accepted (2026-11-25). Phase 4. Builds on D106; the rest of the Animate
+workspace stays a roadmap item.
+
+1. **Why now:** after effect presets (D117) nobody could add an animation except with raw
+   ops: the editor had no animation UI and agents had no animation docs. Saved presets,
+   FLIP, choreography and two lints came next, all invisible. The maintainer chose to pull
+   a thin slice of D106 forward, so every effect can be tried by hand, and Save as preset
+   gets a real home.
+2. **Animate is the second workspace** (D53 §3, D90 §2): the same panels as Design, each
+   workspace keeping its own sizes; its right panel is the Animate panel instead of the
+   inspector. The switcher shows in the top bar (Blender's workspace tabs) now that there
+   are two, and in View and the palette ("Animate workspace"). No shortcut: Ctrl+PageUp/
+   PageDown, Blender's, switch browser tabs.
+3. **The Animate panel, depths 1 and 2 of D106:**
+   - **Motion:** the deck's level (with its one-line summary) and **Play**, which plays the
+     slide on the canvas with the clicks taken for you (a short beat between steps), then
+     goes back to rest.
+   - **Steps:** the slide's animations grouped as they play ("As the slide appears",
+     "Click 1"…), by layer name and effect, with entrance, emphasis and exit marked. A row
+     selects the animation and its layer; selecting a layer on the canvas shows its first
+     animation. ↑/↓ walk the list; Delete removes the animation, not the layer.
+   - **Tune:** effect, start (on click, with previous, after previous), speed (the
+     `$motion` durations, labelled with their length at the level, or the effect's own),
+     delay, repeat, and the effect's own settings generated from its params schema (golden
+     rule 5), unset meaning "follows the level". Preview plays it alone; Move earlier /
+     later (PowerPoint's); Remove.
+   - **Add effect:** the effects that suit every selected layer (no typewriter on a
+     shape), grouped entrance, emphasis, exit. Resting the pointer on one for 150 ms
+     plays it on the selection, looping; a click adds it: one animation per selected layer,
+     the first on a click and the rest with it, right after the animation being tuned.
+4. **Previews and Play are never ops** (D106 §2): `canvas-playback.ts` sequences a
+   `SlidePlayer` (D115) on the canvas's own `SlideView`, playing a copy of the deck (only
+   the previewed animations, for a preview). It stops when the document or the slide
+   changes, on a press on the canvas, or when it ends; outlines hide while it plays. The
+   panel asks for playback through the module; the canvas registers it, so neither holds
+   the other.
+5. **Every edit is one transaction of ordinary `animation.*` and `deck.setMotionLevel`
+   ops** (golden rule 1), built by the pure `model/animate.ts`: on click is stored as no
+   trigger, `subtle` as no level, a removed last setting removes `params`, and changing
+   the effect drops the old effect's settings and any keyframes, keeping the timing.
+6. **Tests:** the model and playback sequencing are unit-tested; `phase4-animate.test.ts`
+   drives the built editor in Chromium: switch, hover preview (Web Animations running,
+   no transaction), text-only effects, add, tune, undo, Play, Delete, back to Design.
+7. **Left for the full Animate workspace item:** the level per slide and in the New deck
+   dialog, editing `$motion` values, Animate this slide (choreography), transition
+   thumbnails, dragging steps, the timeline panel, right-click → Animate… and a badge on
+   animated layers in Design, and the Present workspace.

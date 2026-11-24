@@ -173,6 +173,11 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
   registry (Phase 6, D79).
 - **Edits are optimistic previews, committed as transactions**: a drag shows on the canvas
   only (`preview.ts`) and sends one transaction when it ends, so one gesture is one undo step.
+- **Workspaces** (`model/workspace.ts`, `layout.ts`, D53, D90, D118): Design and Animate
+  are presets of the same panels; in Animate the right panel is the **Animate panel**
+  (`components/AnimatePanel.tsx`, its ops from `model/animate.ts`). Its Play and hover
+  previews play on the editor canvas's own view through `canvas-playback.ts` (a
+  `SlidePlayer` the canvas registers), never as ops.
 - **Presenting** (`components/PresentView.tsx`, `model/presentation.ts`, D116): a fullscreen
   modal dialog with its own `SlideView` and `SlidePlayer` (D115); the pure `Presentation`
   model decides what a click or a key does (next step, next slide, back, end screen).
