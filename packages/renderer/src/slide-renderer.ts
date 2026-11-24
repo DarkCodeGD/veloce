@@ -45,6 +45,7 @@ import { cssSlideBackground } from "@veloce/plugin-api";
 import {
   applyCss,
   frameLayoutCss,
+  frameSpaceCss,
   frameStyleCss,
   MOTION_PROPERTIES,
   nodeBoxCss,
@@ -288,7 +289,12 @@ export class SlideRenderer {
     const size = this.#sizeOf(node);
     const css = nodeBoxCss(node, parentLayout, size, this.#motion.get(node.id));
     if (node.kind === "frame") {
-      Object.assign(css, frameLayoutCss(node.layout), frameStyleCss(node, this.#ctx.assetUrl));
+      Object.assign(
+        css,
+        frameLayoutCss(node.layout),
+        frameStyleCss(node, this.#ctx.assetUrl),
+        frameSpaceCss(node),
+      );
     }
     if (node.hidden) css.display = "none"; // last: a frame's layout sets display too
     applyCss(m.el, css);

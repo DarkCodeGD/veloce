@@ -47,6 +47,37 @@ export function ancestorRotation(index: SlideIndex, id: string): number {
 }
 
 /**
+ * How many times bigger than its layout a layer is drawn because of 2.5D depth (D112): each
+ * layer on the way down with a `depth` in a frame with `perspective` is magnified by
+ * perspective / (perspective − depth), and the whole subtree with it. 1 when flat.
+ */
+export function depthScale(index: SlideIndex, id: string): number {
+  let scale = 1;
+  for (const at of chainOf(index, id)) {
+    const entry = index.nodes.get(at);
+    const depth = entry?.node.depth ?? 0;
+    const frame = entry?.parentId ? index.nodes.get(entry.parentId)?.node : undefined;
+    const p = frame?.kind === "frame" ? frame.perspective : undefined;
+    if (depth !== 0 && p !== undefined && depth < p) scale *= p / (p - depth);
+  }
+  return scale;
+}
+
+/**
+ * A delta drawn on the slide, in the layer's own parent space: its ancestors' rotation
+ * undone, then its depth magnification (D112). Every gesture that turns a pointer delta
+ * into `position` or a size goes through here, so a layer stays under the cursor.
+ */
+export function toLayerSpace(index: SlideIndex, id: string, d: Point): Point {
+  const rad = (-ancestorRotation(index, id) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const k = depthScale(index, id);
+  const turned = rad === 0 ? d : { x: d.x * cos - d.y * sin, y: d.x * sin + d.y * cos };
+  return k === 1 ? turned : { x: turned.x / k, y: turned.y / k };
+}
+
+/**
  * Where a free layer's `position` goes when its left/top edge moves by `d` (in its parent's
  * axes) and its size grows by `grow`, in the layer's own anchor (core's anchor.ts): every
  * gesture computes "start edge + delta", and this keeps that right for layers pinned to the

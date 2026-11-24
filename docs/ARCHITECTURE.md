@@ -69,6 +69,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Animations** (`schema/animation.ts`, `timeline.ts`, D110): each slide's `animations`, in
   play order, with triggers that derive the steps (`scheduleSlide`); an effect or keyframe
   tracks on motion channels or the target's own properties.
+- **2.5D** (D112): `perspective` on frames and `depth` on layers are document fields; the
+  renderer draws them (`frameSpaceCss`, `drawnCss`), and the editor's gestures undo the
+  depth's magnification (`toLayerSpace`).
 - **Motion levels and tokens** (`schema/motion.ts`, `motion-tokens.ts`, D111): the theme's
   `$motion` values, scaled by the slide's or deck's level, resolve an animation's times and
   easings (`slideMotionTokens` → `scheduleSlide`).

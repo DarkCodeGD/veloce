@@ -33,6 +33,7 @@ import {
 import { drawnRect, type ElementInfo, type Insertable, insertCommand } from "../model/insert.js";
 import {
   ancestorRotation,
+  depthScale,
   dropInto,
   freeSizing,
   isFree,
@@ -41,6 +42,7 @@ import {
   placeFreely,
   resizeTo,
   rotateTo,
+  toLayerSpace,
 } from "../model/manipulate.js";
 import { marqueeCandidates, marqueeHits, rectBetween } from "../model/marquee.js";
 import {
@@ -189,7 +191,7 @@ export function moveDrag(ctx: Context, ids: readonly string[], start: Point): Dr
         guides = snap.guides;
       }
       const positions = new Map(
-        starts.map((s) => [s.id, movedPosition(s.node, rotateVector(d, -s.turn))] as const),
+        starts.map((s) => [s.id, movedPosition(s.node, toLayerSpace(index, s.id, d))] as const),
       );
       const measures = parent ? spacingIn(parent, offset(bounds, d), exclude) : [];
       return { command: moveTo(index, positions), feedback: { guides, measures } };
@@ -235,7 +237,7 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
         const command = placeFreely(
           index,
           id,
-          add(pull.position, rotateVector(d, -turn)),
+          add(pull.position, toLayerSpace(index, id, d)),
           pull.size,
         );
         return { command, feedback: { guides } };
@@ -253,7 +255,7 @@ function singleMove(ctx: Context, id: string, start: Point): Drag | null {
         }
         const command = dropInto(index, id, {
           parentId: parent.id,
-          position: movedPosition(at.node, rotateVector(d, -turn)),
+          position: movedPosition(at.node, toLayerSpace(index, id, d)),
         });
         const measures = turn === 0 ? spacingIn(parent, offset(rect, d), self) : [];
         return { command, feedback: { guides, measures } };
@@ -341,7 +343,8 @@ export function resizeDrag(
   const b0: Box = { cx: size.w / 2, cy: size.h / 2, w: size.w, h: size.h, rotation };
   const dir = handleDirection(handle);
   const parentId = index.nodes.get(id)?.parentId;
-  const snappable = free && rotation === 0 && turn === 0;
+  // Snapping compares drawn edges with the new size: only where they're the same thing.
+  const snappable = free && rotation === 0 && turn === 0 && depthScale(index, id) === 1;
   const parent = snappable
     ? space.frames(index, subtree(index, id)).find((f) => f.id === parentId)
     : undefined;
@@ -352,7 +355,7 @@ export function resizeDrag(
     update(pointer, mods) {
       if (trim && mods.mod) return trim.update(pointer, mods);
       const p = space.toSlide(pointer);
-      const d = rotateVector(sub(p, p0), -turn);
+      const d = toLayerSpace(index, id, sub(p, p0));
       const keepRatio = picture && corner ? !mods.shift : mods.shift;
       const raw = resizeBox(b0, handle, d, { keepRatio, fromCenter: mods.alt });
       let w = Math.max(1, Math.round(raw.w));
@@ -434,7 +437,6 @@ export function cropDrag(
   const node = index.nodes.get(id)?.node;
   const size = space.size(id);
   if (node?.kind !== "element" || !size || size.w <= 0 || size.h <= 0) return null;
-  const turn = ancestorRotation(index, id);
   const rotation = node.rotation ?? 0;
   const free = isFree(index, id);
   const focus = focusOf(picture.focusKey ? node.props[picture.focusKey] : undefined);
@@ -448,7 +450,7 @@ export function cropDrag(
     update(pointer, mods) {
       const p = space.toSlide(pointer);
       // Into the layer's own axes: undo its frames' rotation, then its own.
-      const d = rotateVector(rotateVector(sub(p, p0), -turn), -rotation);
+      const d = rotateVector(toLayerSpace(index, id, sub(p, p0)), -rotation);
       let shown = picture0;
       let window = window0;
       if (part.kind === "pan") shown = panPicture(picture0, window0, d);

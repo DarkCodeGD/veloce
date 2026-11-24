@@ -36,6 +36,8 @@ export const RULE_NAMES: Record<LintRule, string> = {
   "ignored-padding": "Padding has no effect",
   "section-field": "Section name shows wrong",
   "duplicate-match-key": "Morph key used twice",
+  "flat-depth": "Depth has no effect",
+  "depth-behind-viewer": "Layer is behind the viewer",
 };
 
 /**

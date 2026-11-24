@@ -93,6 +93,15 @@ export function frameLayoutCss(layout: Layout): CssRecord {
   }
 }
 
+/**
+ * A frame's 3D space (2.5D, D112): `perspective` puts its children's depth and 3D turns in
+ * view, with the vanishing point at its centre. Without `preserve-3d`, each child is drawn
+ * in its own plane and painted in layer order, so depth never re-sorts the stack.
+ */
+export function frameSpaceCss(node: FrameNode): CssRecord {
+  return node.perspective === undefined ? {} : { perspective: `${node.perspective}px` };
+}
+
 /** A frame's visual style: fill, stroke, corner radius, shadow, clipping. */
 export function frameStyleCss(node: FrameNode, assetUrl: AssetUrlResolver): CssRecord {
   const css: CssRecord = {};
@@ -200,8 +209,11 @@ export function drawnCss(node: Node, shift: string | null, motion?: MotionState)
   const css: CssRecord = {};
   const parts: string[] = [];
   if (shift) parts.push(shift);
-  if (m.z !== 0) parts.push(`translate3d(${num(m.x)}px, ${num(m.y)}px, ${num(m.z)}px)`);
-  else if (m.x !== 0 || m.y !== 0) parts.push(`translate(${num(m.x)}px, ${num(m.y)}px)`);
+  // Depth (2.5D, D112) rests where the document puts it; motion's `z` moves it from there.
+  const z = (node.depth ?? 0) + m.z;
+  if (z !== 0) {
+    parts.push(`translate3d(${num(m.x)}px, ${num(m.y)}px, ${m.z === 0 ? z : num(z)}px)`);
+  } else if (m.x !== 0 || m.y !== 0) parts.push(`translate(${num(m.x)}px, ${num(m.y)}px)`);
   // Values from the document alone stay exact (a node at rest gets the CSS it always had).
   const rotation = (node.rotation ?? 0) + m.rotate;
   if (rotation !== 0) parts.push(`rotate(${m.rotate === 0 ? rotation : num(rotation)}deg)`);

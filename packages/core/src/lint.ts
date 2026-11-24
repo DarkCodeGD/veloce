@@ -51,6 +51,10 @@ export const LINT_RULES = {
     "Text shows the section's name where that's wrong: on a slide in no section (it's empty), or as the title of a slide that doesn't start the section it names.",
   "duplicate-match-key":
     "Two layers on one slide share a morph match key, so morph pairs only the first of them.",
+  "flat-depth":
+    "A layer has a `depth` but its frame has no `perspective`, so the depth shows nothing (2.5D).",
+  "depth-behind-viewer":
+    "A layer's `depth` is at or past its frame's `perspective`: it's behind the viewer and isn't drawn.",
 } as const;
 export type LintRule = keyof typeof LINT_RULES;
 
@@ -112,6 +116,7 @@ export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
       ...sectionFieldRules(deck, slide, index),
       ...positionRules(slide),
       ...matchKeyRules(slide),
+      ...depthRules(slide),
       ...tokenRules(slide, deck.theme),
       ...visualRules(slide, options.measurements?.get(slide.id)),
       ...balanceRules(slide, options.measurements?.get(slide.id)),
@@ -286,6 +291,41 @@ function matchKeyRules(slide: Slide): LintIssue[] {
     message: `${ids.length} layers on slide "${slide.id}" share the match key "${key}" (${ids.map((id) => `"${id}"`).join(", ")}), so morph pairs only the first.`,
     fix: 'Give each a different "matchKey", or remove the key from the ones that shouldn\'t morph ("matchKey": null).',
   }));
+}
+
+/**
+ * 2.5D's two traps (D112): depth only shows inside a frame with perspective, and a layer at
+ * or past the viewer's distance vanishes. Both look like a broken renderer, so say why.
+ */
+function depthRules(slide: Slide): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const { node: frame } of visibleNodes(slide)) {
+    if (frame.kind !== "frame") continue;
+    for (const child of frame.children) {
+      if (child.hidden || !child.depth) continue;
+      const where = frame.id === slide.root.id ? "the slide" : `frame "${frame.id}"`;
+      if (frame.perspective === undefined) {
+        issues.push({
+          rule: "flat-depth",
+          severity: "warning",
+          slideId: slide.id,
+          nodeIds: [child.id],
+          message: `${describe(child)} has depth ${child.depth}, but ${where} has no perspective, so it shows nothing.`,
+          fix: `Give ${frame.id === slide.root.id ? `the slide's root frame "${frame.id}"` : `frame "${frame.id}"`} a perspective (e.g. "perspective": 1200), or remove the depth ("depth": null).`,
+        });
+      } else if (child.depth >= frame.perspective) {
+        issues.push({
+          rule: "depth-behind-viewer",
+          severity: "error",
+          slideId: slide.id,
+          nodeIds: [child.id],
+          message: `${describe(child)} has depth ${child.depth}, at or past ${where}'s perspective (${frame.perspective}): it's behind the viewer and isn't drawn.`,
+          fix: `Use a depth well under ${frame.perspective} (e.g. ${Math.round(frame.perspective / 4)}), or a larger perspective.`,
+        });
+      }
+    }
+  }
+  return issues;
 }
 
 /**

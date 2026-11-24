@@ -2927,3 +2927,37 @@ D104 §1–2 concrete; part of format v3.
    things move, not twenty; lint warns (never errors) when a slide does far more than its
    level says, with the fix "remove the loops, or set the slide to lively". Each lands with
    its own roadmap item. Performance budgets (D107 §4) still cap every level.
+
+## D112 — 2.5D: `perspective` on frames, `depth` on layers, layer order still decides
+
+**Status:** Accepted (2026-11-24). Phase 4's 2.5D (D83 §5, D103 §7), part of format v3.
+
+1. **`perspective` on frames** (stage pixels, 100–100 000; none by default): the viewer's
+   distance for the frame's own children, with the vanishing point at its centre (CSS
+   `perspective`). Smaller is more dramatic. A frame inside sets its own: only direct
+   children share a frame's space. **Why per frame, not per slide:** a card can tilt its
+   own content without the whole slide going 3D, and the slide is just its root frame.
+2. **`depth` on any layer** (stage pixels towards the viewer, ±10 000): the rest position on
+   the z axis, like `rotation` it changes neither layout nor what's in front. Animations'
+   `z` moves it from there (D103's motion slot adds the two). **Why not `z`:** in every
+   design tool and in CSS, "z" reads as stacking order (z-index), and depth here never
+   changes stacking.
+3. **The layer order decides what's in front,** whatever the depth: frames don't use
+   `preserve-3d`, so each child is drawn in its own plane and painted in order. **Why:** the
+   Layers panel stays the truth about stacking, and `preserve-3d` is flattened anyway by
+   clipping, opacity and filters, which frames use constantly.
+4. **Lint names the two traps:** `flat-depth` (warning: depth in a frame without
+   perspective shows nothing) and `depth-behind-viewer` (error: depth at or past the
+   perspective, so the layer isn't drawn), each with the fix.
+5. **The editor's gestures work in drawn space:** a layer at depth d in perspective p is
+   drawn p / (p − d) times bigger, and moves that many times further than its `position`.
+   Move, resize, crop and align divide the pointer's delta by that factor (multiplied down
+   the tree, after undoing ancestor rotation: `toLayerSpace`), so a deep layer stays under
+   the cursor; resize doesn't snap a deep layer (its drawn edges aren't its size). Real
+   Chromium tests prove the factor and the drag.
+6. **Fields:** Depth beside Rotation in the inspector; Perspective in a frame's layout
+   section (the slide's Layout section for its root).
+7. **Not yet:** resting 3D turns (`rotateX`/`rotateY` exist as motion only); a camera
+   moving over the 2.5D scene (Phase 5); agents' input fields, docs and outline for
+   `depth` and `perspective`, with the MCP item's real-agent retest (core ops already
+   accept them, and the two lint rules are in `get_docs("lint")`).

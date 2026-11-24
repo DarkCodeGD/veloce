@@ -5,7 +5,7 @@
  *
  * Geometry happens on the slide, in the boxes layers cover on screen (rotation included),
  * so layers in different frames align with each other. Each layer's on-slide shift is then
- * turned into its parent's space (undoing ancestor rotation) and added to its `position`:
+ * turned into its parent's space (undoing ancestor rotation and 2.5D depth) and added to its `position`:
  * one `node.update` per layer that actually moves, one transaction (golden rules #1, #7).
  *
  * A free layer that fills its frame along an axis (text does by default: `width: "fill"`)
@@ -16,7 +16,7 @@
 import type { Op } from "@veloce/core";
 import type { Command } from "./commands.js";
 import type { Point, Rect } from "./geometry.js";
-import { ancestorRotation, isFree, movedPosition } from "./manipulate.js";
+import { isFree, movedPosition, toLayerSpace } from "./manipulate.js";
 import { nodeLabel, type SlideIndex, topmost } from "./slide-index.js";
 
 export type AlignEdge = "left" | "center" | "right" | "top" | "middle" | "bottom";
@@ -57,14 +57,6 @@ export function alignable(index: SlideIndex, ids: readonly string[]): string[] {
 }
 
 /** An on-slide shift, in the layer's parent space (rotated frames turn their children). */
-function localShift(index: SlideIndex, id: string, d: Point): Point {
-  const rad = (-ancestorRotation(index, id) * Math.PI) / 180;
-  if (rad === 0) return d;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  return { x: d.x * cos - d.y * sin, y: d.x * sin + d.y * cos };
-}
-
 /** Shift each layer by its on-slide delta; null when nothing moves. */
 function shiftBy(
   index: SlideIndex,
@@ -76,7 +68,7 @@ function shiftBy(
   for (const [id, d] of deltas) {
     const node = index.nodes.get(id)?.node;
     if (!node) continue;
-    const moved = movedPosition(node, localShift(index, id, d)); // in the layer's anchor
+    const moved = movedPosition(node, toLayerSpace(index, id, d)); // in the layer's anchor
     const position = { x: round2(moved.x), y: round2(moved.y) };
     const movedX = position.x !== (node.position?.x ?? 0);
     const movedY = position.y !== (node.position?.y ?? 0);

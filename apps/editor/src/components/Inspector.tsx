@@ -523,6 +523,16 @@ function LayerSection({
         suffix="°"
         {...setLive("rotation", "Rotate layer")}
       />
+      {/* 2.5D (D112): towards the viewer; shows once the frame has a perspective. */}
+      <NumberField
+        label="Depth"
+        value={node.depth}
+        placeholder="0"
+        min={-10_000}
+        max={10_000}
+        suffix="px"
+        {...setLive("depth", "Change depth")}
+      />
       <ToggleField label="Hidden" value={node.hidden} onCommit={set("hidden", "Toggle hidden")} />
       <ToggleField label="Locked" value={node.locked} onCommit={set("locked", "Toggle locked")} />
     </Section>
@@ -689,6 +699,18 @@ function LayoutSection({
           {...liveLayout("gap", "Change gap")}
         />
       )}
+      {/* 2.5D (D112): gives the layers' depth a vanishing point at the frame's centre. */}
+      <NumberField
+        label="Perspective"
+        value={node.perspective}
+        placeholder="None"
+        min={100}
+        max={100_000}
+        suffix="px"
+        {...live((v) =>
+          updateNode(node.id, { perspective: v === null ? null : v }, "Change perspective"),
+        )}
+      />
       {layout.mode === "absolute" ? (
         <p className="inspector-hint">
           Free layers are placed from the frame's edges; pin them with Pin X / Pin Y.

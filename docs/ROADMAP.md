@@ -32,11 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-24
-- **Next:** 2.5D, then format v3's fixtures, and v3 is complete. Done in Phase 4: visual regression tests (D102), the
+- **Next:** format v3's fixtures and an animated visual reference deck, and v3 is complete. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (962 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (974 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -277,8 +277,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [x] Motion level on the deck and per slide; fixed `$motion` tokens (durations, stagger,
       easings) with a personality per built-in theme, scaled by the level; the level also
       sets how much moves (reach, effects per layer, ambient) (D111)
-- [ ] 2.5D: perspective on frames and depth (`z`) on layers; the motion slot already draws
-      `z`, `rotateX` and `rotateY` (D83 §5, D103 §7)
+- [x] 2.5D: `perspective` on frames, `depth` on layers (layer order still decides), lint
+      for its traps, drags that keep deep layers under the cursor (D112)
 - [ ] Format v3: one migration for all of the above, with fixtures and a visual reference
       deck that animates
 - [ ] Timeline evaluator in core: keyframes, cubic-Bézier easing, springs, stagger, seeded
@@ -312,7 +312,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       animated layers). Present workspace: rehearse in presenter view. Both on the round 5
       shell
 - [ ] MCP: `set_animations(slideId, steps)`, choreography from intent, the motion level
-      (docs give each level's summary, D111 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
+      (docs give each level's summary, D111 §7), `depth` and `perspective` in node input,
+      docs and outlines (D112 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide
 - [ ] Determinism test: seek to the same step/time twice → identical screenshots

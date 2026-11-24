@@ -155,6 +155,13 @@ const nodeCommon = {
    * `position`, `anchor` and sizes describe the upright box.
    */
   rotation: z.number().min(-360).max(360).optional(),
+  /**
+   * 2.5D (D112): stage pixels towards the viewer (negative: away). Shows once the parent
+   * frame has a `perspective`: nearer layers are drawn bigger and drift from the vanishing
+   * point. Like `rotation`, it doesn't change layout, nor the stacking order (the layer
+   * order decides what's in front). Animations' `z` moves it from here. Default: 0.
+   */
+  depth: z.number().min(-10_000).max(10_000).optional(),
   /** Default: `"hug"` (plugins may declare their own default, e.g. text fills width). */
   width: SizingSchema.optional(),
   height: SizingSchema.optional(),
@@ -200,6 +207,13 @@ const frameFields = {
   kind: z.literal("frame"),
   layout: LayoutSchema,
   style: FrameStyleSchema.optional(),
+  /**
+   * 2.5D (D112): the viewer's distance from this frame in stage pixels, for its children's
+   * `depth` and 3D turns (`rotateX`/`rotateY` motion), with the vanishing point at the
+   * frame's centre. Smaller is more dramatic: 800 is strong, 2000 gentle. Only the frame's
+   * own children are in its space; a frame inside sets its own. Default: none (flat).
+   */
+  perspective: z.number().min(100).max(100_000).optional(),
 };
 
 /** A frame's own fields without its subtree (validate edits without re-walking children). */
