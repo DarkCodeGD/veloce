@@ -2,7 +2,7 @@
  * SlideView = StageView + SlideRenderer: "show this slide of this deck in that box".
  * What the editor uses for its main canvas and its slide thumbnails.
  */
-import type { Deck, MotionState, SlideMeasurement } from "@veloce/core";
+import type { Deck, MotionClip, MotionState, SlideMeasurement } from "@veloce/core";
 import { SlideRenderer, type SlideRendererOptions } from "./slide-renderer.js";
 import { type Camera, StageView, type StageViewOptions } from "./stage.js";
 
@@ -55,6 +55,19 @@ export class SlideView {
   /** Draw layers away from their rest position (see `SlideRenderer.setMotion`). */
   setMotion(motion: ReadonlyMap<string, MotionState>): void {
     this.#renderer.setMotion(motion);
+  }
+
+  /** Play planned motion on the compositor (see `SlideRenderer.playMotion`, D115). */
+  playMotion(clips: ReadonlyMap<string, readonly MotionClip[]>, origin: number): void {
+    this.#renderer.playMotion(clips, origin);
+  }
+
+  pauseMotion(time?: number): void {
+    this.#renderer.pauseMotion(time);
+  }
+
+  stopMotion(): void {
+    this.#renderer.stopMotion();
   }
 
   ready(): Promise<void> {

@@ -2,13 +2,20 @@
  * The View menu (D89, D90, D92): the command palette, canvas zoom (view state, never ops),
  * the left panel's tabs, the workspace's panels shown or collapsed, and Follow AI.
  */
+import { Play } from "lucide-react";
 import { type CameraControls, cameraControls } from "../camera-controls.js";
 import { openPalette } from "../command-palette.js";
 import { panel as layoutPanel, setPanelCollapsed, togglePanel } from "../layout.js";
 import { zoomKeyDirection } from "../model/camera.js";
+import { presentedSlides } from "../model/presentation.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import type { PanelId } from "../model/workspace.js";
-import type { EditorCommand, Panel } from "./context.js";
+import { startPresenting } from "../present.js";
+import type { CommandContext, EditorCommand, Panel } from "./context.js";
+
+/** There's a slide to present (hidden ones don't count). */
+const canPresent = (c: CommandContext) =>
+  c.deck !== undefined && presentedSlides(c.deck).length > 0;
 
 const zoom = (
   id: string,
@@ -115,6 +122,31 @@ export function viewCommands(): EditorCommand[] {
         const open = SIDE_PANELS.some((id) => !layoutPanel(id).collapsed);
         for (const id of SIDE_PANELS) setPanelCollapsed(id, open);
       },
+    },
+    {
+      // Google Slides' Slideshow and PowerPoint's Shift+F5: from the slide on screen.
+      id: "view.present",
+      label: "Present",
+      shortcut: SHORTCUTS.present,
+      icon: Play,
+      keywords: "present slideshow play show fullscreen start",
+      group: "view",
+      menu: "view",
+      section: "present",
+      enabled: canPresent,
+      run: (c) => startPresenting(c.slideIndex?.slide.id ?? null),
+    },
+    {
+      id: "view.presentFromStart",
+      label: "Present from start",
+      shortcut: SHORTCUTS.presentFromStart,
+      icon: Play,
+      keywords: "present slideshow play show fullscreen beginning first",
+      group: "view",
+      menu: "view",
+      section: "present",
+      enabled: canPresent,
+      run: () => startPresenting(null),
     },
     {
       id: "view.followAI",

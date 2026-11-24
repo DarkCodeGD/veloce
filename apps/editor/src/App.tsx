@@ -35,6 +35,7 @@ import { LayoutsDialog } from "./components/LayoutsDialog.js";
 import { ManageDecksDialog } from "./components/ManageDecksDialog.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { PreferencesDialog } from "./components/PreferencesDialog.js";
+import { PresentView } from "./components/PresentView.js";
 import { SaveComponentDialog } from "./components/SaveComponentDialog.js";
 import { SectionDialog } from "./components/SectionDialog.js";
 import { ShortcutsDialog } from "./components/ShortcutsDialog.js";
@@ -56,6 +57,7 @@ import { layerSeverities, slideBadges, withoutMuted } from "./model/lint-view.js
 import { editableText, pickTarget, pruneSelection } from "./model/selection.js";
 import { indexSlide } from "./model/slide-index.js";
 import { type PanelId, type PanelLayout, panelLayout, panelSpec } from "./model/workspace.js";
+import { usePresenting } from "./present.js";
 import { previewDeck, previewStore } from "./preview.js";
 import { useSettings } from "./settings.js";
 
@@ -100,6 +102,7 @@ export function App() {
   const [panel, setPanel] = useState<Panel>("slides");
   /** The open app dialog, if any (D76–D78). */
   const dialog = useOpenDialog();
+  const presenting = usePresenting();
   const prefs = useSettings();
   const [follow, setFollow] = useState(prefs.ai.followAI);
   // Follow AI starts as Preferences say (D91), once they arrive and whenever they change.
@@ -422,6 +425,9 @@ export function App() {
       {dialog === "section" && deck && <SectionDialog deck={deck} onClose={closeDialog} />}
       {dialog === "layouts" && deck && deckId && (
         <LayoutsDialog deck={deck} deckId={deckId} onClose={closeDialog} />
+      )}
+      {presenting && deck && deckId && (
+        <PresentView deck={deck} deckId={deckId} from={presenting.from} />
       )}
       <CommandPalette deck={deck ?? undefined} />
       <AddMenu />

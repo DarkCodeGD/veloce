@@ -169,6 +169,9 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
   registry (Phase 6, D79).
 - **Edits are optimistic previews, committed as transactions**: a drag shows on the canvas
   only (`preview.ts`) and sends one transaction when it ends, so one gesture is one undo step.
+- **Presenting** (`components/PresentView.tsx`, `model/presentation.ts`, D116): a fullscreen
+  modal dialog with its own `SlideView` and `SlidePlayer` (D115); the pure `Presentation`
+  model decides what a click or a key does (next step, next slide, back, end screen).
 
 ## Tests
 

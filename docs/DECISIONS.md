@@ -3093,3 +3093,34 @@ version, v3, for the morph key, the timeline, motion levels and tokens, and 2.5D
    `motion.json` at six moments (`motion--<slide>@<step>-<ms>.png`), as D113 §4 promised.
    MCP's `render_preview` gets a step and time with its own roadmap item and an agent
    retest.
+
+## D116 — Present comes early: a fullscreen Play before the Animate workspace
+
+**Status:** Accepted (2026-11-25). A departure from the roadmap's order, on purpose.
+
+1. **Why now:** after the clock (D115), decks could play, but nothing in the app showed it:
+   presenter mode, the Animate workspace and the MCP tools sat at the end of Phase 4, about
+   eight items away. Tests prove frames are right; they can't say a spring feels cheap or a
+   step drags, and the maintainer hand-tests every UX change. So the core of presenter mode
+   comes first, and every motion item after it (presets, transitions, choreography) can be
+   watched. It's that item's first slice, not a throwaway: notes, the next-slide preview,
+   the timer, a second window, the laser pointer and reduce motion stay in Presenter mode.
+2. **Keys and entry points are the mainstream ones:** View → Present (Shift+F5, from the
+   slide on screen) and Present from start (F5), PowerPoint's keys; a filled Present button
+   at the top right, as in Google Slides. While presenting: →, ↓, Space, Page Down, Enter,
+   N or a click move on; ←, ↑, Page Up, Backspace or P go back; Home and End; Esc leaves.
+   The pointer hides after 2 s still.
+3. **Navigation is a pure model** (`model/presentation.ts`) over `SlidePlayer`: next starts
+   the slide's next step, then the next slide, then an end screen, as every tool does.
+   Back goes one step back shown played out (as if it just ended, loops still going), and
+   from a slide's first step to the previous slide fully built. Hidden slides are skipped.
+   Moves run one at a time: a click while a slide loads (fonts, images) waits for it
+   instead of being lost or starting motion on a half-drawn frame.
+4. **A native modal `<dialog>` taken fullscreen**, like every dialog here (D76): the editor
+   behind is inert and its shortcuts don't fire. Leaving fullscreen ends the show; if
+   fullscreen is refused, the dialog still fills the window. It presents the deck as it
+   was when it started, so an agent's edit meanwhile doesn't restart the slide on screen.
+5. **Something to watch:** until the Animate workspace or the MCP tools land, the only
+   animated deck is the reference deck `motion.json`. A copy goes into the maintainer's
+   local `./decks` as "Motion demo"; the frozen original stays as it is, and the copy
+   isn't committed.

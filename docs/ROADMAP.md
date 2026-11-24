@@ -34,9 +34,9 @@
 - **Last updated:** 2026-11-25
 - **Next:** effect presets (fade, slide, scale…), so agents' `fade-in` moves. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (1029 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1037 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -287,6 +287,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [x] Core clock: `SlidePlayer` seeks on the main thread (motion, properties, plugins'
       `seek(t)`) and plays motion on the compositor, sampled; real Chromium proves both
       draw the same frame; the visual test captures `motion.json` mid-step (D107, D115)
+- [x] Present, pulled forward so motion can be hand-tested: Present (Shift+F5) and from
+      start (F5), fullscreen, clicks through steps and slides, back a step, hidden slides
+      skipped, an end screen (D116)
 - [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), shaped by
       the motion level and `$motion` tokens, extensible by plugins; Save as preset keeps
       your own in the deck; `fade-in` by that name, and unknown effects load as warnings
@@ -303,7 +306,7 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       than its reach) gets a warning with the fix (D111 §7)
 - [ ] Performance lint: agents and people get "this slide will drop frames" with a fix;
       starting budgets about 600 layers moving at once and 100 blurring (D104 §4, D107 §4)
-- [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
+- [ ] Presenter mode, on top of Present (D116): speaker notes, next-slide preview, timer, second window
       synced, laser pointer; its slide overview grouped by sections (D97); reduce motion
       plays the calm version (D104 §4)
 - [ ] Animate workspace with three depths, no mode switch (D106): one click (level slider,

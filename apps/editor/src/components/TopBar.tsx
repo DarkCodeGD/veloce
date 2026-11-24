@@ -1,7 +1,8 @@
 import type { DeckListing } from "@veloce/core";
-import { Redo2, Undo2 } from "lucide-react";
+import { Play, Redo2, Undo2 } from "lucide-react";
 import { useEffect } from "react";
 import { redo, undo } from "../actions.js";
+import { isCommandEnabled, runCommand } from "../editor-commands.js";
 import { originName } from "../model/history.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { shortcutAttrs } from "../platform.js";
@@ -109,6 +110,17 @@ export function TopBar({
           Follow AI
         </label>
         <span className={`status status-${status}`}>{STATUS_LABEL[status]}</span>
+        <button
+          type="button"
+          className="present-button"
+          data-tip="Present from this slide"
+          {...shortcutAttrs(SHORTCUTS.present)}
+          disabled={!isCommandEnabled("view.present")}
+          onClick={() => runCommand("view.present")}
+        >
+          <Play size={14} aria-hidden="true" />
+          Present
+        </button>
       </div>
     </header>
   );

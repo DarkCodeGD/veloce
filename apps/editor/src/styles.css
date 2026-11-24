@@ -3889,6 +3889,74 @@ html.is-scrubbing * {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* The top bar's Present button (D116): the one filled button up there, as in Google Slides. */
+
+.present-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.present-button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.present-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Presenting (components/PresentView.tsx, D116): the slide alone, on black, edge to edge. */
+
+.present {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #000;
+  color: #fff;
+  outline: none;
+  overflow: hidden;
+}
+
+.present::backdrop {
+  background: #000;
+}
+
+.present-idle {
+  cursor: none;
+}
+
+/* Sized, not positioned: the stage view makes its viewport `position: relative` itself. */
+.present-stage {
+  width: 100%;
+  height: 100%;
+}
+
+.present-end {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: rgb(255 255 255 / 0.6);
+  font-size: 18px;
+}
+
 /* Dialogs (components/Dialog.tsx, D76): a native modal <dialog>, airy like the panels. */
 
 .dialog {

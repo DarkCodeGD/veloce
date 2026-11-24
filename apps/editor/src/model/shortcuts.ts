@@ -74,6 +74,9 @@ export const SHORTCUTS = {
   toolText: "T",
   toolHand: "H",
   addMenu: "Shift+A",
+  // Presenting (D116): PowerPoint's keys. F5 from the start, Shift+F5 from this slide.
+  presentFromStart: "F5",
+  present: "Shift+F5",
 } as const;
 
 export type ShortcutSpec = string;
