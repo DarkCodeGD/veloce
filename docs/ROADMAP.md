@@ -32,11 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-25
-- **Next:** the timeline evaluator in core, which makes decks play. Done in Phase 4: visual regression tests (D102), the
+- **Next:** the core clock, which feeds the evaluator to the renderer: decks play. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (977 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1007 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -281,8 +281,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       for its traps, drags that keep deep layers under the cursor (D112)
 - [x] Format v3: one migration for all of the above; a fixture per format version, the v3 one
       saved back unchanged; `motion.json`, a reference deck that animates (D113)
-- [ ] Timeline evaluator in core: keyframes, cubic-Bézier easing, springs, stagger, seeded
-      randomness; pure and deterministic, no dependencies (D105 §1)
+- [x] Timeline evaluator in core: keyframes, cubic-Bézier easing, springs that settle in
+      their duration, OKLab colors, stagger, seeded randomness; pure, ~0.1 ms a frame for
+      300 layers (D105 §1, D114)
 - [ ] Core clock: `seek(slideId, step, t)` drives the motion slot and plugins' `seek(t)`
       (scrubbing, export); presenting plays transform, opacity and filter tracks on the
       compositor as Web Animations, and a pixel test proves both draw the same frame (D107);

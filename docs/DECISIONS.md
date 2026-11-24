@@ -2992,3 +2992,53 @@ version, v3, for the morph key, the timeline, motion levels and tokens, and 2.5D
 5. **Effect names in frozen files are a promise:** the fixtures use `"fade-in"` (the
    name D110's docs teach), so the effect presets ship one by that name, and an unknown
    effect stays a warning when loading, like an unknown element type, never an error.
+
+## D114 — The timeline evaluator: a moment is a time and its clicks
+
+**Status:** Accepted (2026-11-25). Phase 4's evaluator (D105 §1), in core, no dependencies.
+
+1. **A moment is `{ time, clicks }`:** milliseconds since the slide appeared, and when each
+   step after the first began. Presenting passes the real clicks; scrubbing and export
+   pass clicks that come as each step ends (`seek(step, t)` → `seekPosition`). **Why:**
+   one pure function draws all three, and a `forever` loop from an earlier step keeps its
+   real phase however long the presenter waited. A click during a step doesn't cut that
+   step short: its animations play on by the clock, and the next step's take over the
+   channels they share.
+2. **Compile once, evaluate per frame:** `compileSlide(deck, slide)` resolves tokens at the
+   slide's level, solves easings, parses colors and lays out the schedule; `at()` is only
+   arithmetic. 300 layers × 3 tracks take ~0.1 ms a frame (Node, this machine).
+3. **Which animation shows,** per layer and per channel or property: the one that started
+   last (list order on a tie). Before any has started, the first one's start holds, so an
+   entrance on a later click keeps its layer hidden until then (as PowerPoint does); after
+   one ends, its end holds. A track without a keyframe at 0 or 1 runs from or to the
+   layer's own value; a property the layer doesn't set holds its nearest keyframe. **Why
+   not additive:** two animations of `x` adding up surprises everyone; composition modes can
+   come with the timeline panel if needed.
+4. **Easing is per stretch between keyframes** (as in CSS `@keyframes` and After Effects):
+   each stretch uses its starting keyframe's easing, else the animation's. With two
+   keyframes, which is most tracks, that's the whole animation. **Why not over the whole
+   animation (the Web Animations effect easing):** a pulse `[{ at: 0.5, value: 1.4 }]`
+   eased in-out as a whole turns around at full speed; per stretch it eases into the peak
+   and out of it. Both map exactly onto Web Animations (keyframe easings) for the clock. The
+   schema's comments said both; they now say this.
+5. **Easings:** CSS names as CSS's own Béziers; Bézier solved by Newton's method, then
+   bisection, to 1e-9 in time (browsers use far less). **Springs are duration-based:**
+   damping ratio 1 − 0.9 × bounce (so bounce 1 still settles), stiffness solved so the
+   swing is under 0.1% at the duration's end, and that 0.1% spread linearly so it lands on
+   exactly 1 with no jump. The schedule's end times stay true, and the clock can sample the
+   curve into CSS `linear()`. Overshoot: bounce 0.3 → 3.5%, 0.5 → 12.6%, 1 → 73%.
+6. **Values:** numbers interpolate; colors (hex, tokens, `transparent`) blend in **OKLab with
+   premultiplied alpha**, like CSS `color-mix()`, and come out as hex a document accepts;
+   number tokens (`$radius.md`) resolve through the theme; anything else (a gradient and a
+   color) switches halfway, as CSS does. Motion channels may overshoot (that's a spring;
+   `resolveMotion` keeps them drawable), but a property never leaves the range its values
+   give, so a bouncing radius can't go negative.
+7. **Seeded randomness is stateless:** `randomAt(seed, i)` hashes the pair (MurmurHash3's
+   mixer), so seeking needs no replay; `hashSeed` seeds from stable parts such as an
+   animation ID. `staggerDelays` spreads items from the start, end, center, edges, an index
+   or a seeded shuffle, optionally along an easing. Values are pinned by tests: exported
+   videos replay them, so changing them changes old exports.
+8. **Effects plug in:** an `EffectResolver` turns an effect into tracks with its own default
+   duration and easing, which `scheduleSlide` also reads, so the schedule and the frames
+   agree. Without one (until the presets item), an effect moves nothing but keeps its place
+   in time.

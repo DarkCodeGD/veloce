@@ -180,16 +180,24 @@ export interface Step {
   duration: number;
 }
 
+/** What an effect gives an animation that doesn't set its own (D114). */
+export interface AnimationDefaults {
+  duration?: Time;
+  easing?: Easing;
+}
+
 /**
  * When every animation of a slide plays. Step 0 holds the animations before the first
  * `onClick` (they play as the slide appears) and is always there, even empty; each `onClick`
  * starts a step. `withPrevious` starts with the animation before it, `afterPrevious` when it
  * ends; the first animation of a step starts at its delay. `$motion` times resolve from
  * `tokens` (`slideMotionTokens(deck, slide)`; default: Veloce's own motion, `subtle`).
+ * `defaults` gives an effect's own duration to animations that set none.
  */
 export function scheduleSlide(
   slide: Pick<Slide, "animations">,
   tokens: MotionTokens = motionTokens(undefined),
+  defaults?: (animation: Animation) => AnimationDefaults | undefined,
 ): Step[] {
   const steps: Step[] = [{ animations: [], duration: 0 }];
   let previous: ScheduledAnimation | null = null;
@@ -205,7 +213,8 @@ export function scheduleSlide(
     const start: number = from + resolveTime(animation.delay ?? 0, tokens);
     const forever = animation.repeat === "forever";
     const plays = typeof animation.repeat === "number" ? animation.repeat : 1;
-    const end = start + resolveTime(animation.duration ?? DEFAULT_DURATION, tokens) * plays;
+    const duration = animation.duration ?? defaults?.(animation)?.duration ?? DEFAULT_DURATION;
+    const end = start + resolveTime(duration, tokens) * plays;
     const scheduled: ScheduledAnimation = { animation, start, end, forever };
     step.animations.push(scheduled);
     step.duration = Math.max(step.duration, end);

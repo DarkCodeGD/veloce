@@ -75,6 +75,10 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Motion levels and tokens** (`schema/motion.ts`, `motion-tokens.ts`, D111): the theme's
   `$motion` values, scaled by the slide's or deck's level, resolve an animation's times and
   easings (`slideMotionTokens` → `scheduleSlide`).
+- **The timeline evaluator** (`evaluate.ts`, `easing.ts`, `color-mix.ts`, `random.ts`, D114):
+  `compileSlide(deck, slide)` once per edit, then `at({ time, clicks })` per frame gives every
+  animated layer's `MotionState` and property values. Pure: presenting, scrubbing (`seek`)
+  and export draw the same frame for the same moment. Effects come in through a resolver.
 - **Ops** (`src/ops/`): `slide.*`, `node.*`, `animation.*`, `deck.*`, `asset.*`, `component.*`. Each is
   plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
   Merge Patches. Ops copy only the path to what changed (structural sharing), so untouched
@@ -136,8 +140,9 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
   the slide (click-through, not a layer).
   **Motion** (D103) is drawn on top of layout: `setMotion` moves, turns, scales, fades and
   blurs layers from their rest position (core's `MotionState`) without re-running layout,
-  and the renderer is the only writer of `transform`, `opacity` and `filter`. The timeline that
-  produces motion will be our own evaluator in core; proven libraries only draw (D105).
+  and the renderer is the only writer of `transform`, `opacity` and `filter`. Core's
+  evaluator produces the motion (D114); the clock that feeds it to `setMotion` is next.
+  Proven libraries only draw (D105).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
   `update`, `seek`, `dispose`, and `aiDocs` for agents) and registers them in a registry that
   core uses to validate props. Every plugin passes the conformance kit. The built-in ones

@@ -29,7 +29,7 @@ export const KeyframeSchema = z.strictObject({
   at: z.number().min(0).max(1),
   /** A number, or a color (`"#ff0000"`, `"$color.accent"`) for color properties. */
   value: z.union([z.number(), z.string().min(1).max(200)]),
-  /** How the value travels from this keyframe to the next. Default: the animation's easing. */
+  /** How the value travels from this keyframe to the next. Default: the animation's. */
   easing: EasingSchema.optional(),
 });
 export type Keyframe = z.infer<typeof KeyframeSchema>;
@@ -119,7 +119,10 @@ export const AnimationSchema = z
     delay: timeSchema().optional(),
     /** One play: milliseconds, or a `$motion` duration. Default: the effect's, or `"$motion.normal"`. */
     duration: timeSchema(1).optional(),
-    /** Over the whole animation. Default: the effect's, or `"$motion.enter"`. */
+    /**
+     * How each stretch between keyframes travels (each starts slow, fast or springy on its
+     * own), unless a keyframe sets its own. Default: the effect's, or `"$motion.enter"`.
+     */
     easing: EasingSchema.optional(),
     effect: EffectRefSchema.optional(),
     tracks: TracksSchema.optional(),
