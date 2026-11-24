@@ -18,7 +18,7 @@
 - Decks animate (steps, effects, transitions, morph) and present well (presenter view,
   second screen, laser pointer).
 - Reuse: components and slide layouts; slide numbers, footers and sections.
-- The core plugins (chart, icon, code, math, video, Lottie) pass conformance.
+- The core plugins (table, chart, icon, code, math, video, Lottie) pass conformance.
 - Third-party plugins, sandboxed like Figma, add commands, panels and element types, and
   agents can call their commands (D79).
 - Export to PDF, PNG, standalone HTML and MP4.
@@ -26,10 +26,11 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor, complete (phase gate due)
+- **Active phase:** Phase 4: Motion
 - **Last updated:** 2026-11-24
-- **Next:** Phase 3 is complete: run the phase gate before Phase 4 starts (its blocker, the
-  GSAP license question, comes first).
+- **Next:** the suggestion-mode design note (Open questions), then Phase 4's first item,
+  visual regression tests. The Phase 3 gate is done: Motion replaces GSAP (D100); tables,
+  lines and arrows, a morph match key and toasts over dialogs were added to the plan.
 - **State:** `pnpm check` is green (906 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
@@ -116,7 +117,7 @@ new version → broadcast to all clients → `renderer` re-renders → measureme
 ## Stack
 
 TypeScript (strict) · pnpm workspaces · Vite · React (editor UI only) · Zod · Vitest · Playwright ·
-fflate (zip) · TipTap (rich text) · own transform handles (D43) · GSAP (default animation driver; fallback driver: Motion, MIT. See D14) ·
+fflate (zip) · TipTap (rich text) · own transform handles (D43) · Motion (MIT, the animation driver, D100) ·
 `@modelcontextprotocol/sdk` (Streamable HTTP) · Electron + electron-builder + electron-updater ·
 plain Three.js inside the 3D plugin (plugins are framework-agnostic).
 
@@ -149,7 +150,7 @@ plain Three.js inside the 3D plugin (plugins are framework-agnostic).
       actionable errors (D33)
 - [x] View-only editor and `apps/server` on one local port with Host/Origin checks (D34)
 
-## Phase 3 — Manual editor
+## Phase 3 — Manual editor ✅ (2026-11-24)
 
 - [x] Rounds 1–3: selection, hover, layers panel, move/resize/rotate, snapping, auto-layout
       drag, TipTap text editing, schema-generated inspector, slide panel, themes, assets,
@@ -250,18 +251,28 @@ never undoes the agent's work.
 
 ## Phase 4 — Motion
 
-**Blocker:** resolve the GSAP license question (Open questions) before starting.
+**Before the timeline schema:** the suggestion-mode design note (Open questions), so the
+document-model changes below don't rule out reviewable agent edits later.
 
 - [ ] Visual regression tests first: reference decks rendered in CI and compared with
       stored screenshots, so the renderer work below can't silently move a pixel in
       existing decks
 - [ ] Motion is a transform on top of a layer's rest position, never width/height per frame;
       stacks get layout animations (FLIP); 2.5D is perspective and z on frames (D83 §5)
+- [ ] Toasts show over open dialogs: a modal `<dialog>` makes everything behind it inert, so
+      an error from a dialog's action (Save version failing) is dimmed and can't be
+      clicked. Manage decks works around it with its own Undo bar (D99 §4); fix it once,
+      before the Animate workspace adds more dialogs
+- [ ] Morph match key: an optional key on nodes that morph matches across slides. IDs are
+      unique in the deck and Duplicate slide gives fresh ones, so matching by ID never
+      finds anything; Duplicate slide fills the key from the original node, agents set it
+      themselves, and morph falls back to name and type (like PowerPoint's `!!name`).
+      Decided and in the schema before the timeline schema
 - [ ] Timeline schema: per-slide steps (click triggers); animations `{ target, effect | keyframes, trigger: onClick | withPrevious | afterPrevious, delay, duration, easing }`
 - [ ] Core clock: `seek(slideId, step, t)`; plugins driven via `seek(t)`
-- [ ] `AnimationDriver` interface; GSAP as default driver (swap-able)
+- [ ] `AnimationDriver` interface, with Motion as the driver (D100)
 - [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), extensible by plugins
-- [ ] Slide transitions (fade, push, zoom) + **morph** (match nodes by id across slides)
+- [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key)
 - [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
       synced, laser pointer; its slide overview grouped by sections (D97)
 - [ ] Animate workspace (timeline, steps, effect and transition pickers) and Present
@@ -279,6 +290,13 @@ Each plugin: `propsSchema`, `aiDocs`, `renderStatic`, conformance kit passes. Se
 assets (icons, logos) load only through `<img>`, never inlined, so scripts in an SVG can't run.
 
 - [ ] Plugin host mount policy: mount the current slide ±1 only; others show static thumbnails
+- [ ] `table`: rows and columns of rich-text cells, a header row, column widths and theme
+      styles; agents send a 2D array. Motivation: comparison, pricing and feature slides
+      are faked today with grids of frames: heavy MCP payloads, awkward to edit by hand
+- [ ] Lines and arrows: a `line` shape with two endpoints, a stroke and arrowheads at
+      either end, drawn with a tool and dragged by its ends. Motivation: shapes are only
+      rect and ellipse, so flows, timelines and callouts use `→` characters. (Connectors
+      that stay attached to shapes wait for after 1.0)
 - [ ] `chart` (ECharts): bar/line/pie/area/scatter, data in props, animated entry
 - [ ] `lottie` (dotLottie): play/seek, segment control
 - [ ] `code` (Shiki): syntax highlight, line highlight steps
@@ -324,6 +342,8 @@ network or disk without permission, and disabling it removes every trace.
 - [ ] `veloce://` protocol handler
 - [ ] Native menus (macOS mirrors round 5's menu bar), recent files, window state, crash
       recovery from autosave
+- [ ] Moving a deck to the trash uses the OS trash (`shell.trashItem`), so it can be
+      restored after a restart too, not only with this session's Undo (D99 §1)
 - [ ] Preferences → Interface (D91 §2): UI scale through Electron's zoom factor (CSS zoom
       misplaces popovers), and light/dark once there's a light token set
 - [ ] Preferences → System: GPU preference (high-performance / power saving; applied at
@@ -412,6 +432,8 @@ user moves one into a phase.
 - Find and replace across the deck; auto-fit text (shrink to fit its box)
 - Right-to-left and CJK text layout
 - `path`/`polygon` shapes for custom silhouettes, with a strict path-data validator
+- Connectors: lines that stay attached to shapes and reroute when they move
+- Apply a layout to an existing slide, mapping its content into the layout's slots (D95 §7)
 - Frame style presets in the theme (`$style.card`), decided together with components
 - A user component library shared between decks (`~/.config/veloce/library/`)
 - Linked components: a main component with instances and overrides (an override model,
@@ -448,15 +470,15 @@ user moves one into a phase.
 
 ## Open questions
 
-- [x] **Project license:** Apache-2.0 (decided 2026-11-18). GSAP can stay the default driver if its license text checks out (D14).
-- [ ] **GSAP license:** read the GSAP "standard no-charge license" text. Veloce doesn't compete with
-      Webflow, but GSAP's license is not OSI-approved: fine next to an MIT/Apache app, but a conflict with GPL
-      and a blocker for strict distro packaging (e.g. Debian main). If incompatible → Motion becomes the
-      default driver and GSAP ships as an optional plugin. **Resolve before Phase 4.**
+- [x] **Project license:** Apache-2.0 (decided 2026-11-18).
+- [x] **GSAP license:** its 2025 license forbids no-code visual animation tools that compete
+      with Webflow, and isn't OSI-approved: Motion (MIT) is the driver, GSAP isn't shipped
+      (2026-11-24, D100).
 - [ ] **Name:** trademark search for "Veloce" in the software class.
 - [x] **Extension:** `.veloce` confirmed by the user (2026-11-18).
 - [ ] **Suggestion mode (after 1.0, but check now):** before Phase 4 changes the document
       model, confirm that agent edits could later be held as a reviewable change set (per
-      origin, like undo) without a format break. A short design note is enough.
+      origin, like undo) without a format break. A short design note is enough. **Resolve
+      before Phase 4's timeline schema.**
 - [ ] **Sync:** server op log now; move to Yjs only if cloud multi-user collaboration becomes a goal.
 - [ ] **Business:** hosted web viewer / cloud sync / plugin marketplace (post-launch).

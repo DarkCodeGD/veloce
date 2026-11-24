@@ -33,7 +33,8 @@ is simpler than CRDTs for a local-first app; Yjs stays an option if cloud collab
 Plugins add element types, effects, transitions, themes and importers/exporters, not alternative
 tween engines. **Why:** GSAP/anime.js/Framer Motion overlap ~90%; several engines confuse the AI,
 fight over the timeline and break seeking/export. Animations are stored as intent (`fadeUp 400ms`),
-and GSAP is just the default driver behind an `AnimationDriver` interface.
+and GSAP is just the default driver behind an `AnimationDriver` interface. (The driver is
+Motion since D100.)
 Kept: Lottie and Rive (they play designer-made assets, a different job), Three.js, charts, code, math.
 Dropped: anime.js. Optional: Matter.js only with deterministic stepping or pre-baking.
 
@@ -82,6 +83,8 @@ agent) → Claude skill (workflow + design taste) → docs site/`llms.txt`. Refe
 
 ### D14 — Veloce is FOSS; GSAP default, Motion as fallback driver (2026-11-18)
 
+**Superseded by D100** (Motion is the only bundled driver; GSAP isn't shipped).
+
 Veloce is free and open-source. GSAP stays the default `AnimationDriver` (most battle-tested timelines);
 **Motion** (motion.dev, MIT, formerly Framer Motion, vanilla JS API, Web Animations API based, seekable)
 is the fallback driver. **Why:** GSAP is free but its license is not OSI-approved, which may conflict with
@@ -91,7 +94,8 @@ touches files. Final default depends on the project license (open question in RO
 ### D15 — Apache-2.0 license (2026-11-18)
 
 **Why:** permissive (friendly to plugin authors and companies building on Veloce) with an explicit
-patent grant that MIT lacks. Compatible with GSAP's no-charge license being a non-OSI dependency.
+patent grant that MIT lacks. Compatible with GSAP's no-charge license being a non-OSI dependency
+(moot since D100: GSAP isn't shipped).
 
 ### D16 — Tooling: TypeScript 7, Vitest, Biome, source export condition (2026-11-18)
 
@@ -2446,3 +2450,20 @@ palette) takes the open deck away; a toast offers **Undo**, as for other destruc
 5. **Not for agents:** MCP has no delete tool: removing a whole deck is the user's call. An
    agent whose current deck was trashed is told the user moved it to the trash and not to
    recreate it.
+
+## D100 — Motion is the animation driver; GSAP isn't shipped
+
+**Status:** Accepted (2026-11-24), at the Phase 3 → 4 gate. Supersedes D14.
+
+1. **Motion** (motion.dev, MIT) is the only `AnimationDriver` Veloce bundles. GSAP isn't
+   shipped, not even as an optional plugin. **Why (new information since D14):** GSAP's
+   Standard "No Charge" License (Webflow, 2025-04-30) has a "Prohibited Uses" clause: no use
+   in tools that let people build visual animations without code in a way that competes with
+   Webflow's visual animation builder. Veloce's Animate workspace is a no-code visual
+   animation builder, and Phase 7 exports animated standalone HTML: at best a gray area, and
+   "competing" is the licensor's call. On top of that, the license isn't OSI-approved (no
+   GPL forks, no Debian main). Motion has none of these limits.
+2. **Nothing else changes:** decks store animation intent (D5), the driver sits behind
+   the `AnimationDriver` interface, and plugins still implement `seek(t)` on the one clock
+   (golden rule 3). Check Motion's license and version when it's added (CLAUDE.md), and
+   use only its MIT core, not the paid Motion+ extras.
