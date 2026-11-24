@@ -1,14 +1,14 @@
 /**
  * File → Manage decks… (D99): every deck in the workspace, most recently edited first, to
  * open one or move it to the trash, several in a row. Trashing is the same undoable step as
- * File → Move deck to trash, so there's no "are you sure?": Undo is in the dialog (the toast
- * is behind it, inert while the dialog is modal) and in the toast once it's closed.
+ * File → Move deck to trash, so there's no "are you sure?": its toast's Undo, which shows
+ * over the dialog (D108).
  * The list is the server's, live: a deck an agent creates or another tab trashes shows here.
  */
 import type { DeckListing } from "@veloce/core";
 import { Presentation, Search, Trash2 } from "lucide-react";
 import { useId, useRef, useState, useSyncExternalStore } from "react";
-import { restoreDeck, trashDeck } from "../actions.js";
+import { trashDeck } from "../actions.js";
 import { openDialog } from "../dialogs.js";
 import { client } from "../editor-context.js";
 import { filterDecks } from "../model/decks.js";
@@ -24,8 +24,6 @@ export function ManageDecksDialog({ onClose }: { onClose(): void }) {
   const decks = useSyncExternalStore(client.subscribe, decksOf);
   const openId = useSyncExternalStore(client.subscribe, openOf);
   const [query, setQuery] = useState("");
-  /** The deck trashed last from here: its Undo bar. */
-  const [trashed, setTrashed] = useState<{ id: string; title: string } | null>(null);
   const searchId = useId();
   const search = useRef<HTMLInputElement>(null);
   const shown = filterDecks(decks, query);
@@ -33,12 +31,7 @@ export function ManageDecksDialog({ onClose }: { onClose(): void }) {
   const trash = async (deck: DeckListing) => {
     // Its row (and the focused button) goes: keep focus in the dialog, on the search.
     search.current?.focus();
-    if (await trashDeck({ id: deck.id, title: deck.title })) setTrashed(deck);
-  };
-  const undo = async () => {
-    if (!trashed) return;
-    setTrashed(null);
-    await restoreDeck(trashed.id);
+    await trashDeck({ id: deck.id, title: deck.title });
   };
 
   const open = (id: string) => {
@@ -107,14 +100,6 @@ export function ManageDecksDialog({ onClose }: { onClose(): void }) {
             Trashed decks stay in the <code>.trash</code> folder inside your decks folder for 30
             days.
           </p>
-        </div>
-      )}
-      {trashed && (
-        <div className="decks-undo" role="status">
-          <span>Moved “{trashed.title}” to the trash.</span>
-          <button type="button" className="button" onClick={() => void undo()}>
-            Undo
-          </button>
         </div>
       )}
     </Dialog>

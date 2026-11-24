@@ -32,12 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-24
-- **Next:** toasts over dialogs, then the morph match key and the timeline schema (format
-  v3). Done in Phase 4: visual regression tests (D102), the
+- **Next:** the morph match key, then the timeline schema (format v3). Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (926 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (927 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -268,10 +267,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       a layer's rest position, never width/height per frame (D83 §5, D103)
 - [x] Performance test: `pnpm perf:motion`; presenting plays on the compositor, seeking and
       export on the clock; budgets for performance lint (D107)
-- [ ] Toasts show over open dialogs: a modal `<dialog>` makes everything behind it inert, so
-      an error from a dialog's action (Save version failing) is dimmed and can't be
-      clicked. Manage decks works around it with its own Undo bar (D99 §4); fix it once,
-      before the Animate workspace adds more dialogs
+- [x] Toasts show inside the open modal dialog, so a dialog's errors and Undo can be
+      clicked; Manage decks' own Undo bar is gone (D108)
 - [ ] Morph match key: an optional key on nodes that morph matches across slides. IDs are
       unique in the deck and Duplicate slide gives fresh ones, so matching by ID never
       finds anything; Duplicate slide fills the key from the original node, agents set it

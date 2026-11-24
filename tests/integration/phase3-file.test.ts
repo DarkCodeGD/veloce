@@ -228,10 +228,15 @@ describe.skipIf(problem !== null)("Phase 3: File menu", { timeout: 60_000 }, () 
     await dialog().getByRole("button", { name: "Move “Alpha” to trash" }).click();
     await expect.poll(() => rows().count()).toBe(1);
     expect(await page.title()).toBe("Untitled deck – Veloce");
-    // Undo is in the dialog: the toast behind a modal dialog can't be clicked.
-    await dialog().getByRole("status").getByRole("button", { name: "Undo" }).click();
+    // The toast shows inside the modal dialog, so its Undo can be clicked (D108): outside
+    // it, the page is inert. Playwright's click fails if something else would get it.
+    const toast = dialog().locator(".toast").last();
+    await expect.poll(() => toast.textContent()).toContain('Moved "Alpha" to the trash');
+    await toast.getByRole("button", { name: "Undo" }).click();
     await expect.poll(() => rows().count()).toBe(2);
-    expect(await dialog().getByRole("status").count()).toBe(0);
+    await expect
+      .poll(() => dialog().locator(".toast", { hasText: 'Moved "Alpha"' }).count())
+      .toBe(0);
     expect(await page.title()).toBe("Untitled deck – Veloce");
 
     // Trash both, one after the other, without leaving the dialog: it shows the empty state.
@@ -243,6 +248,10 @@ describe.skipIf(problem !== null)("Phase 3: File menu", { timeout: 60_000 }, () 
     await expect.poll(() => page.title()).toBe("Veloce");
     await dialog().getByRole("button", { name: "Done" }).click();
     await expect.poll(() => dialog().count()).toBe(0);
+    // The last toast is still up, back on the page now that no dialog is open.
+    const left = page.locator("body > .toasts .toast").last();
+    await expect.poll(() => left.textContent()).toContain('Moved "Untitled deck" to the trash');
+    await left.getByRole("button", { name: "Dismiss" }).click();
   });
 
   it("logged no errors in the page", () => {

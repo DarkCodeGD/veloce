@@ -4938,16 +4938,3 @@ html.is-scrubbing * {
 .decks-none {
   margin: 8px 0;
 }
-
-/* The last trashed deck's Undo, inside the dialog (the toast is inert behind it). */
-.decks-undo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 8px 8px 8px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}

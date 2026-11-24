@@ -2443,8 +2443,9 @@ palette) takes the open deck away; a toast offers **Undo**, as for other destruc
 3. **Every tab follows:** deleting the active deck makes the most recent other one active
    and every tab switches to it; with none left, tabs show no deck and File → New works.
 4. **Manage decks** (File → Manage decks…): every deck, most recently edited first, with
-   search, to open one or trash several in a row. Its Undo is a bar inside the dialog,
-   because a modal `<dialog>` makes the page behind it, toasts included, inert. Restoring
+   search, to open one or trash several in a row. Its Undo was a bar inside the dialog,
+   because a modal `<dialog>` made the toast behind it inert (superseded by D108: the toast
+   now shows inside the dialog). Restoring
    makes the deck active only if it was active when trashed, so undoing the trash of some
    other deck doesn't move anyone's view.
 5. **Not for agents:** MCP has no delete tool: removing a whole deck is the user's call. An
@@ -2769,3 +2770,23 @@ Main-thread motion costs 2 ms of JavaScript per frame for 300 layers and 6 ms fo
 **Caveats:** one machine, headless Chromium at 60 Hz; CPU throttling slows the main thread
 only. The numbers are recorded here, and the test is rerun when how motion is drawn or played
 changes (CLAUDE.md).
+
+## D108 — Toasts show inside the open modal dialog
+
+**Status:** Accepted (2026-11-24). Supersedes D99 §4's Undo bar inside Manage decks.
+
+A modal `<dialog>` makes everything outside it inert (D76), toasts included: an error from
+a dialog's own action (Save version failing) or the Undo after trashing a deck in Manage
+decks showed dimmed behind it and couldn't be clicked.
+
+1. **Toasts are portaled into the topmost open modal dialog,** and back to the body when
+   none is open. `Dialog` records itself when it opens (`trackModal` in `popup-host.ts`;
+   it's the only caller of `showModal`), and `Toasts` follows the top of that stack. It's
+   the same idea as popups (D76: portal into the dialog the trigger is in), for feedback that
+   has no trigger.
+2. **Not the popover top layer:** a `popover` shown after `showModal` is still inert in
+   Chrome (checked in Chromium 156: the click lands on the dialog's backdrop).
+3. **Dialogs animate opacity only,** never a transform, so `position: fixed` toasts inside
+   them still place against the window (already true for popups, D76).
+4. **Manage decks drops its own Undo bar:** the toast's Undo works over it now, the same as
+   everywhere else.

@@ -9,10 +9,12 @@
  * dead (keys sent to a detached element never reach the window) until the next click.
  *
  * The body is a form, so Enter in a field submits it (`onSubmit`) like any dialog's default
- * button. Clicking the backdrop closes it, as Esc does.
+ * button. Clicking the backdrop closes it, as Esc does. While it's open, toasts show inside
+ * it (D108), so feedback from its actions can be clicked.
  */
 import { X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef } from "react";
+import { trackModal } from "./popup-host.js";
 
 export function Dialog({
   title,
@@ -43,13 +45,16 @@ export function Dialog({
   const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
+    let untrack = () => {};
     if (dialog && !dialog.open) {
       dialog.showModal();
+      untrack = trackModal(dialog);
       dialog
         .querySelector<HTMLElement>(".dialog-body :is(input, textarea, button, [tabindex])")
         ?.focus();
     }
     return () => {
+      untrack();
       dialog?.close(); // the browser gives focus back to what opened it, if it's still there
       // If it isn't, don't leave focus on this dialog's removed fields.
       const focused = document.activeElement;
