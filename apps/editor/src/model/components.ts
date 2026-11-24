@@ -89,8 +89,17 @@ export interface SaveComponentInput {
   /** The params kept, by name. */
   params: ReadonlyArray<{ param: string; target: string }>;
   /** Saving a whole slide as a slide layout (D95): its own fields. `node` is its root. */
-  slide?: Pick<Slide, "background">;
+  slide?: Pick<Slide, "background" | "hideFooter">;
 }
+
+/** What a saved layout keeps of its slide: background, and whether it shows the footer. */
+export const slideFieldsOf = ({
+  background,
+  hideFooter,
+}: Pick<Slide, "background" | "hideFooter">) => ({
+  ...(background !== undefined && { background }),
+  ...(hideFooter && { hideFooter }),
+});
 
 export function saveComponentCommand(deck: Deck, input: SaveComponentInput): Command {
   const params: Record<string, ComponentParam> = {};
@@ -101,9 +110,7 @@ export function saveComponentCommand(deck: Deck, input: SaveComponentInput): Com
     ...(description && { description }),
     ...(input.params.length > 0 && { params }),
     node: layout ? input.node : templateOf(input.node),
-    ...(layout && {
-      slide: layout.background !== undefined ? { background: layout.background } : {},
-    }),
+    ...(layout && { slide: slideFieldsOf(layout) }),
   };
   const replacing = getComponent(deck, input.name) !== undefined;
   return {

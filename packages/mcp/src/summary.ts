@@ -37,11 +37,25 @@ export function deckSummary(deck: Deck): string {
   lines.push(
     `Slide layouts: ${layouts.join(", ")}. Start a slide with { "use": name, "with": { … } } in upsert_slide.`,
   );
+  const footer = footerLine(deck.footer);
+  if (footer) lines.push(footer);
   if (deck.slides.length === 0) lines.push("(no slides yet: add some with upsert_slide)");
   deck.slides.forEach((slide, i) => {
     lines.push("", slideOutline(slide, i));
   });
   return lines.join("\n");
+}
+
+/** What the footer shows (D97), or null without one (get_docs teaches deck.setFooter). */
+function footerLine(footer: Deck["footer"]): string | null {
+  const parts = [
+    footer?.date && "date",
+    footer?.text && `"${footer.text}"`,
+    footer?.slideNumber && "slide number",
+  ].filter(Boolean);
+  return parts.length
+    ? `Footer: ${parts.join(" · ")} (deck.setFooter changes it; hideFooter leaves it off a slide).`
+    : null;
 }
 
 /**
@@ -86,8 +100,15 @@ export function componentOutline(name: string, component: Component, note?: stri
 
 export function slideHeader(slide: Slide, index: number): string {
   const name = slide.name ? ` "${slide.name}"` : "";
-  const flags = [slide.hidden && "hidden", slide.notes && "has notes"].filter(Boolean).join(", ");
-  return `${index + 1}. slide ${slide.id}${name} · root frame ${slide.root.id} (${layoutLabel(slide.root)})${flags ? ` · ${flags}` : ""}`;
+  const flags = [
+    slide.hidden && "hidden",
+    slide.notes && "has notes",
+    slide.hideFooter && "no footer",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const section = slide.section !== undefined ? `[section "${slide.section}"] ` : "";
+  return `${section}${index + 1}. slide ${slide.id}${name} · root frame ${slide.root.id} (${layoutLabel(slide.root)})${flags ? ` · ${flags}` : ""}`;
 }
 
 /** " from top-right" for anchored layers ("" for the default top-left). */

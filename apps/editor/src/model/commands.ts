@@ -101,39 +101,12 @@ export function addSlide(afterIndex: number): Command {
 }
 
 export function duplicateSlide(slide: Slide, index: number): Command {
-  const copy: Slide = {
-    ...structuredClone(slide),
-    id: createId("sl"),
-    root: cloneWithNewIds(slide.root),
-  };
+  // The copy joins the original's section (D97): it doesn't start one of its own.
+  const { section: _section, ...fields } = structuredClone(slide);
+  const copy: Slide = { ...fields, id: createId("sl"), root: cloneWithNewIds(slide.root) };
   return {
     label: "Duplicate slide",
     ops: [{ op: "slide.insert", slide: copy, index: index + 1 }],
     select: [copy.id],
-  };
-}
-
-export function deleteSlide(slide: Slide): Command {
-  return {
-    label: `Delete slide${slide.name ? ` "${slide.name}"` : ""}`,
-    ops: [{ op: "slide.remove", id: slide.id }],
-  };
-}
-
-/** Move a slide up (-1) or down (+1): the keyboard alternative to dragging it in the rail. */
-export function moveSlide(slides: readonly Slide[], id: string, delta: number): Command | null {
-  const from = slides.findIndex((s) => s.id === id);
-  return from === -1 ? null : moveSlideTo(slides, id, from + delta);
-}
-
-/** Put a slide at position `index` (0-based, clamped). Null when it's already there. */
-export function moveSlideTo(slides: readonly Slide[], id: string, index: number): Command | null {
-  const from = slides.findIndex((s) => s.id === id);
-  const to = Math.min(slides.length - 1, Math.max(0, index));
-  if (from === -1 || to === from) return null;
-  return {
-    label: `Move slide ${from + 1} to position ${to + 1}`,
-    ops: [{ op: "slide.move", id, index: to }],
-    select: [id],
   };
 }

@@ -26,6 +26,7 @@ import { ComponentsPanel } from "./components/ComponentsPanel.js";
 import { DeckInfoDialog } from "./components/DeckInfoDialog.js";
 import { EditorCanvas, type TextEdit } from "./components/EditorCanvas.js";
 import { EmptyState } from "./components/EmptyState.js";
+import { FooterDialog } from "./components/FooterDialog.js";
 import { HistoryPanel } from "./components/HistoryPanel.js";
 import { Inspector } from "./components/Inspector.js";
 import { IssuesPanel } from "./components/IssuesPanel.js";
@@ -34,6 +35,7 @@ import { LayoutsDialog } from "./components/LayoutsDialog.js";
 import { NewDeckDialog } from "./components/NewDeckDialog.js";
 import { PreferencesDialog } from "./components/PreferencesDialog.js";
 import { SaveComponentDialog } from "./components/SaveComponentDialog.js";
+import { SectionDialog } from "./components/SectionDialog.js";
 import { ShortcutsDialog } from "./components/ShortcutsDialog.js";
 import { SlideRail } from "./components/SlideRail.js";
 import { Splitter } from "./components/Splitter.js";
@@ -414,6 +416,8 @@ export function App() {
       {dialog === "versions" && deck && <VersionsDialog deckId={deck.id} onClose={closeDialog} />}
       {dialog === "save-component" && deck && <SaveComponentDialog onClose={closeDialog} />}
       {dialog === "save-layout" && deck && <SaveComponentDialog layout onClose={closeDialog} />}
+      {dialog === "footer" && deck && <FooterDialog deck={deck} onClose={closeDialog} />}
+      {dialog === "section" && deck && <SectionDialog deck={deck} onClose={closeDialog} />}
       {dialog === "layouts" && deck && deckId && (
         <LayoutsDialog deck={deck} deckId={deckId} onClose={closeDialog} />
       )}

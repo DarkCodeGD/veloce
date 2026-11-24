@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import { ComponentNameSchema, ComponentSchema } from "../schema/component.js";
-import { AssetInfoSchema, SlideSchema } from "../schema/deck.js";
+import { AssetInfoSchema, FooterSchema, SlideSchema } from "../schema/deck.js";
 import { NodeSchema } from "../schema/node.js";
 import { AssetIdSchema, IdSchema } from "../schema/primitives.js";
 import { ThemeSchema } from "../schema/theme.js";
@@ -64,6 +64,11 @@ export const DeckSetThemeOp = z.strictObject({
   op: z.literal("deck.setTheme"),
   theme: ThemeSchema,
 });
+/** Set the deck's footer (D97), or remove it with `null`. Replaces the whole footer. */
+export const DeckSetFooterOp = z.strictObject({
+  op: z.literal("deck.setFooter"),
+  footer: FooterSchema.nullable(),
+});
 /** Register an asset's metadata. Idempotent: adding an existing asset is a no-op. */
 export const AssetAddOp = z.strictObject({
   op: z.literal("asset.add"),
@@ -99,6 +104,7 @@ export const OpSchema = z.discriminatedUnion("op", [
   NodeUpdateOp,
   DeckUpdateMetaOp,
   DeckSetThemeOp,
+  DeckSetFooterOp,
   AssetAddOp,
   AssetRemoveOp,
   ComponentSaveOp,

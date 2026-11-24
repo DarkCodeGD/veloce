@@ -6,18 +6,11 @@ import {
   element,
   frame,
   type Op,
+  type Slide,
 } from "@veloce/core";
 import { describe, expect, it } from "vitest";
-import {
-  addSlide,
-  deleteNodes,
-  deleteSlide,
-  duplicateNodes,
-  duplicateSlide,
-  moveSlide,
-  moveSlideTo,
-  reorderNode,
-} from "./commands.js";
+import { addSlide, deleteNodes, duplicateNodes, duplicateSlide, reorderNode } from "./commands.js";
+import { deleteSlideCommand, moveSlideBy, moveSlideToSlot } from "./sections.js";
 import {
   editableText,
   pick,
@@ -148,16 +141,21 @@ describe("commands produce valid, undoable ops", () => {
     deck = apply(deck, copy.ops);
     expect(deck.slides[1]?.root.children).toHaveLength(3);
     expect(deck.slides[1]?.root.id).not.toBe("root");
-    deck = apply(deck, moveSlide(deck.slides, "s1", 2)?.ops ?? []);
+    deck = apply(deck, moveSlideBy(deck.slides, "s1", 1)?.ops ?? []);
+    deck = apply(deck, moveSlideBy(deck.slides, "s1", 1)?.ops ?? []);
     expect(deck.slides.at(-1)?.id).toBe("s1");
-    expect(moveSlide(deck.slides, "s1", 1)).toBeNull(); // already last
-    const toFront = moveSlideTo(deck.slides, "s1", -5); // clamped
+    expect(moveSlideBy(deck.slides, "s1", 1)).toBeNull(); // already last
+    const first = deck.slides[0]?.id ?? "";
+    const toFront = moveSlideToSlot(deck.slides, "s1", { key: first, index: 0 });
     expect(toFront?.label).toBe("Move slide 3 to position 1");
     deck = apply(deck, toFront?.ops ?? []);
     expect(deck.slides[0]?.id).toBe("s1");
-    expect(moveSlideTo(deck.slides, "s1", 0)).toBeNull();
-    deck = apply(deck, moveSlideTo(deck.slides, "s1", 2)?.ops ?? []);
-    deck = apply(deck, deleteSlide(deck.slides.at(-1) as never).ops);
+    expect(moveSlideToSlot(deck.slides, "s1", { key: "s1", index: 0 })).toBeNull();
+    deck = apply(deck, deleteSlideCommand(deck.slides, deck.slides.at(-1) as never).ops);
     expect(deck.slides).toHaveLength(2);
+    // A copy of a section's first slide joins that section; it doesn't start another (D97).
+    const starts = { ...(deck.slides[0] as Slide), section: "Intro" };
+    const twin = duplicateSlide(starts, 0).ops[0];
+    expect(twin?.op === "slide.insert" && twin.slide).not.toHaveProperty("section");
   });
 });

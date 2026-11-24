@@ -60,6 +60,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   `asset:<hash>`; never base64 in the document.
 - **Components and slide layouts** (D94, D95): named templates in the deck, inserted as
   plain copies (`use` / `with`), so the rest of the system never sees them.
+- **Fields, the footer and sections** (`fields.ts`, D97): a text run can be a field (slide
+  number, date…) whose value depends on where the slide is; the footer is deck settings
+  drawn over every slide; a section is a marker on its first slide.
 - **Ops** (`src/ops/`): `slide.*`, `node.*`, `deck.*`, `asset.*`, `component.*`. Each is
   plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
   Merge Patches. Ops copy only the path to what changed (structural sharing), so untouched
@@ -115,7 +118,9 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
 - **Renderer**: deck → DOM. Frames become CSS flexbox, grid or positioned boxes
   (`layout.ts`); a stage is laid out at its real size (1920×1080) and scaled with a CSS
   transform, so text wraps the same at every zoom. Rendering is incremental, and a plugin
-  that throws only breaks its own box.
+  that throws only breaks its own box. It hands elements the slide's field values and
+  re-draws the ones that show them when those change, and draws the deck's footer over
+  the slide (click-through, not a layer).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
   `update`, `seek`, `dispose`, and `aiDocs` for agents) and registers them in a registry that
   core uses to validate props. Every plugin passes the conformance kit. The built-in ones

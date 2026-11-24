@@ -93,6 +93,7 @@ const DESIGN = `# Design rules
 - **Color:** text on $color.background or $color.surface uses $color.text/$color.muted; text on $color.primary uses $color.on-primary. Accent colors for emphasis only.
 - **Translucent color:** add an opacity in percent to a color token: "$color.primary/15" for a tinted card, "$color.secondary/30" for a glow or glass layer. It follows theme switches; a hex with alpha doesn't.
 - **Icons:** there is no icon element yet. Don't use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font. Use shapes, numbers or short words instead.
+- **Structure:** in a longer deck, start each part with \`section: "<name>"\` on its first slide (upsert_slide), often a Section header slide. Slide numbers and a footer line come from the deck's footer, set once with deck.setFooter (get_docs("ops")), never drawn by hand on each slide; Title and Section header slides leave it off.
 - **Numbers:** show a big number ($text.display, $color.primary) with a short caption instead of a sentence.
 - **Check your work:** fix every lint error; run render_preview on slides with images, many elements or custom layouts.`;
 
@@ -161,13 +162,14 @@ All edits are ops applied as one atomic transaction (all or nothing), undoable w
 
 - \`{ "op": "slide.insert", "slide": <slide like upsert_slide>, "index"? }\`
 - \`{ "op": "slide.remove", "id" }\`, \`{ "op": "slide.move", "id", "index" }\`
-- \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"? } }\`
+- \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"?, "section"?, "hideFooter"? } }\` (\`"section": null\` ends a section there)
 - \`{ "op": "node.insert", "parentId": <frame id>, "node": <node>, "index"? }\` (index omitted = last). The node is written as in upsert_slide: \`kind\` and \`id\` are optional (new IDs are returned).
 - \`{ "op": "node.remove", "id" }\`
 - \`{ "op": "node.move", "id", "parentId", "index"? }\`
 - \`{ "op": "node.update", "id", "set": { … } }\`: JSON Merge Patch. Objects merge, \`null\` deletes a field.
   e.g. \`{ "op": "node.update", "id": "title", "set": { "props": { "content": "New title" }, "width": "fill" } }\`
 - \`{ "op": "deck.updateMeta", "set": { "title"?, "description"?, "authors"?, "language"? } }\`
+- \`{ "op": "deck.setFooter", "footer": { "text"?, "slideNumber"?: true, "date"?: true } }\`: a footer along the bottom of every slide (date left, text centered, number right), drawn inside the slide's margin; \`"footer": null\` removes it. Slides with \`hideFooter\` leave it off.
 
 Notes:
 - IDs are shared by slides and nodes and unique per deck. Slide roots are frames: insert into them with the root's ID (see get_slide).

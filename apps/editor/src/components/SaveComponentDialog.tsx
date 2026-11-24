@@ -16,7 +16,12 @@ import {
 import { useId, useState } from "react";
 import { run } from "../actions.js";
 import { commandContext } from "../editor-commands.js";
-import { type ParamProposal, proposeParams, saveComponentCommand } from "../model/components.js";
+import {
+  type ParamProposal,
+  proposeParams,
+  saveComponentCommand,
+  slideFieldsOf,
+} from "../model/components.js";
 import { nodeLabel } from "../model/slide-index.js";
 import { Dialog, DialogField, describedBy } from "./Dialog.js";
 
@@ -43,7 +48,7 @@ function source(layout: boolean): Source | null {
     const slide = c.slideIndex.slide;
     return {
       node: slide.root,
-      slide: slide.background !== undefined ? { background: slide.background } : {},
+      slide: slideFieldsOf(slide),
       name: slide.name,
       label: "this slide",
     };

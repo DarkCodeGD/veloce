@@ -20,12 +20,13 @@ Runs on Linux, Windows and macOS. Decks are saved as `.veloce` files.
 ## What works today
 
 - **For agents (MCP):** build whole slides in one call, batch edits, themes, images, lint
-  feedback after every change, slide previews, reusable components and slide layouts, and
-  undo of their own work.
+  feedback after every change, slide previews, reusable components and slide layouts,
+  sections, footers and slide numbers, and undo of their own work.
 - **In the editor:** slides, layers and an inspector; direct manipulation (move, resize,
   rotate, crop, snapping), auto layout and free layers; rich text; themes, colors and
   gradients; images and fonts; a menu bar, command palette and Preferences; components and
-  slide layouts; history with per-person undo; versions kept inside the file; and live lint.
+  slide layouts; slide numbers, footers and sections; history with per-person undo; versions
+  kept inside the file; and live lint.
 
 ## Quick start
 

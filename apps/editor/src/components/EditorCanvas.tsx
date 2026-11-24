@@ -16,7 +16,7 @@
  * around the layer; drag inside the layer to move it over the picture, drag the dimmed
  * picture to pan it, drag the layer's edges to trim, drag the picture's corners to scale it. Enter, Esc, a double-click or a click elsewhere leaves.
  */
-import type { Deck, TextContent } from "@veloce/core";
+import { type Deck, fieldValues, type TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { openAddMenu } from "../add-menu.js";
@@ -656,6 +656,11 @@ export function EditorCanvas({
           content={textContentOf(index, editing.id)}
           box={textBoxOf(propsOf(index, editing.id))}
           theme={deck.theme}
+          fields={fieldValues(
+            deck,
+            deck.slides.findIndex((s) => s.id === slideId),
+            new Date(),
+          )}
           name={shownIndex?.nodes.get(editing.id)?.node.name}
           caret={editing.caret}
           // Above the layer, like its name tag (hidden while typing).

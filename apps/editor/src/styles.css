@@ -1513,6 +1513,77 @@ html[data-resizing="y"] * {
   opacity: 1;
 }
 
+/* Sections (D97): a header row that opens and closes its slides, like PowerPoint's. It lines
+   up with the thumbnails (past the number column) and keeps a little extra air above, so
+   each section reads as a group. */
+.rail-section {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.rail-section:first-child {
+  margin-top: 0;
+}
+
+.rail-section-toggle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  transition:
+    background var(--fast),
+    color var(--fast);
+}
+
+.rail-section-toggle:hover,
+.rail-section-toggle:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.rail-section-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-section-count {
+  flex: none;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-section-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--fast);
+}
+
+.rail-section-actions .icon-button {
+  width: 22px;
+  height: 22px;
+}
+
+.rail-section:hover .rail-section-actions,
+.rail-section:focus-within .rail-section-actions {
+  opacity: 1;
+}
+
 .rail-footer {
   padding: 0 10px 16px 36px;
 }
@@ -3236,6 +3307,18 @@ html.is-scrubbing * {
   font-size: 0.9em;
 }
 
+/* A field (D97) is one unit: shaded while typing, like PowerPoint's, so it doesn't pass for
+   text you typed. A tint of the text's own color reads on light and dark slides alike. */
+.text-edit-content .text-field {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 0.15em;
+}
+
+.text-edit-content .text-field.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .text-toolbar {
   position: absolute;
   z-index: 5;
@@ -4675,6 +4758,24 @@ html.is-scrubbing * {
   color: var(--text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Insert → Footer and slide numbers (D97): a switch per part, its place as the hint. */
+.footer-dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.footer-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.footer-option label {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
 }
 
 /* Slide → New slide from layout (D95): the layouts, drawn in the deck's theme. */

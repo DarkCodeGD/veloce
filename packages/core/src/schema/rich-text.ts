@@ -15,8 +15,19 @@ export const LinkSchema = z
     error: "Links must start with http://, https:// or mailto:",
   });
 
+/**
+ * Fields (D97): values the renderer fills in where the text is drawn, so they stay right
+ * when slides move, the deck is renamed or the day changes.
+ */
+export const FIELD_NAMES = ["slideNumber", "slideCount", "date", "deckTitle", "section"] as const;
+export const FieldNameSchema = z.enum(FIELD_NAMES);
+export type FieldName = z.infer<typeof FieldNameSchema>;
+
 export const TextRunSchema = z.strictObject({
+  /** For a field run: the value it showed when it was written (search, copy, fallback). */
   text: z.string().max(100_000),
+  /** Draws this field's current value instead of `text` (D97). */
+  field: FieldNameSchema.optional(),
   bold: z.boolean().optional(),
   italic: z.boolean().optional(),
   underline: z.boolean().optional(),

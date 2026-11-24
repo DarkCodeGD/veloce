@@ -8,16 +8,28 @@
  *
  * Plugins are isolated from each other: if one throws, its box shows an error placeholder and
  * the rest of the slide still renders.
+ *
+ * Fields and the footer (D97): elements read the slide's field values (its number, the
+ * deck's title…) from their context. Those change without the slide changing (another slide
+ * moved, the deck was renamed), so every render compares them and re-draws the elements that
+ * use fields. The deck's footer is drawn over the slide from core's `footerNode`, through the
+ * same code as the slide's own nodes, and is click-through: it isn't a layer.
  */
 import {
   type Deck,
   type ElementNode,
+  type FieldValues,
   type FrameNode,
+  fieldValues,
   findSlide,
+  footerNode,
+  hasFieldRuns,
+  isFooterId,
   type Layout,
   type Node,
   type Slide,
   type SlideMeasurement,
+  sameFieldValues,
   walkNodes,
 } from "@veloce/core";
 import type { ElementContext, ElementInstance, PluginRegistry } from "@veloce/plugin-api";
@@ -38,6 +50,8 @@ export interface SlideRendererOptions {
   assetUrl(assetId: string): string;
   /** Called when a plugin throws (mount/update/seek/dispose). Default: `console.error`. */
   onPluginError?(error: unknown, info: { nodeId: string; type: string; phase: string }): void;
+  /** Today, for the date field (D97). Default: the clock. Tests and exports pin it. */
+  now?(): Date;
 }
 
 interface Mounted {
@@ -57,6 +71,10 @@ export class SlideRenderer {
   readonly #mounted = new Map<string, Mounted>();
   #slide: Slide | null = null;
   #theme: Deck["theme"] | null = null;
+  #fields: FieldValues | null = null;
+  /** The footer drawn now, and what it was built from (rebuilt only when that changes). */
+  #footer: FrameNode | null = null;
+  #footerFrom: { footer: Deck["footer"]; slide: Slide | null } = { footer: undefined, slide: null };
   #time = 0;
   #disposed = false;
 
@@ -64,7 +82,7 @@ export class SlideRenderer {
   constructor(stage: HTMLElement, options: SlideRendererOptions) {
     this.#stage = stage;
     this.#options = options;
-    this.#ctx = { assetUrl: (id) => options.assetUrl(id) };
+    this.#ctx = { assetUrl: (id) => options.assetUrl(id), fields: () => this.#fields };
     stage.classList.add("v-stage");
     // The root frame is absolutely positioned against the stage.
     if (!stage.style.position) stage.style.position = "relative";
@@ -81,7 +99,8 @@ export class SlideRenderer {
   /** Render `slideId` of `deck`. Cheap to call on every change: unchanged nodes are skipped. */
   render(deck: Deck, slideId: string): void {
     if (this.#disposed) throw new Error("SlideRenderer was disposed");
-    const slide = findSlide(deck, slideId)?.slide ?? null;
+    const found = findSlide(deck, slideId);
+    const slide = found?.slide ?? null;
     const stage = this.#stage;
     stage.style.width = `${deck.stage.width}px`;
     stage.style.height = `${deck.stage.height}px`;
@@ -94,26 +113,50 @@ export class SlideRenderer {
       applyTheme(stage, deck.theme);
       this.#theme = deck.theme;
     }
-    if (!slide) {
+    if (!found || !slide) {
       this.#clear();
       return;
     }
-    if (slide === this.#slide) return;
-    stage.style.background = cssSlideBackground(
-      slide.background ?? "$color.background",
-      this.#ctx.assetUrl,
-    );
+    // Set before drawing: elements mounted below read them.
+    const values = fieldValues(deck, found.index, this.#options.now?.() ?? new Date());
+    const fieldsChanged = !sameFieldValues(this.#fields, values);
+    this.#fields = values;
+    const footer = this.#footerOf(deck, slide);
 
-    // Dispose nodes that are gone *before* mounting new ones, so heavy plugins (WebGL…) free
-    // their resources first. IDs are unique per deck, so an ID still present is the same node.
-    const live = new Set<string>();
-    for (const { node } of walkNodes(slide.root)) live.add(node.id);
-    for (const [id, mounted] of this.#mounted) {
-      if (!live.has(id)) this.#disposeOne(id, mounted);
+    if (slide !== this.#slide || footer !== this.#footer) {
+      stage.style.background = cssSlideBackground(
+        slide.background ?? "$color.background",
+        this.#ctx.assetUrl,
+      );
+      // Dispose nodes that are gone *before* mounting new ones, so heavy plugins (WebGL…) free
+      // their resources first. IDs are unique per deck, so an ID still present is the same node.
+      const live = new Set<string>();
+      for (const { node } of walkNodes(slide.root)) live.add(node.id);
+      if (footer) for (const { node } of walkNodes(footer)) live.add(node.id);
+      for (const [id, mounted] of this.#mounted) {
+        if (!live.has(id)) this.#disposeOne(id, mounted);
+      }
+      const rootEl = this.#renderNode(slide.root, null);
+      if (stage.firstChild !== rootEl) stage.prepend(rootEl);
+      if (footer) {
+        const footerEl = this.#renderNode(footer, null);
+        footerEl.classList.add("v-footer");
+        footerEl.style.pointerEvents = "none"; // click through to the slide
+        if (rootEl.nextSibling !== footerEl) rootEl.after(footerEl);
+      }
+      this.#slide = slide;
+      this.#footer = footer;
     }
-    const rootEl = this.#renderNode(slide.root, null);
-    if (stage.firstChild !== rootEl) stage.prepend(rootEl);
-    this.#slide = slide;
+    if (fieldsChanged) {
+      // New values (another slide moved, the deck was renamed): re-draw the elements that
+      // show them, including untouched ones the pass above skipped.
+      for (const [id, m] of this.#mounted) {
+        const { node, instance } = m;
+        if (instance && node.kind === "element" && hasFieldRuns(node.props)) {
+          this.#guard(id, node.type, "update", () => instance.update(node.props));
+        }
+      }
+    }
   }
 
   /** Show every element as it looks `time` seconds into the slide (golden rule #3). */
@@ -137,7 +180,7 @@ export class SlideRenderer {
   measure(): SlideMeasurement | null {
     if (!this.#slide) return null;
     const els = new Map<string, HTMLElement>();
-    for (const [id, m] of this.#mounted) els.set(id, m.el);
+    for (const [id, m] of this.#mounted) if (!isFooterId(id)) els.set(id, m.el); // not a layer
     return measureSlide(this.#stage, this.#slide.id, els);
   }
 
@@ -152,6 +195,22 @@ export class SlideRenderer {
   #clear(): void {
     for (const [id, mounted] of this.#mounted) this.#disposeOne(id, mounted);
     this.#slide = null;
+    this.#footer = null;
+    this.#footerFrom = { footer: undefined, slide: null };
+    this.#fields = null;
+  }
+
+  /** The footer for this slide, the same object as last time unless what it's built from changed. */
+  #footerOf(deck: Deck, slide: Slide): FrameNode | null {
+    const from = this.#footerFrom;
+    const same =
+      from.footer === deck.footer && from.slide?.hideFooter === slide.hideFooter && from.slide;
+    if (!same) {
+      this.#footerFrom = { footer: deck.footer, slide };
+      return footerNode(deck, slide);
+    }
+    this.#footerFrom.slide = slide;
+    return this.#footer;
   }
 
   #renderNode(node: Node, parentLayout: Layout | null): HTMLElement {

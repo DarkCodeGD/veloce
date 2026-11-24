@@ -70,7 +70,9 @@ export const ComponentSchema = z.strictObject({
    */
   slot: IdSchema.optional(),
   /** Present for a slide layout (D95): the new slide's own fields. `node` is its root frame. */
-  slide: z.strictObject({ background: PaintSchema.optional() }).optional(),
+  slide: z
+    .strictObject({ background: PaintSchema.optional(), hideFooter: z.boolean().optional() })
+    .optional(),
 });
 export type Component = z.infer<typeof ComponentSchema>;
 

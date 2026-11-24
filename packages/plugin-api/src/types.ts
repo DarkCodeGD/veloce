@@ -10,7 +10,7 @@
  *
  * Built-in elements use this exact contract (golden rule #6).
  */
-import type { Sizing } from "@veloce/core";
+import type { FieldValues, Sizing } from "@veloce/core";
 import type { z } from "zod";
 
 export type ElementProps = Record<string, unknown>;
@@ -31,6 +31,13 @@ export interface PluginManifest {
 export interface ElementContext {
   /** A URL the browser can load for an asset ID (blob:, file:, http:…, chosen by the renderer). */
   assetUrl(assetId: string): string;
+  /**
+   * What text fields show on the slide being drawn (D97): its number, the deck's title… A
+   * text run with `field` draws `values[run.field]` (core's `runText`). The renderer calls
+   * `update(props)` again when they change, so read them while rendering, never cache them.
+   * Absent (or null) outside a slide: draw the run's own `text`.
+   */
+  fields?(): FieldValues | null;
 }
 
 /** A mounted element. The renderer drives it; it never drives itself. */

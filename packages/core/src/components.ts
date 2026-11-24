@@ -277,10 +277,11 @@ export function instantiateSlide(
   const taken = options.taken ?? new Set<string>();
   taken.add(slideId);
   const root = instantiateComponent(name, component, { ...options, taken, prefix: slideId });
-  const background = component.slide.background;
+  const { background, hideFooter } = component.slide;
   return {
     id: slideId,
     ...(background !== undefined && { background: cloneJson(background) }),
+    ...(hideFooter && { hideFooter }),
     root: root as FrameNode,
   };
 }

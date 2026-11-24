@@ -68,6 +68,8 @@ export function applyOp(deck: Deck, op: Op, ctx: ApplyContext = {}): OpResult {
         deck: { ...deck, theme: op.theme },
         inverse: { op: "deck.setTheme", theme: deck.theme },
       };
+    case "deck.setFooter":
+      return deckSetFooter(deck, op);
     case "asset.add":
       return assetAdd(deck, op);
     case "asset.remove":
@@ -215,6 +217,14 @@ function deckUpdateMeta(deck: Deck, op: OpOf<"deck.updateMeta">): OpResult {
   return {
     deck: { ...deck, meta },
     inverse: { op: "deck.updateMeta", set: inversePatch(meta, deck.meta) },
+  };
+}
+
+function deckSetFooter(deck: Deck, op: OpOf<"deck.setFooter">): OpResult {
+  const { footer: before, ...rest } = deck;
+  return {
+    deck: op.footer ? { ...rest, footer: op.footer } : rest,
+    inverse: { op: "deck.setFooter", footer: before ?? null },
   };
 }
 

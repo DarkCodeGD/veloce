@@ -48,7 +48,7 @@ export const versionInfo = ({ id, name, savedAt, deck }: DeckVersion): VersionIn
 
 /**
  * The ops that turn `current` into `target` (an older copy of the same deck): its slides,
- * theme, title and other meta, components, and the assets it registered. One transaction, so undo puts
+ * theme, footer, title and other meta, components, and the assets it registered. One transaction, so undo puts
  * everything back. The stage (slide size) isn't changed: no op can, and a deck keeps its own.
  *
  * Every current slide is removed and every saved one inserted, even an unchanged one: plain
@@ -84,6 +84,9 @@ export function restoreOps(current: Deck, target: Deck): Op[] {
   });
   if (JSON.stringify(current.theme) !== JSON.stringify(target.theme)) {
     ops.push({ op: "deck.setTheme", theme: target.theme });
+  }
+  if (JSON.stringify(current.footer) !== JSON.stringify(target.footer)) {
+    ops.push({ op: "deck.setFooter", footer: target.footer ?? null });
   }
   const meta = metaPatch(current.meta, target.meta);
   if (meta) ops.push({ op: "deck.updateMeta", set: meta });

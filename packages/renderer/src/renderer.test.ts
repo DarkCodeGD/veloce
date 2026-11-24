@@ -410,3 +410,80 @@ describe("SlideView", () => {
     expect(viewport.children).toHaveLength(0);
   });
 });
+
+describe("fields and the footer (D97)", () => {
+  const NOW = new Date(2026, 10, 24, 12);
+  const numbered = (d: Deck) =>
+    edit(d, [
+      {
+        op: "node.insert",
+        parentId: "root2",
+        node: element(
+          "text",
+          { content: [{ runs: [{ text: "Slide " }, { text: "?", field: "slideNumber" }] }] },
+          { id: "num" },
+        ),
+      },
+    ]);
+  const setup = () => {
+    const stage = document.createElement("div");
+    document.body.append(stage);
+    const renderer = new SlideRenderer(stage, {
+      registry: registry(),
+      assetUrl: () => "",
+      now: () => NOW,
+    });
+    return { stage, renderer };
+  };
+
+  it("draws a field's value, and re-draws it when another slide moves", () => {
+    const { stage, renderer } = setup();
+    let d = numbered(deck());
+    renderer.render(d, "two");
+    expect(byId(stage, "num")?.textContent).toBe("Slide 2");
+    d = edit(d, [{ op: "slide.move", id: "two", index: 0 }]); // slide "two" itself is untouched
+    renderer.render(d, "two");
+    expect(byId(stage, "num")?.textContent).toBe("Slide 1");
+    expect(calls.filter((c) => c.startsWith("update"))).toEqual([]); // probes don't use fields
+    renderer.dispose();
+  });
+
+  it("draws the deck's footer over slides that show it, click-through, never measured", () => {
+    const { stage, renderer } = setup();
+    let d = edit(deck(), [
+      { op: "deck.setFooter", footer: { text: "Acme", slideNumber: true, date: true } },
+    ]);
+    renderer.render(d, "two");
+    const footer = byId(stage, "_footer");
+    expect(footer?.style.pointerEvents).toBe("none");
+    expect(footer?.previousElementSibling).toBe(byId(stage, "root2")); // drawn over the slide
+    expect(byId(stage, "_footer-text")?.textContent).toBe("Acme");
+    expect(byId(stage, "_footer-number")?.textContent).toBe("2");
+    expect(byId(stage, "_footer-date")?.textContent).toBe("November 24, 2026");
+
+    d = edit(d, [{ op: "slide.update", id: "two", set: { hideFooter: true } }]);
+    renderer.render(d, "two");
+    expect(byId(stage, "_footer")).toBeNull();
+    d = edit(d, [{ op: "slide.update", id: "two", set: { hideFooter: null } }]);
+    renderer.render(d, "two");
+    expect(byId(stage, "_footer-number")?.textContent).toBe("2");
+    d = edit(d, [{ op: "deck.setFooter", footer: { slideNumber: true } }]);
+    renderer.render(d, "two");
+    expect(byId(stage, "_footer-text")?.textContent).toBe(""); // the slot stays, empty
+    d = edit(d, [{ op: "deck.setFooter", footer: null }]);
+    renderer.render(d, "two");
+    expect(byId(stage, "_footer")).toBeNull();
+    renderer.dispose();
+  });
+
+  it("brings the footer back after the slide was gone", () => {
+    const { stage, renderer } = setup();
+    const d = edit(deck(), [{ op: "deck.setFooter", footer: { slideNumber: true } }]);
+    renderer.render(d, "two");
+    renderer.render(d, "missing"); // clears the stage
+    expect(byId(stage, "_footer")).toBeNull();
+    renderer.render(d, "two");
+    expect(byId(stage, "_footer-number")?.textContent).toBe("2");
+    renderer.dispose();
+  });
+});

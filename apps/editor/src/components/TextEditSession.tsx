@@ -14,7 +14,7 @@
  * text layer is selected (`prefetchTextEditor`), so it never weighs on startup.
  */
 import type { Editor } from "@tiptap/core";
-import type { TextContent, Theme } from "@veloce/core";
+import type { FieldValues, TextContent, Theme } from "@veloce/core";
 import { NODE_ID_ATTR } from "@veloce/renderer";
 import { useLayoutEffect, useRef, useState } from "react";
 import { reportError, run } from "../actions.js";
@@ -55,6 +55,8 @@ interface Props {
   /** The layer's own style/color/alignment when editing started (what plain text shows). */
   box: TextBox;
   theme: Theme;
+  /** What fields show on this slide (D97): drawn in the text, offered by the toolbar. */
+  fields: FieldValues | null;
   /**
    * The layer's own name, for the undo label. Unnamed layers are named by their text, and
    * that's the new text: "Edit text "Edited by me"", not the words that were replaced.
@@ -78,7 +80,7 @@ export function TextEditSession(props: Props) {
   const escapeTrap = useRef<(() => boolean) | null>(null);
 
   useLayoutEffect(() => {
-    const { stage, nodeId, content, caret, name, box } = latest.current;
+    const { stage, nodeId, content, caret, name, box, fields } = latest.current;
     const layer = stage.querySelector<HTMLElement>(`[${NODE_ID_ATTR}="${CSS.escape(nodeId)}"]`);
     if (!layer) {
       latest.current.onExit();
@@ -116,6 +118,7 @@ export function TextEditSession(props: Props) {
         instance = createTextEditor({
           element: host,
           content,
+          fields,
           onChange: (next) => {
             doc = next;
             if (!frame) frame = requestAnimationFrame(preview); // one re-layout per frame, max
@@ -174,6 +177,7 @@ export function TextEditSession(props: Props) {
       anchor={props.anchor}
       theme={props.theme}
       box={props.box}
+      fields={props.fields}
       escapeTrap={escapeTrap}
     />
   );

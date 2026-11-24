@@ -6,10 +6,18 @@
  *
  * Paragraphs carry two extra attributes (alignment and a text style token) and colors are a
  * mark that keeps the core value (`$color.primary` stays a token, rendered as its CSS var).
+ * Fields (D97) are inline atoms showing the slide's current value.
  */
-import { Editor, Extension, Mark, mergeAttributes } from "@tiptap/core";
+import { Editor, Extension, Mark, mergeAttributes, Node } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import { isTokenRef, type TextContent, textStyleCss } from "@veloce/core";
+import {
+  FieldNameSchema,
+  type FieldValues,
+  isTokenRef,
+  runText,
+  type TextContent,
+  textStyleCss,
+} from "@veloce/core";
 import { cssColor } from "@veloce/plugin-api";
 import { DOC, type DocNode, toDoc } from "../model/rich-text-doc.js";
 import { proseMirrorKey, SHORTCUTS } from "../model/shortcuts.js";
@@ -84,10 +92,45 @@ const ColorMark = Mark.create({
   renderHTML: ({ HTMLAttributes }) => ["span", mergeAttributes(HTMLAttributes), 0],
 });
 
+/**
+ * A field: one unit the caret steps over, drawn as this slide's value (what the slide shows),
+ * keeping its name and the text it was written with (rich-text-doc.ts maps both).
+ */
+const fieldNode = (values: FieldValues | null) =>
+  Node.create({
+    name: DOC.field,
+    group: "inline",
+    inline: true,
+    atom: true,
+    selectable: true,
+    addAttributes() {
+      return {
+        field: { default: null, parseHTML: (el) => el.getAttribute("data-v-field") },
+        text: { default: "", parseHTML: (el) => el.textContent ?? "" },
+      };
+    },
+    // Only our own fields: copied from another slide, they show this slide's value.
+    parseHTML: () => [{ tag: "span[data-v-field]" }],
+    renderHTML: ({ node, HTMLAttributes }) => [
+      "span",
+      mergeAttributes(HTMLAttributes, { "data-v-field": node.attrs.field, class: "text-field" }),
+      shownText(node.attrs, values),
+    ],
+    renderText: ({ node }) => shownText(node.attrs, values),
+  });
+
+function shownText(attrs: Record<string, unknown>, values: FieldValues | null): string {
+  const field = FieldNameSchema.safeParse(attrs.field);
+  const text = typeof attrs.text === "string" ? attrs.text : "";
+  return runText(field.success ? { text, field: field.data } : { text }, values);
+}
+
 export interface TextEditorOptions {
   /** Where the editable goes (it fills it). */
   element: HTMLElement;
   content: TextContent;
+  /** What fields show on this slide (D97). */
+  fields: FieldValues | null;
   /** Every change to the text or its formatting. */
   onChange(doc: DocNode): void;
   /** Esc: done editing. */
@@ -122,6 +165,7 @@ export function createTextEditor(options: TextEditorOptions): Editor {
       }),
       ParagraphAttributes,
       ColorMark,
+      fieldNode(options.fields),
     ],
     editorProps: {
       attributes: { class: "text-edit-content", "aria-label": "Text", spellcheck: "true" },

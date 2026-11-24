@@ -1,11 +1,19 @@
 /**
  * The Slide menu (D89): new (blank or from a layout, D95), duplicate, delete and reorder
- * slides, save one as a layout, plus going between slides with the keys (not in a menu: the
- * slide list is right there).
+ * slides, save one as a layout, sections (D97), plus going between slides with the keys (not
+ * in a menu: the slide list is right there). Insert → Footer and slide numbers… lives here
+ * too: it's about every slide.
  */
 import { run } from "../actions.js";
-import { openDialog } from "../dialogs.js";
-import { addSlide, deleteSlide, duplicateSlide, moveSlide } from "../model/commands.js";
+import { openDialog, openSectionDialog } from "../dialogs.js";
+import { addSlide, duplicateSlide } from "../model/commands.js";
+import {
+  deleteSlideCommand,
+  moveSectionCommand,
+  moveSlideBy as moveSlideCommand,
+  removeSectionCommand,
+  sectionOf,
+} from "../model/sections.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { type CommandContext, type EditorCommand, onSlide, slidePosition } from "./context.js";
 
@@ -58,13 +66,35 @@ const moveSlideBy = (
   section: "order",
   repeat: true,
   keyWhen: nothingSelected,
+  // Section-aware (D97): from a section's edge it moves into the next section first.
+  enabled: (c) =>
+    onSlide(c) && moveSlideCommand(c.deck.slides, c.slideIndex.slide.id, delta) !== null,
+  run: (c) => {
+    if (onSlide(c)) void run(moveSlideCommand(c.deck.slides, c.slideIndex.slide.id, delta));
+  },
+});
+
+/** The named section the slide on screen is in (D97), or null. */
+const currentSection = (c: CommandContext) => {
+  if (!onSlide(c)) return null;
+  const section = sectionOf(c.deck.slides, c.slideIndex.slide.id);
+  return section?.name != null ? section : null;
+};
+
+const moveSectionBy = (id: string, label: string, delta: -1 | 1): EditorCommand => ({
+  id,
+  label,
+  keywords: "reorder section",
+  group: "slide",
+  menu: "slide",
+  section: "sections",
   enabled: (c) => {
-    if (!onSlide(c)) return false;
-    const to = slidePosition(c) + delta;
-    return to >= 0 && to < c.deck.slides.length;
+    const section = currentSection(c);
+    return !!section && !!c.deck && moveSectionCommand(c.deck.slides, section.key, delta) !== null;
   },
   run: (c) => {
-    if (onSlide(c)) void run(moveSlide(c.deck.slides, c.slideIndex.slide.id, delta));
+    const section = currentSection(c);
+    if (section && c.deck) void run(moveSectionCommand(c.deck.slides, section.key, delta));
   },
 });
 
@@ -124,7 +154,8 @@ export function slideCommands(): EditorCommand[] {
         if (!onSlide(c)) return;
         const at = slidePosition(c);
         const next = c.deck.slides[at + 1] ?? c.deck.slides[at - 1];
-        if ((await run(deleteSlide(c.slideIndex.slide), { undoToast: true })) && next) {
+        const command = deleteSlideCommand(c.deck.slides, c.slideIndex.slide);
+        if ((await run(command, { undoToast: true })) && next) {
           c.goToSlide(next.id);
         }
       },
@@ -147,6 +178,58 @@ export function slideCommands(): EditorCommand[] {
     ),
     navigate("slide.first", "First slide", SHORTCUTS.firstSlide, [], () => 0),
     navigate("slide.last", "Last slide", SHORTCUTS.lastSlide, [], (_at, count) => count - 1),
+    {
+      id: "slide.addSection",
+      label: "Add section…",
+      keywords: "group chapter part",
+      group: "slide",
+      menu: "slide",
+      section: "sections",
+      enabled: onSlide,
+      run: (c) => {
+        if (onSlide(c)) openSectionDialog({ slideId: c.slideIndex.slide.id, rename: false });
+      },
+    },
+    {
+      id: "slide.renameSection",
+      label: "Rename section…",
+      keywords: "group chapter part",
+      group: "slide",
+      menu: "slide",
+      section: "sections",
+      enabled: (c) => currentSection(c) !== null,
+      run: (c) => {
+        const section = currentSection(c);
+        if (section) openSectionDialog({ slideId: section.key, rename: true });
+      },
+    },
+    {
+      id: "slide.removeSection",
+      label: "Remove section",
+      keywords: "group chapter part ungroup",
+      group: "slide",
+      menu: "slide",
+      section: "sections",
+      enabled: (c) => currentSection(c) !== null,
+      run: (c) => {
+        const section = currentSection(c);
+        if (section && c.deck) {
+          void run(removeSectionCommand(c.deck.slides, section.key), { undoToast: true });
+        }
+      },
+    },
+    moveSectionBy("slide.moveSectionUp", "Move section up", -1),
+    moveSectionBy("slide.moveSectionDown", "Move section down", 1),
+    {
+      id: "insert.footer",
+      label: "Footer and slide numbers…",
+      keywords: "header page number date footer",
+      group: "slide",
+      menu: "insert",
+      section: "deck",
+      enabled: (c) => c.deck !== undefined,
+      run: () => openDialog("footer"),
+    },
     {
       id: "slide.saveLayout",
       label: "Save slide as layout…",

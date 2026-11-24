@@ -273,6 +273,21 @@ function SlideSection({ deck, slide, index }: { deck: Deck; slide: Slide; index:
           value={slide.hidden}
           onCommit={set("hidden", "Toggle slide hidden")}
         />
+        {deck.footer && (
+          // Only with a footer to show (D97); title and section header slides start with it off.
+          <ToggleField
+            label="Show footer"
+            value={!slide.hideFooter}
+            onCommit={(show) =>
+              void run({
+                label: show ? "Show footer on slide" : "Hide footer on slide",
+                ops: [
+                  { op: "slide.update", id: slide.id, set: { hideFooter: show ? null : true } },
+                ],
+              })
+            }
+          />
+        )}
         <p className="inspector-hint">Select a layer on the slide or in Layers to edit it.</p>
       </Section>
       <LayoutSection deck={deck} index={index} node={slide.root} title="Layout" />

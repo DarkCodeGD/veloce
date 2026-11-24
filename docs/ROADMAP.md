@@ -26,11 +26,11 @@
 
 ## Current status
 
-- **Active phase:** Phase 3: Manual editor, round 6 (reuse)
+- **Active phase:** Phase 3: Manual editor, complete (phase gate due)
 - **Last updated:** 2026-11-24
-- **Next:** round 6, slide numbers, footers and sections. Components and slide layouts are
-  done (D94, D95).
-- **State:** `pnpm check` is green (852 tests, including real-Chromium lint, preview and editor
+- **Next:** Phase 3 is complete: run the phase gate before Phase 4 starts (its blocker, the
+  GSAP license question, comes first).
+- **State:** `pnpm check` is green (882 tests, including real-Chromium lint, preview and editor
   tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 9 (D96).
@@ -50,7 +50,7 @@
     and Add menu on a command registry (D81); image focus point (D82). Parity with agents is
     done. A free canvas: hand-made slides start Free, Add auto layout (D83); crop mode (D84); grid cell alignment (D85); the size badge (D86); on-canvas gradient handles (D87, D88); every shortcut a command, and the menu bar (D89); resizable, collapsible workspace panels (D90); Preferences (D91); the command palette (D92); versions (D93).
   - Round 6: components, copied on insert, for agents and people (D94); slide layouts, built
-    in and the deck's own (D95).
+    in and the deck's own (D95); slide numbers, footers and sections (D97).
 - **Onboarding gotcha:** Claude Code only connects to MCP servers when a session starts, so the
   server must be running first. Register it with
   `claude mcp add --scope user --transport http veloce http://127.0.0.1:4321/mcp`. Put this in
@@ -235,9 +235,9 @@ same slide structure every time without rebuilding it.
 - [x] Slide layouts are slide-level components with slots: Slide → New slide from layout
       (built-in Title, Title and content, Two columns, Section header, Big number, Quote, in
       the deck's theme), Save slide as layout; agents use them with `use`/`with` (D95)
-- [ ] Slide numbers, footers and sections: dynamic fields (slide number, total, date, deck
-      title) usable in any text; named sections that group slides in the rail and in
-      presenter view
+- [x] Slide numbers, footers and sections: field runs (slide number and count, date, deck
+      title, section) in any text; the deck's footer (date, text, number) with a per-slide
+      opt-out; named sections grouping the rail; for agents and people (D97)
 
 **Done when:** a full deck can be built by hand, with layers placed exactly where you want
 them, including inside the AI's auto-layout slides; every command is reachable from the
@@ -260,7 +260,7 @@ never undoes the agent's work.
 - [ ] Effect presets (fade, slide, scale, blur, typewriter, count-up, stagger…), extensible by plugins
 - [ ] Slide transitions (fade, push, zoom) + **morph** (match nodes by id across slides)
 - [ ] Presenter mode: fullscreen, speaker notes, next-slide preview, timer, second window
-      synced, laser pointer
+      synced, laser pointer; its slide overview grouped by sections (D97)
 - [ ] Animate workspace (timeline, steps, effect and transition pickers) and Present
       workspace (rehearse in presenter view), both on the round 5 shell
 - [ ] MCP: `set_animations(slideId, steps)`, `render_preview` at a step/time

@@ -2314,3 +2314,50 @@ message is something else, so code and UI say "versions").
    their definitions, lint rules from `LINT_RULES`, as the agent docs already are (D13).
    **Why:** hand-written references drift; generated ones can't.
 4. **After 1.0:** tutorials, videos and translated docs.
+
+## D97 — Slide numbers, footers and sections
+
+**Status:** Accepted (2026-11-24). Round 6, its last item.
+
+1. **Fields are text runs:** `{ "text": "", "field": "slideNumber" | "slideCount" | "date" |
+   "deckTitle" | "section" }`, like PowerPoint's and Keynote's fields, not a `{{slide}}`
+   syntax in strings (that would turn a code slide's literal braces into numbers). `text`
+   keeps what the field showed when written: search, copy and lint read it, and a lone
+   element drawn outside a slide shows it.
+2. **The renderer fills them in, the plugin draws them.** `ElementContext.fields()` gives the
+   slide's values (core `fieldValues`); the text plugin draws `runText(run, values)`. Values
+   change without the slide changing (another slide moved, the deck was renamed), so every
+   render compares them and calls `update(props)` on the elements whose props hold a field
+   run. **Why not substitute in the renderer:** it can't tell a text run from another
+   plugin's own `field` key (a chart's data field); a false positive here only costs a
+   redundant `update`. The date is today's (an option pins it for tests and exports), long
+   style in the deck's language.
+3. **The footer is deck settings:** `footer: { text?, slideNumber?, date? }`, set with a new
+   `deck.setFooter` op (whole value, `null` removes it; versions restore it), drawn by the
+   renderer over every slide as core's `footerNode` (date left, text centered, number right,
+   `$text.small` in `$color.muted`, inside the slide's margin), through the same code as
+   the slide's nodes. Its IDs start with `_`, which deck IDs can't, so selection, lint and
+   ops never meet it; it's click-through and not measured. A slide opts out with
+   `hideFooter`; the built-in Title and Section header layouts set it (PowerPoint's "Don't
+   show on title slide"), and saved layouts keep it. **Why not nodes on each slide:** one
+   setting changes every slide, agents can't forget a slide, and nothing drifts.
+4. **Sections are markers, not a list:** `section: "<name>"` on the slide that starts one;
+   it runs to the next. Slide ops can never leave a list out of step, and it's one field
+   for agents. The editor keeps PowerPoint's behaviour on top (`model/sections.ts`): a
+   section keeps its slides when its first slide moves away or is deleted, Alt+↑/↓ cross a
+   section's edge into the next one without moving, a drag drops where the rail shows it
+   (above a header ends the section before; under it, starts that one), and a duplicate
+   joins its original's section. A section left with no slides is gone (sections can't be
+   empty here). Agents' raw `slide.move`/`slide.remove` move the marker with the slide,
+   which the docs say.
+5. **Editor:** Insert → Footer and slide numbers…; Show footer in the Slide settings; the
+   text toolbar's Insert field menu (fields are atoms you step over, shaded while typing);
+   Slide → Add, Rename, Remove section and Move section up/down; section headers in the
+   rail collapse (per tab), rename on double-click and remove (the slides stay).
+6. **MCP:** `section` and `hideFooter` on slides, `deck.setFooter` in apply_ops, field runs
+   in the text docs, the summary marks where sections start and shows the footer (only when
+   there is one: tokens), and the design docs say to set the footer instead of drawing
+   numbers by hand.
+7. **Later:** sections in presenter view come with presenter view (Phase 4); a footer
+   overlapping a free layer isn't linted yet; numbering that skips hidden slides or starts
+   at another number waits for a user who needs it.

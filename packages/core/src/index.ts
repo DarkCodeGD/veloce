@@ -12,6 +12,7 @@ export * from "./components.js";
 export * from "./default-theme.js";
 export * from "./document.js";
 export * from "./errors.js";
+export * from "./fields.js";
 export * from "./fonts.js";
 export * from "./ids.js";
 export * from "./json.js";

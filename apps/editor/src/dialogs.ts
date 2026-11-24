@@ -16,7 +16,9 @@ export type DialogId =
   | "versions"
   | "save-component"
   | "save-layout"
-  | "layouts";
+  | "layouts"
+  | "footer"
+  | "section";
 
 let open: DialogId | null = null;
 const listeners = new Set<() => void>();
@@ -38,6 +40,21 @@ export function openPreferences(tab: PreferencesTab = "editing"): void {
   preferencesTab = tab;
   set("preferences");
 }
+
+/** What the section dialog names (D97): a new section starting at a slide, or a rename. */
+export interface SectionTarget {
+  /** The slide the new section starts at, or the first slide of the one to rename. */
+  slideId: string;
+  rename: boolean;
+}
+let sectionTarget: SectionTarget | null = null;
+
+export function openSectionDialog(target: SectionTarget): void {
+  sectionTarget = target;
+  set("section");
+}
+
+export const currentSectionTarget = (): SectionTarget | null => sectionTarget;
 
 /** The tab Preferences opens on. */
 export const initialPreferencesTab = (): PreferencesTab => preferencesTab;

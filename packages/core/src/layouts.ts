@@ -4,6 +4,9 @@
  * theme tokens only, so they take on whatever theme the deck has. A deck's own component
  * with the same name wins: saving a slide as "Title" restyles that deck's title slides.
  *
+ * Title and Section header slides leave the deck's footer off (D97), as title slides do in
+ * PowerPoint.
+ *
  * Template IDs are short words (`title`, `content`): a slide `s3` made from one gets
  * `s3-title`, `s3-content`.
  */
@@ -47,7 +50,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
         text("subtitle", "Subtitle", "h3", { align: "center", color: "$color.muted" }),
       ],
     }),
-    slide: {},
+    slide: { hideFooter: true },
   },
   "Title and content": {
     description: "A title, then the content: a line of text, or children given with use",
@@ -109,7 +112,7 @@ export const BUILTIN_LAYOUTS: Readonly<Record<string, Component>> = {
         text("subtitle", "What this part covers", "h3", { color: "$color.on-primary" }),
       ],
     }),
-    slide: { background: "$color.primary" },
+    slide: { background: "$color.primary", hideFooter: true },
   },
   "Big number": {
     description: "One number that tells the story, with what it means",

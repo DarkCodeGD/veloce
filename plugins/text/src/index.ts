@@ -6,7 +6,9 @@
  */
 import {
   ColorSchema,
+  type FieldValues,
   type Paragraph,
+  runText,
   type TextContent,
   TextContentSchema,
   type TextRun,
@@ -48,6 +50,7 @@ Headings, body copy, captions and bullet lists. Size and font come from theme te
 **Props**
 - \`content\`: a string (\`"\\n"\` starts a new paragraph) or rich paragraphs: \`[{ runs: [...], list?: "bullet" | "number", level?: 0–5, align?, style? }]\` (a paragraph \`style\` overrides the layer's for that paragraph)
   - a run: \`{ text, bold?, italic?, underline?, strike?, code?, color?, link? }\` (\`code\`: inline monospace; \`link\`: https/mailto, drawn in the text's color, underlined)
+  - a field run draws a live value: \`{ "text": "", "field": "slideNumber" | "slideCount" | "date" | "deckTitle" | "section" }\`, e.g. "Slide 3 of 12" is \`[{ "text": "Slide " }, { "text": "", "field": "slideNumber" }, { "text": " of " }, { "text": "", "field": "slideCount" }]\`. For a number on every slide, set the deck's footer instead (deck.setFooter in get_docs("ops")).
 - \`style\`: \`"$text.display" | "$text.h1" | "$text.h2" | "$text.h3" | "$text.body" | "$text.small" | "$text.caption" | "$text.code"\` (default body). Each style's font (heading or body), size, weight and case (caption may be UPPERCASE) are listed in get_docs("theme").
 - \`color\`: a color token such as \`"$color.muted"\` (default \`"$color.text"\`)
 - \`align\`: \`"left" | "center" | "right" | "justify"\`; \`verticalAlign\`: \`"top" | "middle" | "bottom"\`
@@ -70,13 +73,13 @@ export const textElement = defineElement<TextProps>({
   defaultSize: { width: "fill", height: "hug" },
   deterministic: true,
   aiDocs: AI_DOCS,
-  mount(container, props) {
+  mount(container, props, ctx) {
     const root = document.createElement("div");
     root.className = "v-text";
     container.append(root);
     const render = (p: TextProps) => {
       applyBoxStyle(root, p);
-      root.replaceChildren(...renderParagraphs(p.content));
+      root.replaceChildren(...renderParagraphs(p.content, ctx.fields?.()));
     };
     render(props);
     return {
@@ -129,14 +132,14 @@ function applyBoxStyle(el: HTMLElement, p: TextProps): void {
  * Paragraphs → DOM. Consecutive list paragraphs are grouped into real <ul>/<ol> elements
  * (nested by `level`), so lists stay semantic for screen readers and copy/paste.
  */
-export function renderParagraphs(content: TextContent): Node[] {
+export function renderParagraphs(content: TextContent, fields?: FieldValues | null): Node[] {
   const out: Node[] = [];
   const stack: Array<{ list: HTMLElement; type: "bullet" | "number"; level: number }> = [];
 
   for (const paragraph of toParagraphs(content)) {
     if (!paragraph.list) {
       stack.length = 0;
-      out.push(paragraphElement("p", paragraph));
+      out.push(paragraphElement("p", paragraph, fields));
       continue;
     }
     const level = paragraph.level ?? 0;
@@ -154,12 +157,16 @@ export function renderParagraphs(content: TextContent): Node[] {
       top = { list, type: paragraph.list, level };
       stack.push(top);
     }
-    top.list.append(paragraphElement("li", paragraph));
+    top.list.append(paragraphElement("li", paragraph, fields));
   }
   return out;
 }
 
-function paragraphElement(tag: "p" | "li", paragraph: Paragraph): HTMLElement {
+function paragraphElement(
+  tag: "p" | "li",
+  paragraph: Paragraph,
+  fields: FieldValues | null | undefined,
+): HTMLElement {
   const el = document.createElement(tag);
   el.style.margin = "0";
   if (paragraph.align) el.style.textAlign = paragraph.align;
@@ -170,18 +177,20 @@ function paragraphElement(tag: "p" | "li", paragraph: Paragraph): HTMLElement {
       el.style.setProperty(prop, value);
     }
   }
-  if (paragraph.runs.length === 0 || paragraph.runs.every((r) => r.text === "")) {
+  const texts = paragraph.runs.map((run) => runText(run, fields));
+  if (texts.every((t) => t === "")) {
     el.append(document.createElement("br")); // keep empty lines one line tall
   } else {
-    el.append(...paragraph.runs.map(runElement));
+    el.append(...paragraph.runs.map((run, i) => runElement(run, texts[i] ?? "")));
   }
   return el;
 }
 
-function runElement(run: TextRun): HTMLElement {
+function runElement(run: TextRun, text: string): HTMLElement {
   const isLink = run.link !== undefined && SAFE_LINK.test(run.link);
   const el = document.createElement(isLink ? "a" : "span");
-  el.textContent = run.text;
+  el.textContent = text;
+  if (run.field) el.dataset.vField = run.field;
   if (isLink && el instanceof HTMLAnchorElement && run.link) {
     el.href = run.link;
     el.rel = "noopener noreferrer";

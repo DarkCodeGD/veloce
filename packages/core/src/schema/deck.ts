@@ -14,6 +14,24 @@ import { ThemeSchema } from "./theme.js";
  */
 export const FORMAT_VERSION = 1;
 
+/** A section's name: one line, no spaces at either end. */
+export const SectionNameSchema = z
+  .string()
+  .max(100)
+  .regex(/^\S(?:.*\S)?$/, { error: 'Section names are one line of text, e.g. "Results"' });
+
+/**
+ * The deck's footer (D97), drawn along the bottom of every slide that doesn't hide it: the
+ * date on the left, `text` in the middle and the slide number on the right, like
+ * PowerPoint's Header & Footer.
+ */
+export const FooterSchema = z.strictObject({
+  text: z.string().max(200).optional(),
+  slideNumber: z.boolean().optional(),
+  date: z.boolean().optional(),
+});
+export type Footer = z.infer<typeof FooterSchema>;
+
 export const SlideSchema = z.strictObject({
   id: IdSchema,
   name: z.string().max(200).optional(),
@@ -22,6 +40,13 @@ export const SlideSchema = z.strictObject({
   notes: z.string().max(50_000).optional(),
   /** Skipped in presentation mode, still editable. */
   hidden: z.boolean().optional(),
+  /**
+   * Starts a named section here (D97): this slide and the ones after it, up to the next
+   * slide that starts one, are that section.
+   */
+  section: SectionNameSchema.optional(),
+  /** Leaves the deck's footer off this slide (title and section slides, D97). */
+  hideFooter: z.boolean().optional(),
   /** Always fills the stage; its own width/height/position are ignored. */
   root: FrameNodeSchema,
 });
@@ -98,5 +123,7 @@ export const DeckSchema = z.strictObject({
    * are none. Their asset references count as uses, like a slide's.
    */
   components: ComponentsSchema.optional(),
+  /** Omitted when the deck has no footer (D97). */
+  footer: FooterSchema.optional(),
 });
 export type Deck = z.infer<typeof DeckSchema>;

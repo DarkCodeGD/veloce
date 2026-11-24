@@ -508,6 +508,7 @@ const OP_TYPES = [
   "node.move",
   "node.update",
   "deck.updateMeta",
+  "deck.setFooter",
 ] as const;
 
 const applyOps = defineTool({
@@ -515,7 +516,7 @@ const applyOps = defineTool({
   title: "Apply edits",
   description: [
     "Apply a batch of edits atomically (all or nothing) as one undoable step.",
-    'Ops: slide.insert/remove/move/update, node.insert/remove/move/update, deck.updateMeta. node.update uses JSON Merge Patch: { "op": "node.update", "id": "title", "set": { "props": { "content": "New" } } } (null deletes a field).',
+    'Ops: slide.insert/remove/move/update, node.insert/remove/move/update, deck.updateMeta, deck.setFooter. node.update uses JSON Merge Patch: { "op": "node.update", "id": "title", "set": { "props": { "content": "New" } } } (null deletes a field).',
     'Full reference: get_docs("ops"). Returns lint issues for the slides that changed.',
   ].join(" "),
   input: z.strictObject({
@@ -673,7 +674,10 @@ const saveComponent = defineTool({
       const found = slide ? null : findNode(open.deck, from);
       if (slide) {
         template = slide.root;
-        layout = slide.background !== undefined ? { background: slide.background } : {};
+        layout = {
+          ...(slide.background !== undefined && { background: slide.background }),
+          ...(slide.hideFooter && { hideFooter: true }),
+        };
       } else if (found) {
         template = found.node;
       } else {

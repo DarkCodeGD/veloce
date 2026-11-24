@@ -8,12 +8,16 @@
  * (plugins/text renderParagraphs), so what you edit is what you saw. Coming out, the tree is
  * flattened again, with the nesting depth as `level`.
  *
+ * Fields (D97) are inline atoms holding the field's name and the text it was written with:
+ * the caret steps over them whole and they're deleted whole, like PowerPoint's fields.
+ *
  * Coming out, every value is re-validated with the core schemas: pasted HTML can't smuggle
  * a `javascript:` link or a bogus color into a transaction (the server would refuse it and
  * the whole edit would be lost).
  */
 import {
   ColorSchema,
+  FieldNameSchema,
   LinkSchema,
   type Paragraph,
   type TextContent,
@@ -46,6 +50,8 @@ export const DOC = {
   orderedList: "orderedList",
   /** Our color mark: holds a core Color (a token like `$color.primary`, or a CSS color). */
   color: "veloceColor",
+  /** A field (D97): an inline atom with `field` and the `text` it was written with. */
+  field: "veloceField",
 } as const;
 
 const LIST_NODE = { bullet: DOC.bulletList, number: DOC.orderedList } as const;
@@ -102,7 +108,7 @@ function paragraphNode(paragraph: Paragraph): DocNode {
     attrs: { align: paragraph.align ?? null, textStyle: paragraph.style ?? null },
   };
   // ProseMirror text nodes can't be empty: an empty paragraph has no content.
-  const runs = paragraph.runs.filter((r) => r.text !== "");
+  const runs = paragraph.runs.filter((r) => r.text !== "" || r.field);
   if (runs.length > 0) node.content = runs.map(textNode);
   return node;
 }
@@ -111,9 +117,11 @@ function textNode(run: TextRun): DocNode {
   const marks: DocMark[] = FLAG_MARKS.filter((flag) => run[flag]).map((type) => ({ type }));
   if (run.link) marks.push({ type: "link", attrs: { href: run.link } });
   if (run.color) marks.push({ type: DOC.color, attrs: { color: run.color } });
-  return marks.length > 0
-    ? { type: DOC.text, text: run.text, marks }
+  const node: DocNode = run.field
+    ? { type: DOC.field, attrs: { field: run.field, text: run.text } }
     : { type: DOC.text, text: run.text };
+  if (marks.length > 0) node.marks = marks;
+  return node;
 }
 
 // ── Document → core ──────────────────────────────────────────────────────────────────
@@ -154,8 +162,15 @@ function toParagraph(node: DocNode, list?: { kind: Paragraph["list"]; level: num
 }
 
 function toRun(node: DocNode): TextRun[] {
-  if (node.type !== DOC.text || !node.text) return [];
-  const run: TextRun = { text: node.text };
+  let run: TextRun;
+  if (node.type === DOC.field) {
+    const field = FieldNameSchema.safeParse(node.attrs?.field);
+    if (!field.success) return [];
+    const text = node.attrs?.text;
+    run = { text: typeof text === "string" ? text : "", field: field.data };
+  } else if (node.type === DOC.text && node.text) {
+    run = { text: node.text };
+  } else return [];
   for (const mark of node.marks ?? []) {
     if ((FLAG_MARKS as readonly string[]).includes(mark.type)) run[mark.type as Flag] = true;
     if (mark.type === "link") {
@@ -171,7 +186,11 @@ function toRun(node: DocNode): TextRun[] {
 }
 
 const sameFormat = (a: TextRun, b: TextRun) =>
-  FLAG_MARKS.every((flag) => !a[flag] === !b[flag]) && a.link === b.link && a.color === b.color;
+  !a.field &&
+  !b.field && // each field stays its own run
+  FLAG_MARKS.every((flag) => !a[flag] === !b[flag]) &&
+  a.link === b.link &&
+  a.color === b.color;
 
 /** Adjacent runs with the same formatting become one (ProseMirror may split them). */
 export function mergeRuns(runs: TextRun[]): TextRun[] {

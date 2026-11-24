@@ -190,3 +190,52 @@ describe("normalizeLink", () => {
     expect(normalizeLink("   ")).toBeNull();
   });
 });
+
+describe("fields (D97)", () => {
+  const numbered: RichText = [
+    {
+      runs: [
+        { text: "Slide " },
+        { text: "3", field: "slideNumber", bold: true },
+        { text: "", field: "slideCount" },
+      ],
+    },
+  ];
+
+  it("become inline field nodes with their marks, and come back as field runs", () => {
+    expect(toDoc(numbered).content?.[0]?.content).toEqual([
+      { type: DOC.text, text: "Slide " },
+      { type: DOC.field, attrs: { field: "slideNumber", text: "3" }, marks: [{ type: "bold" }] },
+      { type: DOC.field, attrs: { field: "slideCount", text: "" } }, // empty text still kept
+    ]);
+    expect(roundTrip(numbered)).toEqual(numbered);
+  });
+
+  it("never merge with the text or the field next to them", () => {
+    const twice: RichText = [
+      {
+        runs: [
+          { text: "", field: "date" },
+          { text: "", field: "date" },
+        ],
+      },
+    ];
+    expect(roundTrip(twice)).toEqual(twice);
+  });
+
+  it("drop a field the model doesn't know (pasted or tampered)", () => {
+    const doc: DocNode = {
+      type: DOC.doc,
+      content: [
+        {
+          type: DOC.paragraph,
+          content: [
+            { type: DOC.text, text: "Page " },
+            { type: DOC.field, attrs: { field: "pageNumber", text: "1" } },
+          ],
+        },
+      ],
+    };
+    expect(toContent(fromDoc(doc))).toBe("Page ");
+  });
+});

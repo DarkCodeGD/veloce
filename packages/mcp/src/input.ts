@@ -31,6 +31,7 @@ import {
   OpSchema,
   PaintSchema,
   PointSchema,
+  SectionNameSchema,
   SizingSchema,
   type Slide,
   SlideSchema,
@@ -136,6 +137,13 @@ export const SlideInputSchema = z.strictObject({
   background: PaintSchema.optional().describe('Default "$color.background".'),
   notes: z.string().max(50_000).optional().describe("Speaker notes."),
   hidden: z.boolean().optional(),
+  section: SectionNameSchema.optional().describe(
+    'Starts a named section at this slide (e.g. "Results"): it runs until the next slide with a section.',
+  ),
+  hideFooter: z
+    .boolean()
+    .optional()
+    .describe("Leaves the deck's footer off this slide (title and section header slides)."),
   layout: LayoutSchema.optional().describe(
     'Layout of the slide\'s root frame. Default: a column centered top-to-bottom, with "$space.xl" padding and "$space.md" gap. Children stretch across; add align: "center" to center hug-width content.',
   ),

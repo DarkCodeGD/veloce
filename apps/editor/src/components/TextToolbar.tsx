@@ -15,13 +15,20 @@
  */
 import type { Editor } from "@tiptap/core";
 import type { Mark, Node as PMNode } from "@tiptap/pm/model";
-import { resolveColor, type Theme } from "@veloce/core";
+import {
+  FIELD_NAMES,
+  type FieldName,
+  type FieldValues,
+  resolveColor,
+  type Theme,
+} from "@veloce/core";
 import {
   AlignCenter,
   AlignJustify,
   AlignLeft,
   AlignRight,
   Bold,
+  Braces,
   ChevronDown,
   Code,
   Italic,
@@ -158,7 +165,16 @@ function swatchColor(theme: Theme, color: string | undefined): string | undefine
 
 // ── The toolbar ─────────────────────────────────────────────────────────────────────────
 
-type MenuName = "style" | "color" | "align";
+type MenuName = "style" | "color" | "align" | "field";
+
+/** Fields people can insert (D97), in menu order. */
+export const FIELD_LABELS: Record<FieldName, string> = {
+  slideNumber: "Slide number",
+  slideCount: "Slide count",
+  date: "Date",
+  deckTitle: "Deck title",
+  section: "Section name",
+};
 
 interface Props {
   editor: Editor;
@@ -167,6 +183,8 @@ interface Props {
   theme: Theme;
   /** The layer's own style/color/alignment: what unformatted text shows. */
   box: TextBox;
+  /** What fields show on this slide: the Insert field menu previews them. */
+  fields: FieldValues | null;
   /**
    * Esc while typing calls this first: it closes an open menu (and returns true) instead of
    * ending the session.
@@ -174,7 +192,7 @@ interface Props {
   escapeTrap: MutableRefObject<(() => boolean) | null>;
 }
 
-export function TextToolbar({ editor, anchor, theme, box, escapeTrap }: Props) {
+export function TextToolbar({ editor, anchor, theme, box, fields, escapeTrap }: Props) {
   const [link, setLink] = useState<string | null>(null); // the link field's text, when open
   const [invalid, setInvalid] = useState(false);
   const [menu, setMenu] = useState<MenuName | null>(null);
@@ -386,6 +404,39 @@ export function TextToolbar({ editor, anchor, theme, box, escapeTrap }: Props) {
       >
         <LinkIcon size={15} />
       </button>
+
+      {/* ── Fields: values the slide fills in (D97) ── */}
+      <ToolbarMenu
+        open={menu === "field"}
+        onToggle={() => toggleMenu("field")}
+        label="Insert field"
+        tip="Insert field"
+        className="icon-button"
+        trigger={<Braces size={15} />}
+      >
+        <div className="text-style-list" role="menu" aria-label="Fields">
+          {FIELD_NAMES.map((field) => (
+            <button
+              key={field}
+              type="button"
+              role="menuitem"
+              className="text-style-option"
+              onMouseDown={keepFocus}
+              onClick={() =>
+                pick((c) =>
+                  c.insertContent({
+                    type: DOC.field,
+                    attrs: { field, text: fields?.[field] ?? "" },
+                  }),
+                )
+              }
+            >
+              <span>{FIELD_LABELS[field]}</span>
+              <span className="hint">{fields?.[field] || "—"}</span>
+            </button>
+          ))}
+        </div>
+      </ToolbarMenu>
       {link !== null && (
         <input
           ref={linkInput}
