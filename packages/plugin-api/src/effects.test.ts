@@ -52,6 +52,13 @@ describe("effects in the registry (D117)", () => {
     expect(onFrame).toMatchObject({ ok: false, reason: "wrong-target" });
     expect(onFrame.ok === false && onFrame.message).toContain("is a frame");
     expect(onFrame.ok === false && onFrame.hint).toContain("acme.rise"); // what fits instead
+    // Without a target (a saved preset, D119), only the effect and its params are checked.
+    expect(registry.validateEffect({ name: "acme.type" }).ok).toBe(true);
+    expect(registry.validateEffect({ name: "acme.rise", params: { distance: "x" } }).ok).toBe(
+      false,
+    );
+    expect([registry.hasEffect("acme.rise"), registry.hasEffect("rise")]).toEqual([true, false]);
+    expect(registry.applyContext().hasEffect).toBe(registry.hasEffect);
   });
 
   it("records the effects' plugins in a deck's lock", () => {
@@ -61,6 +68,22 @@ describe("effects in the registry (D117)", () => {
         {
           root: frame({ id: "root", children: [] }),
           animations: [{ id: "a", target: "x", effect: { name: "acme.rise" } }],
+        },
+      ],
+    };
+    expect(registry.lockFor(deck as never)).toEqual({ "acme.motion": "1.0.0" });
+  });
+
+  it("locks a saved preset's effect, not an installed effect its name shadows (D119)", () => {
+    const registry = new PluginRegistry()
+      .register(plugin("acme.motion", base as never))
+      .register(plugin("other.motion", { ...base, name: "other.rise" } as never));
+    const deck = {
+      presets: { "other.rise": { effect: { name: "acme.rise" } } },
+      slides: [
+        {
+          root: frame({ id: "root", children: [] }),
+          animations: [{ id: "a", target: "x", effect: { name: "other.rise" } }],
         },
       ],
     };

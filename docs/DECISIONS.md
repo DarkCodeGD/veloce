@@ -3232,3 +3232,58 @@ workspace stays a roadmap item.
    dialog, editing `$motion` values, Animate this slide (choreography), transition
    thumbnails, dragging steps, the timeline panel, right-click → Animate… and a badge on
    animated layers in Design, and the Present workspace.
+
+## D119 — Saved presets: a tuned animation kept in the deck, played by name, linked
+
+**Status:** Accepted (2026-11-25). Phase 4. Builds on D106 §3 and D117 §8.
+
+1. **A preset is how something moves, never when.** `deck.presets`, keyed by name, holds an
+   installed effect with its settings, or keyframe `tracks`, plus `duration`, `easing`,
+   `repeat` and `alternate`, and a `title` and `description` for people. Target, trigger and
+   delay stay on the animation. **Why:** the same motion is reused on other layers and
+   slides, each starting where it belongs; PowerPoint's Animation Painter and After
+   Effects' animation presets also copy the motion, not the slot in the sequence.
+2. **Played by name, like a built-in:** `{ "effect": { "name": "big-bounce" } }`. The
+   animation's own fields win over the preset's, and its `params` merge over the preset's
+   settings. **Linked, unlike components (D94):** changing a preset changes every
+   animation that plays it, like a text style. **Why:** a preset has no ids or subtree to
+   copy and no override model to invent (an animation's own fields already are one), and
+   "make every entrance on this deck a bit slower" is the reason to save one.
+3. **Expansion is the whole trick:** core's `expandAnimation` swaps a preset's name for
+   what it holds; `compileSlide` expands first, so the schedule, the evaluator, the
+   compositor plan and export never learn about presets, and a preset plays exactly as the
+   same animation written out (tested frame by frame). It follows the level as the
+   animation it came from did (D111 §4): unset settings and `$motion` times scale.
+4. **Names:** lowercase words joined by `-`, like the built-ins' (agents type them), never
+   dotted, so plugin effects (always namespaced) can't share one. `preset.save` refuses a
+   new preset named like an installed effect (`ApplyContext.hasEffect`). In a file, the
+   deck's preset wins over an effect a later Veloce adds under its name: the file means what
+   it meant. A preset builds on an installed effect, never on another preset, so expansion
+   never recurses. At most 200 per deck. The editor slugs the typed name ("Big bounce!" →
+   `big-bounce`, `-2` when taken) and keeps the typed text as the title.
+5. **Ops with exact inverses:** `preset.save` (new or replacing) and `preset.remove`. Saving
+   checks the preset (its effect installed, settings valid) and that **every animation that
+   plays it still suits its layer** (a typewriter only on text). Using one is checked as
+   what it stands for, the error naming the preset. A keyframe preset takes no `params`.
+6. **Removing is refused while animations play it,** like `asset.remove` (D65): the error's
+   hint gives the exact `animation.update` that inlines one use. `inlinePresetOps` builds
+   them all; the editor's Delete preset sends them and the remove as one transaction, so
+   nothing on screen changes and one Undo brings the preset back. **Why not cascade inside
+   `preset.remove`:** one op's inverse would have to restore many animations; ordinary ops
+   in one transaction already do that, and agents can send the same ones (golden rule 1).
+7. **Files and versions:** a v3 field (D113 §1 kept v3 open for it); the v3 fixture saves a
+   preset and an animation that plays it back byte for byte. A preset whose plugin isn't
+   installed opens with a warning, its animations keeping their time without moving
+   (D117 §3); one can still be retitled while keeping that effect. `restoreOps` brings back
+   a version's presets before its slides; `lockFor` locks a preset's plugin.
+8. **Editor (Animate panel):** Save as preset… under the tuned animation (name and
+   description; the animation then plays it, its own copies of the settings dropped);
+   Update preset when an animation changes the preset it plays (Figma's "update style");
+   presets first in Add effect as **Saved**, only where core says they fit, previewed on
+   hover like any effect, with a bin that deletes; the steps list, the Effect picker and
+   the settings show the preset's title and values. Tests: core ops, expansion and
+   versions; the panel's model; `phase4-animate.test.ts` saves, reuses, updates, deletes
+   and undoes in real Chromium.
+9. **Agents:** presets work through `apply_ops` today (`preset.save`, effect names, errors
+   with the fix); teaching them (docs, the deck summary) and the real-agent retest come with
+   the MCP animation item, as for effects (D117 §9).

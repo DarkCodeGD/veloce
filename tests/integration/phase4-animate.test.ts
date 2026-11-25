@@ -2,8 +2,9 @@
  * Phase 4 acceptance (the Animate workspace, first slice, D118): a person animates a slide
  * without an agent. Switch to Animate, select a layer, rest the pointer on an effect to see
  * it play on the canvas (never an edit), click it to add it, tune it (start, settings),
- * undo, play the slide, and remove it. Text-only effects show only for text. Every change
- * is an ordinary transaction (golden rule 1). Real Chromium against the real server.
+ * undo, play the slide, and remove it. Text-only effects show only for text. Save a tuned
+ * animation as a preset, play it on another layer, update it and delete it (D119). Every
+ * change is an ordinary transaction (golden rule 1). Real Chromium against the real server.
  */
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Animation } from "@veloce/core";
@@ -134,6 +135,67 @@ describe.skipIf(problem !== null)(
       await expect.poll(() => animations().length).toBe(0);
       expect(h.stored("box")).toBeDefined();
       await panel().getByText("Nothing moves on this slide yet").waitFor();
+    });
+
+    // ── Saved presets (D119) ─────────────────────────────────────────────────────────
+
+    const presets = () => h.latestDeck().presets;
+    const tile = (name: string) => panel().locator(".effect-tile", { hasText: name });
+
+    it("saves a tuned animation as a preset, which it then plays by name (D119)", async () => {
+      await selectLayer("box");
+      await panel().getByRole("button", { name: "Slide in", exact: true }).click();
+      await panel().getByRole("combobox", { name: "Direction" }).click();
+      await page.getByRole("option", { name: "Left" }).click();
+      await expect.poll(() => animations()[0]?.effect?.params).toEqual({ direction: "left" });
+
+      await panel().getByRole("button", { name: "Save as preset…" }).click();
+      const dialog = page.getByRole("dialog", { name: "Save as preset" });
+      await dialog.getByLabel("Name").fill("Swoop");
+      await dialog.getByRole("button", { name: "Save" }).click();
+      await expect.poll(presets).toEqual({
+        swoop: { title: "Swoop", effect: { name: "slide-in", params: { direction: "left" } } },
+      });
+      expect(animations()[0]?.effect).toEqual({ name: "swoop" });
+      await panel().locator(".animate-row", { hasText: "Swoop" }).waitFor();
+      await panel().getByRole("heading", { name: "Saved" }).waitFor();
+    });
+
+    it("adds the preset to another layer from the Saved group", async () => {
+      await selectLayer("title");
+      await tile("Swoop").click();
+      await expect
+        .poll(() => animations().map((a) => [a.target, a.effect?.name]))
+        .toEqual([
+          ["box", "swoop"],
+          ["title", "swoop"],
+        ]);
+    });
+
+    it("updates the preset from one animation's changes, for both", async () => {
+      await panel().getByRole("combobox", { name: "Direction" }).click();
+      await page.getByRole("option", { name: "Right" }).click();
+      await expect.poll(() => animations()[1]?.effect?.params).toEqual({ direction: "right" });
+      await panel().getByRole("button", { name: "Update preset" }).click();
+      await expect.poll(() => presets()?.swoop?.effect?.params).toEqual({ direction: "right" });
+      expect(animations()[1]?.effect).toEqual({ name: "swoop" });
+      await expect
+        .poll(() => panel().getByRole("button", { name: "Update preset" }).count())
+        .toBe(0);
+    });
+
+    it("deletes the preset, its animations moving as before; Undo brings it back", async () => {
+      await tile("Swoop").hover();
+      await panel().getByRole("button", { name: "Delete preset Swoop" }).click();
+      await expect.poll(presets).toBeUndefined();
+      expect(animations().map((a) => a.effect)).toEqual([
+        { name: "slide-in", params: { direction: "right" } },
+        { name: "slide-in", params: { direction: "right" } },
+      ]);
+      await page.keyboard.press("Control+z");
+      await expect.poll(() => presets()?.swoop?.title).toBe("Swoop");
+      expect(animations().map((a) => a.effect?.name)).toEqual(["swoop", "swoop"]);
+      expect(h.pageErrors).toEqual([]);
     });
 
     it("goes back to Design with the inspector as it was", async () => {

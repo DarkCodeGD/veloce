@@ -28,6 +28,7 @@ export * from "./motion-plan.js";
 export * from "./motion-tokens.js";
 export * from "./ops/apply.js";
 export * from "./ops/schema.js";
+export * from "./presets.js";
 export * from "./random.js";
 export * from "./schema/index.js";
 export * from "./settings.js";

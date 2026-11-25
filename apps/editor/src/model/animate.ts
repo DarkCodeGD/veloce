@@ -7,12 +7,22 @@
  */
 import {
   type Animation,
+  type ApplyContext,
+  animationProblem,
+  clearOverridesPatch,
   createId,
   type Deck,
+  getPreset,
+  inlinePresetOps,
   type MotionLevel,
   type MotionTokens,
   type Node,
   type Op,
+  PRESET_TIMING,
+  presetFromAnimation,
+  presetOf,
+  presetOverrides,
+  presetTitle,
   resolveTime,
   type Slide,
   scheduleSlide,
@@ -23,15 +33,62 @@ import type { EffectKind } from "@veloce/plugin-api";
 import type { Command } from "./commands.js";
 import { nodeLabel, type SlideIndex } from "./slide-index.js";
 
-/** What the panel needs to know about an effect (a slice of the registry's `EffectInfo`). */
+/**
+ * What the panel needs to know about an effect (a slice of the registry's `EffectInfo`), or
+ * about one of the deck's saved presets (D119), which the panel offers like an effect.
+ */
 export interface EffectSummary {
   name: string;
   title: string;
   description: string;
-  kind: EffectKind;
+  /** A keyframe preset is `custom`: it brings nothing in or out by itself. */
+  kind: EffectKind | "custom";
   /** Element types it plays on; absent: any layer. */
   targets?: readonly string[];
+  /** A saved preset: whether it suits a layer is asked of core (it may be keyframes). */
+  saved?: { suits(layer: Node): boolean };
 }
+
+/**
+ * The deck's saved presets as the gallery shows them, A to Z by title: an effect preset
+ * takes its effect's kind; whether one suits a layer is core's own check, the one an op
+ * adding it would run (golden rule 1).
+ */
+export function savedPresets(
+  deck: Deck,
+  slide: Slide,
+  describe: (name: string) => EffectSummary | undefined,
+  ctx: ApplyContext,
+): EffectSummary[] {
+  return Object.entries(deck.presets ?? {})
+    .map(([name, preset]): EffectSummary => {
+      const base = preset.effect && describe(preset.effect.name);
+      return {
+        name,
+        title: presetTitle(name, preset),
+        description:
+          preset.description ??
+          (base ? `${base.title}, tuned and saved in this deck` : "Keyframes saved in this deck"),
+        kind: preset.tracks ? "custom" : (base?.kind ?? "custom"),
+        saved: {
+          suits: (layer) =>
+            animationProblem(
+              slide,
+              { id: "preset-check", target: layer.id, effect: { name } },
+              ctx,
+              deck.presets,
+            ) === null,
+        },
+      };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** Looks a name up among the deck's presets first (they win in their deck), then `describe`. */
+export const describeWithPresets =
+  (saved: readonly EffectSummary[], describe: (name: string) => EffectSummary | undefined) =>
+  (name: string): EffectSummary | undefined =>
+    saved.find((p) => p.name === name) ?? describe(name);
 
 // ── The gallery ───────────────────────────────────────────────────────────────────────
 
@@ -43,29 +100,40 @@ const KINDS: ReadonlyArray<{ kind: EffectKind; title: string }> = [
 ];
 
 export interface GalleryGroup {
-  kind: EffectKind;
+  kind: EffectKind | "saved";
   title: string;
   effects: EffectSummary[];
 }
 
 /** Whether an effect plays on every one of `layers` (a typewriter only on text). */
 export const effectSuits = (effect: EffectSummary, layers: readonly Node[]): boolean =>
-  !effect.targets ||
-  layers.every((n) => n.kind === "element" && (effect.targets?.includes(n.type) ?? false));
+  effect.saved
+    ? layers.every((n) => effect.saved?.suits(n))
+    : !effect.targets ||
+      layers.every((n) => n.kind === "element" && (effect.targets?.includes(n.type) ?? false));
 
 /**
- * The effects the selected layers can take, by kind, in the registry's order. Effects that
+ * The effects the selected layers can take: the deck's saved presets first (the ones made
+ * for this deck), then the installed effects by kind, in the registry's order. Effects that
  * don't suit every layer are left out: a gallery shows what a click can do.
  */
 export function effectGallery(
   effects: readonly EffectSummary[],
   layers: readonly Node[],
+  saved: readonly EffectSummary[] = [],
 ): GalleryGroup[] {
-  return KINDS.map(({ kind, title }) => ({
-    kind,
-    title,
-    effects: effects.filter((e) => e.kind === kind && effectSuits(e, layers)),
-  })).filter((group) => group.effects.length > 0);
+  return [
+    {
+      kind: "saved" as const,
+      title: "Saved",
+      effects: saved.filter((e) => effectSuits(e, layers)),
+    },
+    ...KINDS.map(({ kind, title }) => ({
+      kind,
+      title,
+      effects: effects.filter((e) => e.kind === kind && effectSuits(e, layers)),
+    })),
+  ].filter((group) => group.effects.length > 0);
 }
 
 // ── The steps list ────────────────────────────────────────────────────────────────────
@@ -227,6 +295,101 @@ export function removeAnimations(ids: readonly string[]): Command | null {
 export function removeLayerAnimations(slide: Slide, layerIds: readonly string[]): Command | null {
   const ids = (slide.animations ?? []).filter((a) => layerIds.includes(a.target)).map((a) => a.id);
   return removeAnimations(ids);
+}
+
+// ── Saved presets (D119) ──────────────────────────────────────────────────────────────
+
+/**
+ * A preset name from what someone typed ("Big bounce!" → "big-bounce"), not taken by
+ * another preset or an installed effect: "-2", "-3"… when it is. Names are what agents type,
+ * so they're plain lowercase words; the typed text stays as the title.
+ */
+export function presetName(title: string, taken: (name: string) => boolean): string {
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50)
+    .replace(/-+$/, "");
+  const base = /^[a-z]/.test(slug) ? slug : `preset${slug ? `-${slug}` : ""}`.slice(0, 50);
+  if (!taken(base)) return base;
+  for (let n = 2; ; n++) if (!taken(`${base}-${n}`)) return `${base}-${n}`;
+}
+
+export interface SavedPreset {
+  command: Command;
+  name: string;
+}
+
+/**
+ * Save as preset: the tuned animation's motion and timing kept in the deck under a new name
+ * (`isInstalled` says which names the installed effects have), and the animation then plays
+ * it, its own copies of those settings dropped. One undo step.
+ */
+export function savePreset(
+  deck: Deck,
+  animation: Animation,
+  about: { title: string; description?: string },
+  isInstalled: (name: string) => boolean,
+): SavedPreset {
+  const title = about.title.trim();
+  const name = presetName(title, (n) => isInstalled(n) || getPreset(deck, n) !== undefined);
+  const preset = presetFromAnimation(animation, deck.presets, {
+    title,
+    ...(about.description !== undefined && { description: about.description }),
+  });
+  const set: Record<string, unknown> = {
+    effect: { name, params: null },
+    ...(animation.tracks && { tracks: null }),
+  };
+  for (const key of PRESET_TIMING) if (animation[key] !== undefined) set[key] = null;
+  return {
+    name,
+    command: {
+      label: "Save as preset",
+      ops: [
+        { op: "preset.save", name, preset },
+        { op: "animation.update", id: animation.id, set },
+      ],
+    },
+  };
+}
+
+/**
+ * Update preset: the changes this animation makes to the preset it plays become the
+ * preset's, for every animation that plays it (Figma's "update style"). Null when it plays
+ * none, or plays it as saved.
+ */
+export function updatePreset(deck: Deck, animation: Animation): Command | null {
+  const found = presetOf(deck.presets, animation);
+  if (!found || presetOverrides(animation).length === 0) return null;
+  const { title, description } = found.preset;
+  const preset = presetFromAnimation(animation, deck.presets, {
+    ...(title !== undefined && { title }),
+    ...(description !== undefined && { description }),
+  });
+  return {
+    label: "Update preset",
+    ops: [
+      { op: "preset.save", name: found.name, preset },
+      { op: "animation.update", id: animation.id, set: clearOverridesPatch(animation) },
+    ],
+  };
+}
+
+/**
+ * Delete a preset: every animation that plays it gets its own copy first, so nothing on the
+ * slides changes (D119). One undo step.
+ */
+export function deletePreset(deck: Deck, name: string): Command | null {
+  const preset = getPreset(deck, name);
+  if (!preset) return null;
+  return {
+    label: `Delete preset “${presetTitle(name, preset)}”`,
+    ops: [...inlinePresetOps(deck, name), { op: "preset.remove", name }],
+  };
 }
 
 /** The deck's motion level; `subtle` is the default, so it's stored as none. */

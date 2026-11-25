@@ -48,7 +48,7 @@ export const versionInfo = ({ id, name, savedAt, deck }: DeckVersion): VersionIn
 
 /**
  * The ops that turn `current` into `target` (an older copy of the same deck): its slides,
- * theme, footer, title and other meta, components, and the assets it registered. One transaction, so undo puts
+ * theme, footer, title and other meta, components, presets, and the assets it registered. One transaction, so undo puts
  * everything back. The stage (slide size) isn't changed: no op can, and a deck keeps its own.
  *
  * Every current slide is removed and every saved one inserted, even an unchanged one: plain
@@ -77,6 +77,18 @@ export function restoreOps(current: Deck, target: Deck): Op[] {
   for (const [name, component] of Object.entries(after)) {
     if (!Object.hasOwn(before, name) || changed(name)) {
       ops.push({ op: "component.save", name, component });
+    }
+  }
+  // Presets (D119): the slides that play them are gone by now, so any can go; the version's
+  // come back before its slides, which may play them.
+  const presetsBefore = current.presets ?? {};
+  const presetsAfter = target.presets ?? {};
+  for (const name of Object.keys(presetsBefore)) {
+    if (!Object.hasOwn(presetsAfter, name)) ops.push({ op: "preset.remove", name });
+  }
+  for (const [name, preset] of Object.entries(presetsAfter)) {
+    if (JSON.stringify(presetsBefore[name]) !== JSON.stringify(preset)) {
+      ops.push({ op: "preset.save", name, preset });
     }
   }
   target.slides.forEach((slide, index) => {

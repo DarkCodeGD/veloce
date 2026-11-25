@@ -26,6 +26,7 @@ import {
   resolveTime,
   slideMotionTokens,
 } from "./motion-tokens.js";
+import { expandSlide } from "./presets.js";
 import type { Animation, EffectRef, Keyframe, Tracks } from "./schema/animation.js";
 import type { Deck, Slide } from "./schema/deck.js";
 import type { FrameNode, Node } from "./schema/node.js";
@@ -166,10 +167,13 @@ const CHANNELS: ReadonlySet<string> = new Set(MOTION_CHANNELS);
 
 /** Prepares a slide's animations for evaluation, with the deck's theme and motion level. */
 export function compileSlide(
-  deck: Pick<Deck, "theme" | "motionLevel">,
-  slide: Slide,
+  deck: Pick<Deck, "theme" | "motionLevel" | "presets">,
+  stored: Slide,
   options: CompileOptions = {},
 ): CompiledSlide {
+  // Saved presets (D119) become the plain animations they stand for, so nothing below
+  // knows about them: a preset plays exactly as the same animation written out in full.
+  const slide = expandSlide(stored, deck.presets);
   const tokens = slideMotionTokens(deck, slide);
   const nodes = new Map<string, Node>();
   for (const { node } of walkNodes(slide.root)) nodes.set(node.id, node);

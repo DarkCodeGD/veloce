@@ -32,11 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-25
-- **Next:** saved presets (with Save as preset in the Animate panel), then layout animations (FLIP). Done in Phase 4: visual regression tests (D102), the
+- **Next:** layout animations (FLIP), then choreography from intent. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (1112 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1138 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -297,8 +297,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       Design/Animate switcher; the Animate panel with the level, Play on the canvas, the
       steps list, effects previewed on hover and added with a click, tuned (start, speed,
       delay, repeat, the effect's own settings), moved and removed (D118)
-- [ ] Saved presets: Save as preset keeps a tuned animation in the deck (a v3 field and
-      ops), used by name like a built-in, following the level (D106 §3, D117 §8)
+- [x] Saved presets: Save as preset keeps a tuned animation in the deck (`presets`,
+      `preset.save`/`preset.remove`), played by name and linked, following the level;
+      Update and Delete preset in the Animate panel (D119)
 - [ ] Layout animations in stacks (FLIP: measure both layouts, animate the difference
       through the motion slot) and staggering in reading order (D83 §5, D103 §7)
 - [ ] Choreography from intent: a rule-based engine turns an intent into animations from
@@ -320,7 +321,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       with keyframes); the quick way in from Design (right-click → Animate…, a badge on
       animated layers). Present workspace: rehearse in presenter view
 - [ ] MCP: `set_animations(slideId, steps)`, choreography from intent, the motion level
-      (docs give each level's summary, D111 §7), `depth` and `perspective` in node input,
+      (docs give each level's summary, D111 §7), effects and the deck's saved presets
+      (D117 §9, D119 §9), `depth` and `perspective` in node input,
       docs and outlines (D112 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide

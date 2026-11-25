@@ -69,6 +69,10 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Animations** (`schema/animation.ts`, `timeline.ts`, D110): each slide's `animations`, in
   play order, with triggers that derive the steps (`scheduleSlide`); an effect or keyframe
   tracks on motion channels or the target's own properties.
+- **Saved presets** (`schema/preset.ts`, `presets.ts`, D119): `deck.presets` holds tuned
+  motion (an effect with settings, or tracks, plus timing) that animations play by name.
+  `expandAnimation` turns a use into the plain animation it stands for; `compileSlide`
+  expands first, so nothing downstream knows about presets.
 - **2.5D** (D112): `perspective` on frames and `depth` on layers are document fields; the
   renderer draws them (`frameSpaceCss`, `drawnCss`), and the editor's gestures undo the
   depth's magnification (`toLayerSpace`).
@@ -83,8 +87,8 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   each layer's motion from that moment into keyframe clips for the compositor (a clip to
   where it stops, then a loop), within what nobody can see; loops that don't line up
   stay on the clock.
-- **Ops** (`src/ops/`): `slide.*`, `node.*`, `animation.*`, `deck.*`, `asset.*`, `component.*`. Each is
-  plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
+- **Ops** (`src/ops/`): `slide.*`, `node.*`, `animation.*`, `deck.*`, `asset.*`, `component.*`,
+  `preset.*`. Each is plain JSON, validated, and returns its **exact inverse** when applied. Updates are JSON
   Merge Patches. Ops copy only the path to what changed (structural sharing), so untouched
   slides keep their object identity and renderers skip them.
 - **Transactions** (`transaction.ts`): a label, an origin and a list of ops, applied all or
@@ -175,7 +179,8 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
   only (`preview.ts`) and sends one transaction when it ends, so one gesture is one undo step.
 - **Workspaces** (`model/workspace.ts`, `layout.ts`, D53, D90, D118): Design and Animate
   are presets of the same panels; in Animate the right panel is the **Animate panel**
-  (`components/AnimatePanel.tsx`, its ops from `model/animate.ts`). Its Play and hover
+  (`components/AnimatePanel.tsx`, its ops from `model/animate.ts`, saved presets included,
+  D119). Its Play and hover
   previews play on the editor canvas's own view through `canvas-playback.ts` (a
   `SlidePlayer` the canvas registers), never as ops.
 - **Presenting** (`components/PresentView.tsx`, `model/presentation.ts`, D116): a fullscreen

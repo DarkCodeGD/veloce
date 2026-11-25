@@ -7,6 +7,7 @@ import {
   type Deck,
   deepEqual,
   element,
+  expandAnimation,
   FORMAT_VERSION,
   MIDNIGHT_THEME,
   morphPairs,
@@ -367,7 +368,7 @@ describe("migrations", () => {
     expect(read.deck).toEqual({ ...v2, formatVersion: FORMAT_VERSION, theme: MIDNIGHT_THEME });
   });
 
-  it("opens the v3 fixture as stored and saves it back unchanged (D109–D112)", async () => {
+  it("opens the v3 fixture as stored and saves it back unchanged (D109–D112, D119)", async () => {
     const read = await readVeloce(await fixtureFile(3));
     expect(read.migratedFrom).toBeUndefined();
     const { deck } = read;
@@ -393,6 +394,14 @@ describe("migrations", () => {
       [0, 375],
       [435, 1185],
     ]);
+    // A saved preset (D119), played by name on the second slide, survives the read too.
+    expect(deck.presets?.["soft-rise"]?.title).toBe("Soft rise");
+    const rise = s2.animations?.[0];
+    if (!rise) throw new Error("the fixture's second slide plays a preset");
+    expect(expandAnimation(rise, deck.presets)).toMatchObject({
+      duration: "$motion.slow",
+      effect: { name: "fade-in", params: { distance: 40 } },
+    });
     // Saving writes back exactly the document and theme it was read from.
     const saved = unzipSync(await writeVeloce({ deck, assets: new Map() }, { now: NOW }));
     expect(JSON.parse(strFromU8(saved["document.json"] as Uint8Array))).toEqual(

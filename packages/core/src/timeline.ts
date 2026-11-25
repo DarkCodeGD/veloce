@@ -10,10 +10,12 @@
 import type { ApplyContext } from "./checks.js";
 import type { ErrorCode } from "./errors.js";
 import { type MotionTokens, motionTokens, resolveTime } from "./motion-tokens.js";
+import { expandAnimation, presetOf } from "./presets.js";
 import type { Animation } from "./schema/animation.js";
 import type { Deck, Slide } from "./schema/deck.js";
 import type { Easing, Time } from "./schema/motion.js";
 import { FrameStyleSchema, type Node } from "./schema/node.js";
+import type { Preset, Presets } from "./schema/preset.js";
 import { walkNodes } from "./tree.js";
 
 /** An animation's duration and easing when it (and its effect) give none (D111). */
@@ -76,7 +78,10 @@ export function animationProblem(
   slide: Slide,
   animation: Animation,
   ctx: ApplyContext = {},
+  presets?: Presets,
 ): AnimationProblem | null {
+  const preset = presetOf(presets, animation);
+  if (preset) return presetUseProblem(slide, animation, preset.name, preset.preset, ctx, presets);
   if (animation.target === slide.root.id) {
     return {
       code: "FORBIDDEN",
@@ -139,6 +144,37 @@ export function animationProblem(
     }
   }
   return null;
+}
+
+/**
+ * An animation that plays a saved preset (D119) is checked as what it stands for: the
+ * preset's effect with the settings merged, or its keyframes, on this target. Problems
+ * inside the preset point at the animation's `effect`, and say which preset it was.
+ */
+function presetUseProblem(
+  slide: Slide,
+  animation: Animation,
+  name: string,
+  preset: Preset,
+  ctx: ApplyContext,
+  presets: Presets | undefined,
+): AnimationProblem | null {
+  const params = animation.effect?.params ?? {};
+  if (preset.tracks && Object.keys(params).length > 0) {
+    return {
+      code: "INVALID",
+      message: `Animation "${animation.id}": preset "${name}" plays its own keyframes, which have no settings`,
+      path: "effect.params",
+      hint: "Remove effect.params. Its timing (duration, easing, repeat) can still be set on the animation.",
+    };
+  }
+  const problem = animationProblem(slide, expandAnimation(animation, presets), ctx);
+  if (!problem || problem.path === "target") return problem;
+  return {
+    ...problem,
+    message: `${problem.message} (in preset "${name}")`,
+    path: problem.path.startsWith("effect.params") ? "effect.params" : "effect.name",
+  };
 }
 
 /** Why `value` can't stand in for the property at `path` of `node`, or null if it can. */

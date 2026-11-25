@@ -17,10 +17,18 @@ import {
 import { caseClash, componentNotFound, componentProblem, getComponent } from "../components.js";
 import { parseOrThrow, VeloceError } from "../errors.js";
 import { diffPatch, type JsonObject, mergePatch } from "../json.js";
+import {
+  getPreset,
+  inlinePatch,
+  presetNotFoundHint,
+  presetProblem,
+  presetUses,
+} from "../presets.js";
 import { type Animation, AnimationSchema } from "../schema/animation.js";
 import { MAX_COMPONENTS } from "../schema/component.js";
 import { type Deck, DeckMetaSchema, type Slide, SlideFieldsSchema } from "../schema/deck.js";
 import { ElementNodeSchema, FrameFieldsSchema, type FrameNode, type Node } from "../schema/node.js";
+import { MAX_PRESETS } from "../schema/preset.js";
 import { notFoundHint } from "../suggest.js";
 import {
   type AnimationLocation,
@@ -101,6 +109,10 @@ export function applyOp(deck: Deck, op: Op, ctx: ApplyContext = {}): OpResult {
       return componentSave(deck, op, ctx);
     case "component.remove":
       return componentRemove(deck, op);
+    case "preset.save":
+      return presetSave(deck, op, ctx);
+    case "preset.remove":
+      return presetRemove(deck, op);
   }
 }
 
@@ -118,7 +130,7 @@ function slideInsert(deck: Deck, op: OpOf<"slide.insert">, ctx: ApplyContext): O
   assertAssetsExist(deck, slide, slide.id);
   assertElementsValid(slide.root, ctx, "slide.root");
   for (const [i, animation] of (slide.animations ?? []).entries()) {
-    assertAnimationFits(slide, animation, ctx, `slide.animations[${i}]`);
+    assertAnimationFits(deck, slide, animation, ctx, `slide.animations[${i}]`);
   }
   return {
     deck: { ...deck, slides: deck.slides.toSpliced(index, 0, slide) },
@@ -177,7 +189,7 @@ function nodeInsert(deck: Deck, op: OpOf<"node.insert">, ctx: ApplyContext): OpR
     const slide = next.slides[parent.slideIndex] as Slide;
     const list = [...(slide.animations ?? [])];
     for (const [i, { index: at, animation }] of op.animations.entries()) {
-      assertAnimationFits(slide, animation, ctx, `animations[${i}].animation`);
+      assertAnimationFits(deck, slide, animation, ctx, `animations[${i}].animation`);
       list.splice(resolveIndex(at, list.length, `slide "${slide.id}"'s animations`), 0, animation);
     }
     next = replaceSlide(next, parent.slideIndex, withAnimations(slide, list));
@@ -289,7 +301,7 @@ function animationInsert(deck: Deck, op: OpOf<"animation.insert">, ctx: ApplyCon
   const list = slide.animations ?? [];
   const index = resolveIndex(op.index, list.length, `slide "${slide.id}"'s animations`);
   assertNewIds(collectIds(deck), [op.animation.id]);
-  assertAnimationFits(slide, op.animation, ctx, "animation");
+  assertAnimationFits(deck, slide, op.animation, ctx, "animation");
   return {
     deck: replaceSlide(
       deck,
@@ -328,7 +340,7 @@ function animationUpdate(deck: Deck, op: OpOf<"animation.update">, ctx: ApplyCon
   const next = parseOrThrow(AnimationSchema, mergePatch(animation, op.set), ["set"]);
   // An effect from a plugin this install lacks may stay while other fields change.
   const keepsEffect = next.effect?.name === animation.effect?.name;
-  assertAnimationFits(slide, next, ctx, "set", keepsEffect);
+  assertAnimationFits(deck, slide, next, ctx, "set", keepsEffect);
   const list = (slide.animations ?? []).toSpliced(index, 1, next);
   return {
     deck: replaceSlide(deck, slideIndex, withAnimations(slide, list)),
@@ -343,13 +355,14 @@ function withAnimations(slide: Slide, animations: readonly Animation[]): Slide {
 }
 
 function assertAnimationFits(
+  deck: Deck,
   slide: Slide,
   animation: Animation,
   ctx: ApplyContext,
   at: string,
   allowMissing = false,
 ) {
-  const problem = animationProblem(slide, animation, ctx);
+  const problem = animationProblem(slide, animation, ctx, deck.presets);
   if (problem && !(allowMissing && problem.missing)) {
     throw new VeloceError(problem.code, problem.message, {
       path: `${at}.${problem.path}`,
@@ -452,6 +465,79 @@ function componentRemove(deck: Deck, op: OpOf<"component.remove">): OpResult {
   return {
     deck: Object.keys(rest).length > 0 ? { ...deck, components: rest } : without,
     inverse: { op: "component.save", name: op.name, component },
+  };
+}
+
+// ── Presets (D119) ────────────────────────────────────────────────────────────────────
+
+function presetSave(deck: Deck, op: OpOf<"preset.save">, ctx: ApplyContext): OpResult {
+  const { name, preset } = op;
+  const old = getPreset(deck, name);
+  // A preset shadows an installed effect of the same name in its deck, so a new one can't
+  // take one's name (an old one keeps it: the file means what it meant when it was saved).
+  if (!old && ctx.hasEffect?.(name)) {
+    throw new VeloceError("CONFLICT", `"${name}" is already an installed effect`, {
+      hint: `Pick another name, e.g. "my-${name}". Built-in and plugin effects keep theirs.`,
+      path: "name",
+    });
+  }
+  const all = deck.presets ?? {};
+  if (!old && Object.keys(all).length >= MAX_PRESETS) {
+    throw new VeloceError("FORBIDDEN", `This deck already has ${MAX_PRESETS} presets`, {
+      hint: "Remove presets nobody uses (preset.remove) before saving another.",
+    });
+  }
+  const problem = presetProblem(preset, ctx, all);
+  // An effect from a plugin this install lacks may stay while the rest changes (like D117 §3).
+  const keepsEffect = problem?.missing && old?.effect?.name === preset.effect?.name;
+  if (problem && !keepsEffect) {
+    throw new VeloceError(problem.code, `Preset "${name}": ${problem.message}`, {
+      path: `preset.${problem.path}`,
+      ...(problem.hint && { hint: problem.hint }),
+    });
+  }
+  // Every animation that plays it must still suit its layer (a typewriter only on text).
+  const presets = { ...all, [name]: preset };
+  for (const { slide, animation } of presetUses(deck, name)) {
+    const misfit = animationProblem(slide, animation, ctx, presets);
+    if (misfit && !misfit.missing) {
+      throw new VeloceError(misfit.code, misfit.message, {
+        path: "preset",
+        hint: `Animation "${animation.id}" on slide "${slide.id}" plays "${name}". Save the change under a new name instead, or change that animation first.`,
+      });
+    }
+  }
+  return {
+    deck: { ...deck, presets },
+    inverse: old ? { op: "preset.save", name, preset: old } : { op: "preset.remove", name },
+  };
+}
+
+function presetRemove(deck: Deck, op: OpOf<"preset.remove">): OpResult {
+  const preset = getPreset(deck, op.name);
+  if (!preset) {
+    throw new VeloceError("NOT_FOUND", `No preset "${op.name}" in this deck`, {
+      hint: presetNotFoundHint(deck, op.name),
+      path: "name",
+    });
+  }
+  const uses = presetUses(deck, op.name);
+  if (uses.length > 0) {
+    const first = uses[0]?.animation as Animation;
+    throw new VeloceError(
+      "FORBIDDEN",
+      `Preset "${op.name}" is still played by ${quoteList(uses.map((u) => u.animation.id))}`,
+      {
+        hint: `Give each its own copy first, in the same transaction: e.g. { "op": "animation.update", "id": "${first.id}", "set": ${JSON.stringify(inlinePatch(first, deck.presets))} }. Or remove those animations.`,
+      },
+    );
+  }
+  const { [op.name]: _removed, ...rest } = deck.presets ?? {};
+  // No presets left: the field goes too (optional fields are omitted, not empty).
+  const { presets: _all, ...without } = deck;
+  return {
+    deck: Object.keys(rest).length > 0 ? { ...deck, presets: rest } : without,
+    inverse: { op: "preset.save", name: op.name, preset },
   };
 }
 

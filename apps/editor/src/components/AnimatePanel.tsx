@@ -8,8 +8,11 @@
  * - **Animation**: the selected animation, tuned with a few plain controls (effect, start,
  *   speed, delay, repeat) and its effect's own settings, generated from the effect's schema
  *   like the inspector's props (golden rule 5). Move earlier / later, preview, remove.
- * - **Add effect**: the effects that suit the selected layers. Resting the pointer on one
- *   previews it on the canvas; a click adds it.
+ * - **Add effect**: the effects that suit the selected layers, the deck's saved presets
+ *   first (D119). Resting the pointer on one previews it on the canvas; a click adds it.
+ * - **Presets** (D119): Save as preset keeps the tuned animation in the deck and plays it by
+ *   name; Update preset pushes an animation's changes to every one that plays it; a saved
+ *   tile's bin deletes the preset, giving its animations their own copy.
  *
  * Every change is one transaction, the same ops an agent sends (golden rule 1); previews are
  * never ops (D106 §2).
@@ -17,10 +20,13 @@
 import {
   type Animation,
   type Deck,
+  expandAnimation,
   MOTION_LEVEL_SCALES,
   MOTION_LEVELS,
   type MotionLevel,
   type Node,
+  presetOf,
+  presetTitle,
   resolveTime,
   type Slide,
   slideMotionLevel,
@@ -31,16 +37,19 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  Bookmark,
   CircleAlert,
   Clock,
   LogIn,
   LogOut,
   MousePointerClick,
   Play,
+  RefreshCw,
   Sparkles,
   Spline,
   Square,
   Trash,
+  X,
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { run } from "../actions.js";
@@ -49,6 +58,8 @@ import { registry } from "../editor-context.js";
 import {
   addEffect,
   changeEffect,
+  deletePreset,
+  describeWithPresets,
   type EffectSummary,
   effectGallery,
   effectSuits,
@@ -57,6 +68,7 @@ import {
   removeAnimations,
   SPEEDS,
   type StepRow,
+  savedPresets,
   setEffectParam,
   setMotionLevel,
   setTrigger,
@@ -64,10 +76,12 @@ import {
   speedLabel,
   stepsList,
   updateAnimation,
+  updatePreset,
 } from "../model/animate.js";
 import { propFields } from "../model/schema-fields.js";
 import type { SlideIndex } from "../model/slide-index.js";
-import { Group, NumberField, Section, SelectField, ToggleField } from "./fields.js";
+import { Group, humanize, NumberField, Section, SelectField, ToggleField } from "./fields.js";
+import { SavePresetDialog } from "./SavePresetDialog.js";
 
 interface Props {
   deck: Deck;
@@ -98,7 +112,14 @@ const REPEATS = [
 
 export function AnimatePanel({ deck, slide, index, selection, onSelect }: Props) {
   const playing = useCanvasPlayback();
-  const steps = useMemo(() => stepsList(slide, index, describeEffect), [slide, index]);
+  // The deck's saved presets (D119), offered like effects; they win over an installed
+  // effect of the same name, as they do when the slide plays.
+  const saved = useMemo(
+    () => savedPresets(deck, slide, describeEffect, registry.applyContext()),
+    [deck, slide],
+  );
+  const describe = useMemo(() => describeWithPresets(saved, describeEffect), [saved]);
+  const steps = useMemo(() => stepsList(slide, index, describe), [slide, index, describe]);
   const animations = slide.animations ?? [];
 
   // The animation being tuned: picked in the list, or the first of the layer selected on
@@ -138,11 +159,21 @@ export function AnimatePanel({ deck, slide, index, selection, onSelect }: Props)
           />
         )}
       </Section>
-      {tuned && <TuneSection deck={deck} slide={slide} index={index} animation={tuned} />}
+      {tuned && (
+        <TuneSection
+          deck={deck}
+          slide={slide}
+          index={index}
+          animation={tuned}
+          saved={saved}
+          describe={describe}
+        />
+      )}
       <GallerySection
         deck={deck}
         slide={slide}
         layers={layers}
+        saved={saved}
         after={tuned?.id}
         onAdded={(id) => setTunedId(id)}
       />
@@ -284,26 +315,35 @@ function TuneSection({
   slide,
   index,
   animation,
+  saved,
+  describe,
 }: {
   deck: Deck;
   slide: Slide;
   index: SlideIndex;
   animation: Animation;
+  saved: readonly EffectSummary[];
+  describe(name: string): EffectSummary | undefined;
 }) {
   const playing = useCanvasPlayback();
+  const [saving, setSaving] = useState(false);
   const target = index.nodes.get(animation.target)?.node;
   const tokens = slideMotionTokens(deck, slide);
-  const effect = animation.effect ? describeEffect(animation.effect.name) : undefined;
+  const effect = animation.effect ? describe(animation.effect.name) : undefined;
+  const preset = presetOf(deck.presets, animation);
+  const update = updatePreset(deck, animation);
   const set = (patch: Record<string, unknown>, label: string) =>
     void run(updateAnimation(animation.id, patch, label));
 
   // The effects it can change to: those that suit its layer, and its own, whatever it is.
-  const effectOptions = EFFECTS.filter(
-    (e) => e.name === effect?.name || !target || effectSuits(e, [target]),
-  ).map((e) => ({ value: e.name, label: `${e.title} (${e.kind})` }));
+  // Saved presets first, as in the gallery.
+  const effectOptions = [...saved, ...EFFECTS]
+    .filter((e) => e.name === effect?.name || !target || effectSuits(e, [target]))
+    .map((e) => ({ value: e.name, label: `${e.title} (${e.saved ? "saved" : e.kind})` }));
 
-  // Its effect's own length, for "Default · 400 ms".
-  const own = effectDuration(animation, target, tokens);
+  // What it plays when it sets no duration (its preset's, else its effect's), for "Default · 400 ms".
+  const own = defaultDuration(deck, animation, target, tokens);
+  const presetRepeat = preset?.preset.repeat;
   const duration = animation.duration;
   const speedOptions = [
     ...SPEEDS.map((s) => ({ value: s.value, label: speedLabel(s, tokens) })),
@@ -325,6 +365,12 @@ function TuneSection({
           Keyframes an agent or the timeline made. Picking an effect replaces them.
         </p>
       )}
+      {preset && (
+        <p className="inspector-hint">
+          Plays the saved preset “{presetTitle(preset.name, preset.preset)}”. Changes here are this
+          animation's own{update ? "; Update preset gives them to every one that plays it" : ""}.
+        </p>
+      )}
       <SelectField
         label="Effect"
         value={animation.effect?.name}
@@ -335,7 +381,7 @@ function TuneSection({
             : effectOptions
         }
         onCommit={(v) => {
-          const next = typeof v === "string" ? describeEffect(v) : undefined;
+          const next = typeof v === "string" ? describe(v) : undefined;
           if (next) void run(changeEffect(animation, next));
         }}
       />
@@ -369,7 +415,13 @@ function TuneSection({
       <SelectField
         label="Repeat"
         value={animation.repeat === undefined ? undefined : String(animation.repeat)}
-        defaultLabel="Once"
+        defaultLabel={
+          presetRepeat === undefined
+            ? "Once"
+            : presetRepeat === "forever"
+              ? "Until the slide changes"
+              : `${presetRepeat} times`
+        }
         options={
           typeof animation.repeat === "number" &&
           !REPEATS.some((r) => r.value === String(animation.repeat))
@@ -383,7 +435,7 @@ function TuneSection({
           )
         }
       />
-      {effect && <EffectParams animation={animation} />}
+      {effect && <EffectParams deck={deck} animation={animation} />}
       <div className="animate-actions">
         <button
           type="button"
@@ -431,6 +483,31 @@ function TuneSection({
           <Trash size={14} />
         </button>
       </div>
+      <div className="animate-preset-actions">
+        <button type="button" className="button" onClick={() => setSaving(true)}>
+          <Bookmark size={12} aria-hidden />
+          Save as preset…
+        </button>
+        {update && (
+          <button
+            type="button"
+            className="button"
+            data-tip="Every animation that plays this preset moves like this one"
+            onClick={() => void run(update, { undoToast: "Updated the preset" })}
+          >
+            <RefreshCw size={12} aria-hidden />
+            Update preset
+          </button>
+        )}
+      </div>
+      {saving && (
+        <SavePresetDialog
+          deck={deck}
+          animation={animation}
+          suggested={effect?.title}
+          onClose={() => setSaving(false)}
+        />
+      )}
     </Section>
   );
 }
@@ -439,13 +516,18 @@ function TuneSection({
  * The effect's own settings (direction, distance…), from its params schema like the
  * inspector's props. Left unset, they follow the motion level (D117 §4).
  */
-function EffectParams({ animation }: { animation: Animation }) {
-  const name = animation.effect?.name ?? "";
+function EffectParams({ deck, animation }: { deck: Deck; animation: Animation }) {
+  // A saved preset's settings are its effect's; the preset's own values show as defaults.
+  const preset = presetOf(deck.presets, animation)?.preset;
+  const name = (preset ? preset.effect?.name : animation.effect?.name) ?? "";
   const definition = registry.getEffect(name)?.definition;
   if (!definition) return null;
   const fields = propFields({ propsSchema: definition.paramsSchema });
   if (fields.length === 0) return null;
   const params = animation.effect?.params ?? {};
+  const inherited = preset?.effect?.params ?? {};
+  const shown = (key: string) =>
+    inherited[key] === undefined ? undefined : String(inherited[key]);
   const commit = (key: string) => (value: unknown) =>
     void run(setEffectParam(animation, key, value));
   return (
@@ -461,18 +543,28 @@ function EffectParams({ animation }: { animation: Animation }) {
                 {...common}
                 value={value as string | undefined}
                 options={field.options}
-                defaultLabel="Default"
+                defaultLabel={
+                  typeof inherited[field.key] === "string"
+                    ? humanize(inherited[field.key] as string)
+                    : "Default"
+                }
               />
             );
           case "boolean":
-            return <ToggleField key={field.key} {...common} value={value as boolean | undefined} />;
+            return (
+              <ToggleField
+                key={field.key}
+                {...common}
+                value={(value ?? inherited[field.key]) as boolean | undefined}
+              />
+            );
           case "number":
             return (
               <NumberField
                 key={field.key}
                 {...common}
                 value={value as number | undefined}
-                placeholder="Auto"
+                placeholder={shown(field.key) ?? "Auto"}
                 min={field.min}
                 max={field.max}
                 integer={field.integer}
@@ -492,16 +584,18 @@ function GallerySection({
   deck,
   slide,
   layers,
+  saved,
   after,
   onAdded,
 }: {
   deck: Deck;
   slide: Slide;
   layers: Node[];
+  saved: readonly EffectSummary[];
   after: string | undefined;
   onAdded(id: string): void;
 }) {
-  const groups = useMemo(() => effectGallery(EFFECTS, layers), [layers]);
+  const groups = useMemo(() => effectGallery(EFFECTS, layers, saved), [layers, saved]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -548,18 +642,41 @@ function GallerySection({
       {groups.map((group) => (
         <Group key={group.kind} title={group.title}>
           <div className="effect-gallery" onPointerLeave={leave}>
-            {group.effects.map((effect) => (
-              <button
-                key={effect.name}
-                type="button"
-                className={`effect-tile is-${effect.kind}`}
-                data-tip={effect.description}
-                onPointerEnter={() => preview(effect)}
-                onClick={() => void add(effect)}
-              >
-                {effect.title}
-              </button>
-            ))}
+            {group.effects.map((effect) => {
+              const tile = (
+                <button
+                  key={effect.name}
+                  type="button"
+                  className={`effect-tile is-${effect.kind}`}
+                  data-tip={effect.description}
+                  onPointerEnter={() => preview(effect)}
+                  onClick={() => void add(effect)}
+                >
+                  {effect.title}
+                </button>
+              );
+              if (!effect.saved) return tile;
+              const remove = deletePreset(deck, effect.name);
+              return (
+                <span key={effect.name} className="effect-tile-saved">
+                  {tile}
+                  <button
+                    type="button"
+                    className="icon-button effect-tile-delete"
+                    aria-label={`Delete preset ${effect.title}`}
+                    data-tip="Delete preset. Animations that play it keep moving the same way."
+                    onPointerEnter={leave}
+                    onClick={() => {
+                      leave();
+                      if (remove)
+                        void run(remove, { undoToast: `Deleted preset “${effect.title}”` });
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </Group>
       ))}
@@ -575,13 +692,20 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const timeValue = (value: string): Time =>
   value.startsWith("$") ? (value as Time) : Number(value);
 
-/** How long the animation's effect plays when it sets no duration, in ms (null: unknown). */
-function effectDuration(
+/**
+ * How long the animation plays when it sets no duration of its own, in ms (null: unknown):
+ * its saved preset's duration (D119), else its effect's own.
+ */
+function defaultDuration(
+  deck: Deck,
   animation: Animation,
   target: Node | undefined,
   tokens: ReturnType<typeof slideMotionTokens>,
 ): number | null {
-  if (!animation.effect || !target) return null;
-  const resolved = registry.resolveEffect(animation.effect, { animation, target, tokens });
+  const { duration: _own, ...rest } = animation;
+  const plain = expandAnimation(rest, deck.presets);
+  if (plain.duration !== undefined) return resolveTime(plain.duration, tokens);
+  if (!plain.effect || !target) return null;
+  const resolved = registry.resolveEffect(plain.effect, { animation: plain, target, tokens });
   return resolveTime(resolved?.duration ?? "$motion.normal", tokens);
 }

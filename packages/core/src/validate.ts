@@ -9,6 +9,7 @@ import { collectAssetRefs } from "./assets.js";
 import type { ApplyContext } from "./checks.js";
 import { componentProblem } from "./components.js";
 import { type ErrorCode, formatIssues, formatPath } from "./errors.js";
+import { presetProblem } from "./presets.js";
 import { type Deck, DeckSchema, FORMAT_VERSION } from "./schema/deck.js";
 import { MAX_DEPTH, type Node } from "./schema/node.js";
 import { animationProblem } from "./timeline.js";
@@ -100,7 +101,7 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
     for (const [a, animation] of (slide.animations ?? []).entries()) {
       const at = `slides[${s}].animations[${a}]`;
       checkId(animation.id, `${at}.id`);
-      const problem = animationProblem(slide, animation, ctx);
+      const problem = animationProblem(slide, animation, ctx, deck.presets);
       if (problem?.missing) {
         warnings.push({
           severity: "warning",
@@ -127,6 +128,17 @@ export function validateDeck(value: unknown, ctx: ApplyContext = {}): DeckValida
       }
     }
     for (const { node } of walkNodes(component.node)) checkElement(node, `Component "${name}": `);
+  }
+
+  // Presets (D119): an effect nobody installed is a warning, like an animation's (D113 §5).
+  for (const [name, preset] of Object.entries(deck.presets ?? {})) {
+    const problem = presetProblem(preset, ctx, deck.presets);
+    if (!problem) continue;
+    const message = `Preset "${name}": ${problem.message}`;
+    const at = `presets.${name}.${problem.path}`;
+    if (problem.missing) {
+      warnings.push({ severity: "warning", code: problem.code, message, path: at });
+    } else error(problem.code, message, at);
   }
 
   if (errors.length) return { ok: false, errors: errors.slice(0, MAX_REPORTED), warnings };

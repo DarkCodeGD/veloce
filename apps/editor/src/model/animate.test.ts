@@ -6,23 +6,30 @@ import {
   createSlide,
   type Deck,
   element,
+  expandAnimation,
   motionTokens,
 } from "@veloce/core";
 import { describe, expect, it } from "vitest";
 import {
   addEffect,
   changeEffect,
+  deletePreset,
+  describeWithPresets,
   effectGallery,
   galleryPreview,
   moveAnimation,
+  presetName,
   removeLayerAnimations,
   SPEEDS,
+  savedPresets,
+  savePreset,
   setEffectParam,
   setMotionLevel,
   setTrigger,
   soloAnimations,
   speedLabel,
   stepsList,
+  updatePreset,
 } from "./animate.js";
 import type { Command } from "./commands.js";
 import { indexSlide } from "./slide-index.js";
@@ -223,5 +230,116 @@ describe("previews (D118)", () => {
       ["title", "withPrevious", "pop-in"],
       ["box", "withPrevious", "pop-in"],
     ]);
+  });
+});
+
+describe("saved presets (D119)", () => {
+  const tuned: Animation = {
+    id: "a1",
+    target: "title",
+    trigger: "withPrevious",
+    delay: 100,
+    duration: "$motion.slow",
+    repeat: 2,
+    effect: { name: "slide-in", params: { direction: "left" } },
+  };
+  const ctx = registry.applyContext();
+
+  it("names a preset like the built-ins, never taking an installed effect's or another's", () => {
+    const taken = (n: string) => registry.hasEffect(n) || n === "big-bounce";
+    expect(presetName("Big bounce!", taken)).toBe("big-bounce-2");
+    expect(presetName("Crème brûlée", taken)).toBe("creme-brulee");
+    expect(presetName("Fade in", taken)).toBe("fade-in-2");
+    expect(presetName("2024 intro", taken)).toBe("preset-2024-intro");
+    expect(presetName("🎉", taken)).toBe("preset");
+  });
+
+  it("saves the tuned animation, which then plays the preset, as one undo step", () => {
+    const deck = deckWith([tuned]);
+    const { command, name } = savePreset(deck, tuned, { title: "Swoop" }, registry.hasEffect);
+    expect(command.ops).toHaveLength(2);
+    const next = apply(deck, command);
+    expect(name).toBe("swoop");
+    expect(next.presets?.swoop).toEqual({
+      title: "Swoop",
+      effect: { name: "slide-in", params: { direction: "left" } },
+      duration: "$motion.slow",
+      repeat: 2,
+    });
+    const a1 = slideOf(next).animations?.[0] as Animation;
+    // When it plays stays the animation's; how it moves is the preset's now.
+    expect(a1).toEqual({
+      id: "a1",
+      target: "title",
+      trigger: "withPrevious",
+      delay: 100,
+      effect: { name: "swoop" },
+    });
+    expect(expandAnimation(a1, next.presets)).toEqual(tuned);
+  });
+
+  it("offers presets first in the gallery, only where they fit, and names them in the steps", () => {
+    const typer = { title: "Slow type", effect: { name: "typewriter" } };
+    const deck = { ...deckWith([{ id: "a1", target: "title", effect: { name: "slow-type" } }]) };
+    const withPreset: Deck = { ...deck, presets: { "slow-type": typer } };
+    const saved = savedPresets(withPreset, slideOf(withPreset), describe_, ctx);
+    expect(saved.map((p) => [p.name, p.title, p.kind])).toEqual([
+      ["slow-type", "Slow type", "entrance"],
+    ]);
+    const onText = effectGallery(effects, [title], saved);
+    expect(onText[0]?.title).toBe("Saved");
+    expect(onText[0]?.effects.map((e) => e.name)).toEqual(["slow-type"]);
+    expect(effectGallery(effects, [box], saved)[0]?.title).toBe("Entrance"); // no typing a shape
+    const rows = stepsList(
+      slideOf(withPreset),
+      indexSlide(slideOf(withPreset)),
+      describeWithPresets(saved, describe_),
+    );
+    expect(rows[0]?.rows[0]).toMatchObject({ effect: "Slow type", kind: "entrance" });
+  });
+
+  it("updates the preset from an animation's own changes, for every one that plays it", () => {
+    let deck = apply(
+      deckWith([tuned]),
+      savePreset(deckWith([tuned]), tuned, { title: "Swoop" }, registry.hasEffect).command,
+    );
+    const a1 = () => slideOf(deck).animations?.[0] as Animation;
+    expect(updatePreset(deck, a1())).toBeNull(); // plays it as saved: nothing to push
+    deck = apply(deck, {
+      label: "tune",
+      ops: [
+        {
+          op: "animation.update",
+          id: "a1",
+          set: { duration: 900, effect: { params: { direction: "up" } } },
+        },
+      ],
+    });
+    deck = apply(deck, updatePreset(deck, a1()));
+    expect(deck.presets?.swoop).toMatchObject({
+      title: "Swoop",
+      duration: 900,
+      effect: { params: { direction: "up" } },
+    });
+    expect(a1()).toEqual({
+      id: "a1",
+      target: "title",
+      trigger: "withPrevious",
+      delay: 100,
+      effect: { name: "swoop" },
+    });
+  });
+
+  it("deletes a preset, its animations keeping their own copy, as one undo step", () => {
+    const deck = apply(
+      deckWith([tuned]),
+      savePreset(deckWith([tuned]), tuned, { title: "Swoop" }, registry.hasEffect).command,
+    );
+    const command = deletePreset(deck, "swoop");
+    expect(command?.label).toBe("Delete preset “Swoop”");
+    const next = apply(deck, command);
+    expect(next).not.toHaveProperty("presets");
+    expect(slideOf(next).animations?.[0]).toEqual(tuned);
+    expect(deletePreset(next, "swoop")).toBeNull();
   });
 });

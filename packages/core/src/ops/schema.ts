@@ -13,6 +13,7 @@ import { ComponentNameSchema, ComponentSchema } from "../schema/component.js";
 import { AssetInfoSchema, FooterSchema, SlideSchema } from "../schema/deck.js";
 import { MotionLevelSchema } from "../schema/motion.js";
 import { NodeSchema } from "../schema/node.js";
+import { PresetNameSchema, PresetSchema } from "../schema/preset.js";
 import { AssetIdSchema, IdSchema } from "../schema/primitives.js";
 import { ThemeSchema } from "../schema/theme.js";
 
@@ -138,6 +139,24 @@ export const ComponentRemoveOp = z.strictObject({
   name: ComponentNameSchema,
 });
 
+/**
+ * Save an animation preset under `name` (D119), or replace the one saved there. Animations
+ * that play it by name change with it: each must still suit its layer.
+ */
+export const PresetSaveOp = z.strictObject({
+  op: z.literal("preset.save"),
+  name: PresetNameSchema,
+  preset: PresetSchema,
+});
+/**
+ * Forget a preset. Refused while animations play it: give them their own copy first
+ * (`inlinePresetOps`, one `animation.update` each), or remove them.
+ */
+export const PresetRemoveOp = z.strictObject({
+  op: z.literal("preset.remove"),
+  name: PresetNameSchema,
+});
+
 export const OpSchema = z.discriminatedUnion("op", [
   SlideInsertOp,
   SlideRemoveOp,
@@ -159,6 +178,8 @@ export const OpSchema = z.discriminatedUnion("op", [
   AssetRemoveOp,
   ComponentSaveOp,
   ComponentRemoveOp,
+  PresetSaveOp,
+  PresetRemoveOp,
 ]);
 export type Op = z.infer<typeof OpSchema>;
 export type OpType = Op["op"];

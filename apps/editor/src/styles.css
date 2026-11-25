@@ -5184,3 +5184,41 @@ html.is-scrubbing * {
   background: var(--hover);
   border-color: var(--accent);
 }
+
+/* Saved presets (D119): a tile with a bin that shows while the pointer or focus is on it. */
+.effect-tile-saved {
+  position: relative;
+  display: grid;
+}
+
+.effect-tile-saved .effect-tile {
+  padding-right: 22px;
+}
+
+.effect-tile-delete {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity var(--fast);
+}
+
+.effect-tile-saved:hover .effect-tile-delete,
+.effect-tile-saved:focus-within .effect-tile-delete {
+  opacity: 1;
+}
+
+/* Save as preset… and Update preset, under the animation's own actions. */
+.animate-preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.animate-preset-actions .button {
+  height: 28px;
+}

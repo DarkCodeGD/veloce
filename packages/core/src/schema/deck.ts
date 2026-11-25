@@ -7,6 +7,7 @@ import { ComponentsSchema } from "./component.js";
 import { MotionLevelSchema } from "./motion.js";
 import { FrameNodeSchema } from "./node.js";
 import { PaintSchema } from "./paint.js";
+import { PresetsSchema } from "./preset.js";
 import { AssetIdSchema, IdSchema } from "./primitives.js";
 import { ThemeSchema } from "./theme.js";
 
@@ -136,6 +137,11 @@ export const DeckSchema = z.strictObject({
    * are none. Their asset references count as uses, like a slide's.
    */
   components: ComponentsSchema.optional(),
+  /**
+   * Saved animation presets by name (D119): tuned animations that slides play by name, like
+   * a built-in effect. Omitted when there are none.
+   */
+  presets: PresetsSchema.optional(),
   /** Omitted when the deck has no footer (D97). */
   footer: FooterSchema.optional(),
   /** How much the deck moves, `calm` to `absurd` (D104, D111). Omitted: `"subtle"`. */

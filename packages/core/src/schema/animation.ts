@@ -102,6 +102,9 @@ export const EffectRefSchema = z.strictObject({
 export type EffectRef = z.infer<typeof EffectRefSchema>;
 
 export const TriggerSchema = z.enum(["onClick", "withPrevious", "afterPrevious"]);
+
+/** How many times an animation plays (default 1), or "forever" (until the slide changes). */
+export const RepeatSchema = z.union([z.number().int().min(1).max(1000), z.literal("forever")]);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
 export const AnimationSchema = z
@@ -127,7 +130,7 @@ export const AnimationSchema = z
     effect: EffectRefSchema.optional(),
     tracks: TracksSchema.optional(),
     /** How many times it plays (default 1), or "forever" (until the slide changes). */
-    repeat: z.union([z.number().int().min(1).max(1000), z.literal("forever")]).optional(),
+    repeat: RepeatSchema.optional(),
     /** Repeats play back and forth instead of starting over. */
     alternate: z.boolean().optional(),
   })

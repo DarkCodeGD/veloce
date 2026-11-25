@@ -15,6 +15,7 @@ import {
   ELEMENT_TYPE_PATTERN,
   type ElementCheck,
   formatIssues,
+  getPreset,
   type Node,
   suggest,
   TracksSchema,
@@ -228,11 +229,14 @@ export class PluginRegistry {
     return this.#effects.get(name);
   }
 
+  /** Whether an installed plugin provides this effect. An arrow function, like the validators. */
+  readonly hasEffect = (name: string): boolean => this.#effects.has(name);
+
   /**
    * Core's effect validator (D117): the effect exists, suits the target, and its params pass
    * its schema. An arrow function, so it can be passed around unbound.
    */
-  readonly validateEffect = (effect: EffectRef, target: Node): EffectCheck => {
+  readonly validateEffect = (effect: EffectRef, target?: Node): EffectCheck => {
     const registered = this.#effects.get(effect.name);
     if (!registered) {
       const close = suggest(effect.name, this.#effects.keys());
@@ -247,7 +251,7 @@ export class PluginRegistry {
     }
     const { definition } = registered;
     const targets = definition.targets;
-    if (targets && (target.kind !== "element" || !targets.includes(target.type))) {
+    if (target && targets && (target.kind !== "element" || !targets.includes(target.type))) {
       const what = target.kind === "element" ? `a ${target.type} element` : "a frame";
       const fits = this.effectNames().filter((n) => !this.#effects.get(n)?.definition.targets);
       return {
@@ -312,7 +316,11 @@ export class PluginRegistry {
 
   /** Hooks for `@veloce/core` (`applyTransaction`, `DeckDocument`, `validateDeck`). */
   applyContext(): ApplyContext {
-    return { validateElement: this.validateElement, validateEffect: this.validateEffect };
+    return {
+      validateElement: this.validateElement,
+      validateEffect: this.validateEffect,
+      hasEffect: this.hasEffect,
+    };
   }
 
   describe(type: string): ElementTypeInfo | undefined {
@@ -344,9 +352,16 @@ export class PluginRegistry {
         if (plugin) lock[plugin.id] = plugin.version;
       }
       for (const animation of slide.animations ?? []) {
-        const plugin = animation.effect && this.#effects.get(animation.effect.name)?.plugin;
+        // A saved preset's name is the deck's own (D119): its effect is locked below.
+        const name = animation.effect?.name;
+        if (name === undefined || getPreset(deck, name)) continue;
+        const plugin = this.#effects.get(name)?.plugin;
         if (plugin) lock[plugin.id] = plugin.version;
       }
+    }
+    for (const preset of Object.values(deck.presets ?? {})) {
+      const plugin = preset.effect && this.#effects.get(preset.effect.name)?.plugin;
+      if (plugin) lock[plugin.id] = plugin.version;
     }
     return lock;
   }

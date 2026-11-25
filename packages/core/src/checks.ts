@@ -29,7 +29,8 @@ export type EffectCheck =
       hint?: string;
     };
 
-export type EffectValidator = (effect: EffectRef, target: Node) => EffectCheck;
+/** Without a target, only the effect and its params are checked (a saved preset, D119). */
+export type EffectValidator = (effect: EffectRef, target?: Node) => EffectCheck;
 
 /** Hooks that make core plugin-aware without depending on any plugin code. */
 export interface ApplyContext {
@@ -37,6 +38,11 @@ export interface ApplyContext {
   validateElement?: ElementValidator;
   /** Usually `registry.validateEffect`. Omitted → effects aren't checked. */
   validateEffect?: EffectValidator;
+  /**
+   * Whether an installed plugin provides an effect by this name (`registry.hasEffect`):
+   * a saved preset can't take one's name (D119). Omitted → names aren't checked.
+   */
+  hasEffect?: (name: string) => boolean;
 }
 
 export function subtreeIds(node: Node): string[] {

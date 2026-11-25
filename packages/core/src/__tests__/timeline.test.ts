@@ -436,7 +436,11 @@ describe("effects checked by the plugins that provide them (D117)", () => {
   /** Knows "fade-in" (no params) and "type" (text only), like a registry would. */
   const effects: ApplyContext = {
     validateEffect: (effect, target) => {
-      if (effect.name === "type" && !(target.kind === "element" && target.type === "text")) {
+      if (
+        effect.name === "type" &&
+        target &&
+        !(target.kind === "element" && target.type === "text")
+      ) {
         return { ok: false, reason: "wrong-target", message: '"type" plays on text elements' };
       }
       if (effect.name !== "fade-in" && effect.name !== "type") {

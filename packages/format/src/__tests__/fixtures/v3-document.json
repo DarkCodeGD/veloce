@@ -175,8 +175,32 @@
             }
           }
         ]
-      }
+      },
+      "animations": [
+        {
+          "id": "a-rise",
+          "target": "title2",
+          "trigger": "withPrevious",
+          "effect": {
+            "name": "soft-rise"
+          }
+        }
+      ]
     }
   ],
+  "presets": {
+    "soft-rise": {
+      "title": "Soft rise",
+      "description": "A slow, short rise for supporting text.",
+      "effect": {
+        "name": "fade-in",
+        "params": {
+          "distance": 40
+        }
+      },
+      "duration": "$motion.slow",
+      "easing": "$motion.enter"
+    }
+  },
   "assets": {}
 }
