@@ -31,6 +31,8 @@ const SECTIONS = {
     lint: z.boolean(),
     /** Lint rules the editor doesn't show (by rule ID). */
     mutedRules: z.array(z.string().min(1).max(64)).max(64),
+    /** Dragging the motion level plays the slide on the canvas at each level (D122). */
+    previewLevel: z.boolean(),
   }),
   files: z.strictObject({
     /** Where decks are kept. null: the default folder (~/Veloce). Applies on restart. */
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
     nudgeBig: 10,
     lint: true,
     mutedRules: [],
+    previewLevel: true,
   },
   files: { decksFolder: null, autosaveMs: 800 },
   ai: { followAI: true, port: 4321 },

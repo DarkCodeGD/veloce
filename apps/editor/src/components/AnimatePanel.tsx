@@ -1,8 +1,9 @@
 /**
  * The Animate panel (D106 depths 1 and 2, D118): the right panel of the Animate workspace.
  *
- * - **Motion**: the deck's motion level, and Play, which plays the slide on the canvas with
- *   the clicks taken for you. **Animate this slide** (D121): the choreography engine
+ * - **Motion**: the deck's motion level on a slider (D122): dragging it plays the slide on
+ *   the canvas at each level it passes (a preference), letting go sets it; and Play, which
+ *   plays the slide on the canvas with the clicks taken for you. **Animate this slide** (D121): the choreography engine
  *   animates the whole slide from a pacing, punching the selected layers.
  * - **Steps**: the slide's animations as they'll play (as the slide appears, then click by
  *   click). A row selects its animation and its layer.
@@ -90,9 +91,11 @@ import {
 } from "../model/animate.js";
 import { propFields } from "../model/schema-fields.js";
 import { nodeLabel, type SlideIndex } from "../model/slide-index.js";
+import { useSettings } from "../settings.js";
 import { showToast } from "../toasts.js";
 import { Group, humanize, NumberField, Section, SelectField, ToggleField } from "./fields.js";
 import { SavePresetDialog } from "./SavePresetDialog.js";
+import { StepSliderField } from "./Slider.js";
 
 interface Props {
   deck: Deck;
@@ -195,6 +198,10 @@ export function AnimatePanel({ deck, slide, index, selection, onSelect }: Props)
 
 // ── Motion: the level and Play ────────────────────────────────────────────────────────
 
+/** The level slider's fill: cool and calm at the start, hot by absurd. */
+const LEVEL_FILL =
+  "linear-gradient(90deg, #4f9cf9 0%, var(--accent) 45%, #e0569b 75%, #ff7a3d 100%)";
+
 function MotionSection({
   deck,
   slide,
@@ -204,8 +211,39 @@ function MotionSection({
   slide: Slide;
   playing: string | null;
 }) {
-  const level = slideMotionLevel(deck, slide);
+  const { previewLevel } = useSettings().editing;
+  // The level being dragged to, before it's set: the summary follows it.
+  const [previewing, setPreviewing] = useState<MotionLevel | null>(null);
+  const shownDeck = previewing ? { ...deck, motionLevel: previewing } : deck;
+  const level = slideMotionLevel(shownDeck, slide);
   const hasAnimations = (slide.animations?.length ?? 0) > 0;
+
+  // Setting the level changes the deck, which ends any preview on the canvas (it draws the
+  // document again); so once the new level is in, the slide plays on at it.
+  const replay = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the level changes
+  useEffect(() => {
+    if (!replay.current) return;
+    replay.current = false;
+    playOnCanvas({ deck, slideId: slide.id, mode: "slide" });
+  }, [deck.motionLevel]);
+  const commit = (next: string | null) => {
+    replay.current = previewLevel && hasAnimations;
+    return run(setMotionLevel((next as MotionLevel | null) ?? null));
+  };
+
+  const preview = (next: string | null) => {
+    setPreviewing(next as MotionLevel | null);
+    // Feel each level as you pass it: the slide plays at it (never an op, D106 §2).
+    if (next && previewLevel && hasAnimations) {
+      playOnCanvas({
+        deck: { ...deck, motionLevel: next as MotionLevel },
+        slideId: slide.id,
+        mode: "slide",
+      });
+    }
+  };
+
   return (
     <Section
       title="Motion"
@@ -223,12 +261,14 @@ function MotionSection({
         </button>
       }
     >
-      <SelectField
+      <StepSliderField
         label="Level"
         value={deck.motionLevel}
         defaultValue="subtle"
-        options={MOTION_LEVELS.map((l) => ({ value: l, label: capitalize(l) }))}
-        onCommit={(v) => void run(setMotionLevel((v as MotionLevel | null) ?? null))}
+        stops={MOTION_LEVELS.map((l) => ({ value: l, label: capitalize(l) }))}
+        fill={LEVEL_FILL}
+        onPreview={preview}
+        onCommit={commit}
       />
       <p className="inspector-hint">
         {MOTION_LEVEL_SCALES[level].summary}

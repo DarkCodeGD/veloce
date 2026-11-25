@@ -18,7 +18,6 @@ import { Pipette, X } from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent,
-  type PointerEvent,
   type ReactNode,
   type RefObject,
   useEffect,
@@ -31,6 +30,7 @@ import { gradientDragging } from "../gradient-edit.js";
 import { type Hsva, hsvToHex, type PickedColor, toHsva } from "../model/color.js";
 import { placePopover } from "../model/popover.js";
 import { popupHost } from "./popup-host.js";
+import { usePointerDrag } from "./usePointerDrag.js";
 
 /** Chromium's EyeDropper API (not in TypeScript's DOM types yet). */
 type EyeDropperCtor = new () => { open(): Promise<{ sRGBHex: string }> };
@@ -195,16 +195,10 @@ function DragSurface({
   onDrag(x: number, y: number, commit: boolean): void;
   onStep(dx: number, dy: number): void;
 }) {
-  const at = (e: PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    return [clamp01((e.clientX - r.left) / r.width), clamp01((e.clientY - r.top) / r.height)];
-  };
-  const last = useRef<[number, number]>([0, 0]);
-  const end = (commit: boolean) => {
-    if (!dragging.current) return;
-    dragging.current = false;
-    if (commit) onDrag(last.current[0], last.current[1], true);
-  };
+  const drag = usePointerDrag<HTMLDivElement>(
+    (x, y, phase) => onDrag(x, y, phase === "end"),
+    dragging,
+  );
   return (
     <div
       className={className}
@@ -213,24 +207,7 @@ function DragSurface({
       aria-label={label}
       aria-valuetext={valueText}
       aria-valuenow={Math.round(thumb.left * 100)}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.preventDefault(); // keep the focus (and a text selection) where it is
-        e.currentTarget.setPointerCapture(e.pointerId);
-        dragging.current = true;
-        const [x = 0, y = 0] = at(e);
-        last.current = [x, y];
-        onDrag(x, y, false);
-      }}
-      onPointerMove={(e) => {
-        if (!dragging.current || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
-        const [x = 0, y = 0] = at(e);
-        last.current = [x, y];
-        onDrag(x, y, false);
-      }}
-      onPointerUp={() => end(true)}
-      // Capture lost without a release (the window lost focus…): keep what was dragged to.
-      onLostPointerCapture={() => end(true)}
+      {...drag}
       onKeyDown={(e: KeyboardEvent) => {
         const step = e.shiftKey ? 10 : 1;
         const move: Record<string, [number, number]> = {

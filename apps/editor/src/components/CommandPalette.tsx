@@ -53,7 +53,9 @@ interface Row extends PaletteEntry {
   run(): void;
 }
 
-type Flag = readonly ["editing", "snapping" | "lint"] | readonly ["ai", "followAI"];
+type Flag =
+  | readonly ["editing", "snapping" | "lint" | "previewLevel"]
+  | readonly ["ai", "followAI"];
 
 /** The settings it finds: a `flag` flips in place, the rest open Preferences on `tab`. */
 const SETTINGS: ReadonlyArray<{
@@ -80,6 +82,13 @@ const SETTINGS: ReadonlyArray<{
     flag: ["editing", "lint"],
   },
   { id: "rules", label: "Issue rules", tab: "editing", keywords: "lint mute hide problems" },
+  {
+    id: "preview-level",
+    label: "Play the slide while choosing a motion level",
+    tab: "editing",
+    keywords: "animation preview autoplay level slider motion",
+    flag: ["editing", "previewLevel"],
+  },
   { id: "folder", label: "Decks folder", tab: "files", keywords: "directory location" },
   { id: "autosave", label: "Autosave delay", tab: "files", keywords: "save interval" },
   { id: "keymap", label: "Keymap", tab: "keymap", keywords: "keyboard shortcuts keys hotkeys" },

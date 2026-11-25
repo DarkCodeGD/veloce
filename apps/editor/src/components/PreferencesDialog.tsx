@@ -155,6 +155,16 @@ function EditingTab() {
         />
         <Hint>Kept for you and for each agent. More steps use more memory.</Hint>
       </Section>
+      <Section title="Animating">
+        <ToggleField
+          label="Preview levels"
+          value={editing.previewLevel}
+          onCommit={(on) => changeSettings({ editing: { previewLevel: on === true } })}
+        />
+        <Hint>
+          Play the slide on the canvas while you drag the motion level, at each level you pass.
+        </Hint>
+      </Section>
       <Section title="Issues">
         <ToggleField
           label="Check slides"

@@ -5229,3 +5229,186 @@ html.is-scrubbing * {
 .animate-preset-actions .button {
   height: 28px;
 }
+
+/* ── Sliders (D122): custom, like the other inputs ──────────────────────────────────── */
+
+.slider-field {
+  display: grid;
+  gap: 6px;
+  padding: 2px 0 4px;
+}
+
+.slider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.slider-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.slider-value {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color var(--fast) var(--ease);
+}
+
+.slider-value.is-live {
+  color: var(--accent);
+}
+
+.slider-number {
+  width: 76px;
+}
+
+.slider-number.is-live input {
+  color: var(--accent);
+}
+
+/* The hit area is taller than the rail; the thumb's radius is kept inside the field. */
+.slider {
+  position: relative;
+  height: 22px;
+  margin: 0 8px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.slider-rail,
+.slider-fill {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+
+.slider-rail {
+  background: var(--border-strong);
+}
+
+/* The fill is the whole track's color, revealed up to the thumb: a gradient keeps its place. */
+.slider-fill {
+  background: var(--slider-fill, var(--accent));
+  clip-path: inset(0 calc(100% - var(--slider-at)) 0 0 round 2px);
+}
+
+.slider-tick {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 0 0 1.5px var(--border-strong);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.slider-tick.is-passed {
+  box-shadow: 0 0 0 1.5px transparent;
+  background: rgb(255 255 255 / 0.85);
+}
+
+/* The default's notch: a small mark above the rail. */
+.slider-tick.is-default::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 2px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--text-muted);
+  transform: translateX(-50%);
+}
+
+.slider-thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--slider-at);
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.3),
+    0 1px 4px rgb(0 0 0 / 0.45);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition:
+    left 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+
+.slider-fill {
+  transition: clip-path 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.slider:hover .slider-thumb,
+.slider.is-dragging .slider-thumb {
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.slider:focus-visible .slider-thumb {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.3),
+    0 0 0 4px var(--accent-soft);
+}
+
+/* The stops' names under the track: each under its notch, the ends flush with the edges. */
+.slider-stops {
+  position: relative;
+  height: 16px;
+  margin: 0 8px;
+}
+
+.slider-stop {
+  position: absolute;
+  top: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateX(-50%);
+  transition: color var(--fast) var(--ease);
+}
+
+.slider-stop:first-child {
+  transform: translateX(-8px);
+}
+
+.slider-stop:last-child {
+  transform: translateX(calc(-100% + 8px));
+}
+
+.slider-stop:hover {
+  color: var(--text);
+}
+
+.slider-stop.is-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slider-thumb,
+  .slider-fill {
+    transition: none;
+  }
+}

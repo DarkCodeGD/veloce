@@ -267,6 +267,68 @@ describe.skipIf(problem !== null)(
       expect(h.pageErrors).toEqual([]);
     });
 
+    // ── The level slider (D122) ──────────────────────────────────────────────────────
+
+    const level = () => h.latestDeck().motionLevel;
+    const slider = () => panel().getByRole("slider", { name: "Level" });
+    const stopPlaying = async () => {
+      if ((await playingOnCanvas()) > 0)
+        await panel().getByRole("button", { name: "Stop" }).click();
+      await expect.poll(playingOnCanvas).toBe(0);
+    };
+
+    it("sets the level by keys, playing the slide at it as it goes (D122)", async () => {
+      await stopPlaying();
+      const before = level();
+      await slider().focus();
+      await page.keyboard.press("ArrowRight");
+      await expect.poll(level).toBe(before === undefined ? "lively" : before);
+      expect(await slider().getAttribute("aria-valuetext")).toBe("Lively");
+      await expect.poll(playingOnCanvas).toBe(1); // previewed at Lively on the canvas
+      await page.keyboard.press("Control+z"); // undo works with the slider focused
+      await expect.poll(level).toBeUndefined();
+      await expect.poll(() => slider().getAttribute("aria-valuetext")).toBe("Subtle");
+    });
+
+    it("drags across the stops in one undo step, and a stop's name jumps there", async () => {
+      await stopPlaying();
+      const box = await slider().boundingBox();
+      if (!box) throw new Error("no slider");
+      const y = box.y + box.height / 2;
+      await page.mouse.move(box.x + box.width * 0.25, y);
+      await page.mouse.down();
+      for (const at of [0.5, 0.75, 1]) await page.mouse.move(box.x + box.width * at, y);
+      await page.mouse.up();
+      await expect.poll(level).toBe("absurd");
+      await page.keyboard.press("Control+z");
+      await expect.poll(level).toBeUndefined(); // subtle again: one step, not three
+      await panel().locator(".slider-stop", { hasText: "Calm" }).click();
+      await expect.poll(level).toBe("calm");
+      await expect.poll(() => slider().getAttribute("aria-valuetext")).toBe("Calm");
+      await page.mouse.dblclick(box.x + 1, y); // on the thumb (Calm): back to the default
+      await expect.poll(level).toBeUndefined();
+      // Setting it ends the preview (the deck changed), so the slide plays on at the new level.
+      await expect.poll(playingOnCanvas).toBe(1);
+    });
+
+    it("previews levels only while the preference is on", async () => {
+      await stopPlaying();
+      await page.keyboard.press("Control+Comma");
+      await page.getByRole("dialog", { name: "Preferences" }).waitFor();
+      await page.getByRole("switch", { name: "Preview levels" }).click();
+      await page.getByRole("button", { name: "Done" }).click();
+      await slider().focus();
+      await page.keyboard.press("ArrowLeft");
+      await expect.poll(level).toBe("calm");
+      await page.waitForTimeout(200);
+      expect(await playingOnCanvas()).toBe(0); // set, but nothing played
+      await page.keyboard.press("Control+z");
+      await page.keyboard.press("Control+Comma");
+      await page.getByRole("switch", { name: "Preview levels" }).click();
+      await page.getByRole("button", { name: "Done" }).click();
+      expect(h.pageErrors).toEqual([]);
+    });
+
     it("goes back to Design with the inspector as it was", async () => {
       await page.getByRole("tab", { name: "Design" }).click();
       await expect.poll(() => panel().count()).toBe(0);

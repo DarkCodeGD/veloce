@@ -3422,3 +3422,46 @@ animations (FLIP) and staggering in reading order" and D103 §7.
    - The MCP call, docs and the real-agent retest come with the MCP animation item.
    - Transitions between slides come with their own item.
    - Exits are left out: a slide's content leaves when the slide changes.
+
+## D122 — Sliders: custom-made, stepped and continuous; the level previews as you drag
+
+**Status:** Accepted (2026-11-25). The maintainer's request: the editor had no range
+slider, and advanced animation options will need one to stay friendly.
+
+1. **Custom-made, like the editor's other inputs** (the maintainer's choice, over a styled
+   native `<input type="range">`): notches, the stops' names under the track, a default
+   mark and a gradient fill can't be drawn on a native range without fighting it. It's
+   `role="slider"` with `aria-valuenow`/`-min`/`-max` and a spoken `aria-valuetext`
+   ("Lively", not "2"). The keys work like a native slider: arrows, Shift for ten steps on
+   a range, Page Up/Down, Home and End.
+2. **Two flavours, one track** (`components/Slider.tsx`; pure math in `model/slider.ts`,
+   unit-tested):
+   - **`StepSliderField`** picks one of a few named stops. The thumb springs into each
+     notch; a stop's name under the track jumps there on a click; a mark shows the
+     default.
+   - **`RangeSliderField`** picks a number in a range, with a typed value beside it: drag
+     for feel, type for exact (the Figma and After Effects pattern). Nothing uses it yet;
+     the advanced animation options come next.
+3. **Preview while moving, commit once:**
+   - `onPreview` runs as the value moves and is never an op (D106 §2).
+   - `onCommit` runs once, when you let go: on release, on key up or on blur. So a drag is
+     one undo step, and so is each key press.
+   - The dragged value stays on screen until the commit lands, so the thumb never jumps
+     back.
+   - Double-clicking the thumb returns to the default.
+4. **One drag helper:** `usePointerDrag` (pointer capture, fractions across and down, ends
+   once even when the capture is lost) now serves both the color picker's square and bars
+   and the sliders, instead of being hand-rolled in each. Writing it found a trap worth
+   keeping in the comment: a fallback ref made per render forgets the drag at the first
+   re-render.
+5. **The motion level is the first stepped slider.** Its fill runs from a cool blue at Calm
+   to a hot orange at Absurd, and the summary under it follows the level being dragged.
+   **Preview levels** (a preference, `editing.previewLevel`, on by default; also in the
+   command palette) plays the slide on the canvas at each level the thumb passes, so you
+   feel the difference before you let go. Setting the level changes the deck, which ends
+   any preview on the canvas (it redraws the document), so the panel plays the slide again
+   at the new level once the commit lands.
+6. **Tests:** the math (stops, snapping without float dust, keys); in Chromium, keys set
+   and preview the level and undo works with the slider focused; a drag across three stops
+   is one undo step; a stop's name jumps there; double-clicking resets; with the preference
+   off, nothing plays.
