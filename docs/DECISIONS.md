@@ -3531,3 +3531,54 @@ default: a slide with no transition arrives the way its theme moves.
     transition mode; the panel model; MCP; in Chromium, Present morphs, pushes, lands a
     transition on a click and cuts back, and the panel picks, tunes, previews and applies to
     every slide.
+
+## D124 — Head-to-head with Claude's slides: what it showed, and what moves up
+
+**Status:** Accepted (2026-11-26). Amends D105 §3 (the `vector` element's phase) and the
+Phase 6 placement of `icon`; both move into Phase 4.
+
+1. **The test.** Same brief to two fresh agents, same model and effort (Opus 5.5, high):
+   seven slides on "Minecraft: how a block game became the best-selling video game of all
+   time" (title, origin, timeline, numbers as data, why it works, beyond the game, closing;
+   speaker notes; no logos or screenshots). One agent had only Claude's Slides deck type,
+   the other only the Veloce MCP tools; no web, no downloaded images, no repo access, each
+   learning its tool from scratch. The maintainer judged the renders blind (A/B).
+2. **Result.** The maintainer picked Claude's slides on looks: an isometric 3D block, a pixel
+   font, and light and dark slides alternating. Veloce used 124k tokens, 47 calls and 4.9 min
+   against 149k, 42 and 9.5 min; its text was larger and more legible, its chart told a
+   better story (Minecraft against other games), and its built-in preview and lint caught
+   a real contrast bug while the other agent assembled a preview by hand and never saw
+   its animations play. Claude's slides still had **more motion** (a dropping block, growing
+   bars, a count-up) because Veloce agents can't animate over MCP yet.
+3. **What it showed.**
+   - Range comes from the drawing kit. HTML, CSS and inline SVG let that agent draw
+     anything; ours has rect, ellipse, text and images, so no angled lines, 3D-looking
+     shapes or icons.
+   - Taste follows what the tool makes easy: the pixel font wasn't reachable (6 bundled
+     fonts, others only from a local file), and nothing nudges agents toward visual rhythm,
+     so every slide got the same background.
+   - Our best feature, motion, is locked to people until the MCP animation tools land.
+   - Structure and self-checking (lint, `render_preview`) won on speed, cost and polish.
+4. **Decision: close the range gap first, then win on what HTML in an artifact can't do**
+   (motion levels, morph, choreography, determinism, a real editor, plugins up to 3D).
+   Order in Phase 4: the MCP animation tools first, then the head-to-head block:
+   - `vector` element (paths, polygons, lines and arrows) **moves up from Phase 5**, with
+     importing an agent's SVG as safe vector shapes, since agents write SVG path data
+     fluently. Draw-on strokes and shape morphing stay in Phase 5 on top of it.
+   - `icon` plugin (Lucide, ISC) **moves up from Phase 6**: every deck needs icons, and the
+     other side had about 30 built in.
+   - New: more bundled display fonts, plus fetching an open-license font by name into
+     the `.veloce` file (opt-in network; the font's license recorded with it).
+   - New: visual rhythm: slide variants in a theme (dark, light, accent) picked by name,
+     used by layouts, and design docs that tell agents to alternate; a bar-chart recipe in
+     the docs until `chart` (Phase 6) lands.
+   - New: scaling a component copy, so one drawing serves as a hero and as a small mark.
+   - New: the agent's friction: one `apply_ops` failed with `ECONNRESET` (a retry
+     worked; cause unknown), `padding` mixing `x` with `top`/`bottom` is rejected, and grid
+     cells with labels of different line counts misalign a timeline.
+   - New: the head-to-head becomes a standing benchmark (§1's brief and rules), rerun when
+     these land and at phase gates, plus a motion-heavy brief.
+     **Why:** each item is something the other agent used and ours couldn't, and the MCP
+     animation tools are the most leverage for the least work (the engine, presets and
+     choreography already exist). Charts and export stay where they are (Phases 6 and 8):
+     both sides faked charts, and export matters but didn't decide this test.

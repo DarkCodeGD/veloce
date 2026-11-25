@@ -31,10 +31,11 @@
 ## Current status
 
 - **Active phase:** Phase 4: Motion core
-- **Last updated:** 2026-11-25
-- **Next:** motion lint. Done in Phase 4: visual regression tests (D102), the
+- **Last updated:** 2026-11-26
+- **Next:** the MCP animation tools, then the head-to-head block (D124: vector, icons,
+  fonts, visual rhythm). Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123); the head-to-head with Claude's slides (D124);
   phases after 4 were renumbered when Motion graphics became Phase 5.
 - **State:** `pnpm check` is green (1181 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
@@ -112,8 +113,9 @@ veloce/
 │   └── mcp/             MCP tools/resources/instructions, mounted inside doc-server's process
 ├── plugins/
 │   ├── text/ shape/ image/            (built-in, Phase 1–3)
-│   ├── vector/ effects/                (motion graphics, Phase 5)
-│   └── chart/ lottie/ rive/ code/ math/ icon/ video/ three/ …   (Phase 6)
+│   ├── vector/ icon/                   (Phase 4, D124)
+│   ├── effects/                        (motion graphics, Phase 5)
+│   └── chart/ lottie/ rive/ code/ math/ video/ three/ …   (Phase 6)
 └── docs/                ROADMAP.md, DECISIONS.md, generated reference docs
 ```
 
@@ -311,6 +313,31 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [x] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key);
       a theme's signature transition (`theme.motion.transition`), two-view `SlideShow` in
       Present, the Transition section with a canvas preview, MCP docs (D123)
+- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent (`choreograph`, D121 §2), the motion level
+      (docs give each level's summary, D111 §7), effects and the deck's saved presets
+      layout (`space`, `stagger`) (D117 §9, D119 §9, D120 §9), `depth` and `perspective` in node input,
+      docs and outlines (D112 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md).
+      The biggest gap for "AI-first" decks: the maintainer animated the showcase deck by
+      hand, and the head-to-head lost on motion because of it (D124)
+- [ ] From the head-to-head with Claude's slides (D124; it won on looks, we won on cost,
+      speed and polish):
+  - [ ] `vector` element (moved from Phase 5): paths, polygons, stars, chevrons, block
+        arrows, **lines and arrows** (two ends, a stroke and arrowheads, drawn with a tool
+        and dragged by their ends), with a strict path-data validator; an agent's SVG
+        imports as safe vector shapes. Connectors that stay attached wait for after 1.0
+  - [ ] `icon` plugin (moved from Phase 6; Lucide, ISC): agents stop drawing icons from
+        squares and stop using symbol characters
+  - [ ] Fonts: more bundled display faces (OFL), and fetching an open-license font by name
+        into the `.veloce` file (opt-in network, the license recorded with the font)
+  - [ ] Visual rhythm: slide variants in a theme (dark, light, accent) picked by name and
+        used by layouts; design docs tell agents to alternate; a bar-chart recipe in the
+        docs until `chart` lands
+  - [ ] Scale a component copy, so one drawing serves as a hero and as a small mark
+  - [ ] Agent friction: an `apply_ops` failed once with `ECONNRESET` (find the cause);
+        `padding` mixing `x` with `top`/`bottom` is rejected; grid cells with labels of
+        different line counts misalign a timeline's markers
+  - [ ] Standing benchmark: rerun the head-to-head (D124 §1) once these land and at phase
+        gates, plus a motion-heavy brief
 - [ ] Motion lint: a slide doing far more than its level says (more layers, effects or loops
       than its reach) gets a warning with the fix (D111 §7)
 - [ ] Performance lint: agents and people get "this slide will drop frames" with a fix;
@@ -323,10 +350,6 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       transition thumbnails; dragging steps to reorder; full control (the timeline panel,
       with keyframes); the quick way in from Design (right-click → Animate…, a badge on
       animated layers). Present workspace: rehearse in presenter view
-- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent (`choreograph`, D121 §2), the motion level
-      (docs give each level's summary, D111 §7), effects and the deck's saved presets
-      layout (`space`, `stagger`) (D117 §9, D119 §9, D120 §9), `depth` and `perspective` in node input,
-      docs and outlines (D112 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide
 - [ ] Lint false positives that come with morph (agent feedback, black-hole showcase deck,
@@ -343,9 +366,6 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [ ] MCP input: `"#ff7a45/40"` is rejected; only tokens take `/opacity`. Accept a hex with
       `/opacity` (normalise to `#rrggbbaa`), or name `#rrggbbaa` in the error. The error was
       clear enough to fix in one call.
-- [ ] MCP: an agent can't animate the deck it builds (`set_animations` / `choreograph`
-      above). In the showcase deck the maintainer added the animations by hand. This is the
-      biggest gap left for "AI-first" decks.
 - [ ] Determinism test: seek to the same step/time twice → identical screenshots
 
 **Done when:** decks animate in presenter mode at every motion level from `calm` to
@@ -362,11 +382,7 @@ Animate workspace and over MCP (D106).
       paste of keyframes
 - [ ] Motion paths: draw a path on the canvas; the layer follows it, optionally turning
       along it
-- [ ] `vector` element (SVG): paths, polygons, stars, chevrons, block arrows, **lines and
-      arrows** (two ends, a stroke and arrowheads, drawn with a tool and dragged by their
-      ends), with a strict path-data validator. Motivation: shapes are only rect and
-      ellipse, so flows, timelines and callouts use `→` characters. (Connectors that stay
-      attached to shapes wait for after 1.0)
+- `vector` element: moved up to Phase 4 (D124)
 - [ ] Draw-on strokes (trim paths) and **shape morphing** between any two vector shapes
 - [ ] Text animators: per character, word or line; stagger, scramble, cascade, seeded
       randomness; still selectable, accessible text
@@ -400,9 +416,7 @@ assets (icons, logos) load only through `<img>`, never inlined, so scripts in an
 - [ ] `lottie` (dotLottie): play/seek, segment control
 - [ ] `code` (Shiki): syntax highlight, line highlight steps
 - [ ] `math` (KaTeX)
-- [ ] `icon` (Lucide/Iconify). Motivation from an agent transcript: agents used `↕` and other
-      symbol characters as icons, and they render in a fallback font (Inter only covers text). Until
-      this lands, the design docs tell agents not to use them.
+- `icon`: moved up to Phase 4 (D124)
 - [ ] `video`: seek-synced to the clock
 - [ ] Per-corner radius on shapes and frames: one radius field, plus an "individual
       corners" toggle that opens the four (toggling back sets one value again). Reuse
