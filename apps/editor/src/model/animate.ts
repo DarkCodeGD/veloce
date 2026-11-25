@@ -7,6 +7,7 @@
  */
 import {
   type Animation,
+  type AnimationSpace,
   type ApplyContext,
   animationProblem,
   clearOverridesPatch,
@@ -14,6 +15,7 @@ import {
   type Deck,
   getPreset,
   inlinePresetOps,
+  isFreeLayer,
   type MotionLevel,
   type MotionTokens,
   type Node,
@@ -25,6 +27,7 @@ import {
   presetTitle,
   resolveTime,
   type Slide,
+  type STAGGER_FROM,
   scheduleSlide,
   type Time,
   type Trigger,
@@ -181,7 +184,14 @@ export function stepsList(
             animation,
             index: order.get(animation.id) ?? 0,
             layer: node ? nodeLabel(node) : "Missing layer",
-            effect: effect?.title ?? animation.effect?.name ?? "Custom",
+            effect: [
+              effect?.title ?? animation.effect?.name ?? "Custom",
+              animation.stagger && "one by one",
+              animation.space === "makeRoom" && "makes room",
+              animation.space === "collapse" && "closes the gap",
+            ]
+              .filter(Boolean)
+              .join(" · "),
             kind: effect?.kind ?? (animation.effect ? "missing" : "custom"),
             trigger: animation.trigger ?? "onClick",
           };
@@ -267,6 +277,55 @@ export function setEffectParam(animation: Animation, key: string, value: unknown
   const patch = unset && others.length === 0 ? null : { [key]: unset ? null : value };
   return updateAnimation(animation.id, { effect: { params: patch } }, "Change effect settings");
 }
+
+// ── Layout (D120) ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Whether an animation can make room or close the gap: its layer must be placed by a stack
+ * or grid (not free, not the slide), and it can't be staggered. Entrances make room, exits
+ * close the gap; emphasis and keyframes don't change whether a layer is there.
+ */
+export function spaceChoice(
+  animation: Animation,
+  kind: EffectSummary["kind"] | undefined,
+  index: SlideIndex,
+): "makeRoom" | "collapse" | null {
+  if (animation.stagger) return null;
+  const at = index.nodes.get(animation.target);
+  const parent = at?.parentId ? index.nodes.get(at.parentId)?.node : undefined;
+  if (!at || parent?.kind !== "frame" || isFreeLayer(at.node, parent.layout)) return null;
+  if (kind === "entrance") return "makeRoom";
+  if (kind === "exit" && animation.repeat !== "forever") return "collapse";
+  return null;
+}
+
+/** Make room / Close the gap on or off. */
+export const setSpace = (animation: Animation, space: AnimationSpace | null): Command | null =>
+  (animation.space ?? null) === space
+    ? null
+    : updateAnimation(
+        animation.id,
+        { space },
+        space === "makeRoom" ? "Make room" : space === "collapse" ? "Close the gap" : "Keep space",
+      );
+
+export type StaggerFrom = (typeof STAGGER_FROM)[number];
+
+/** How a frame's animation plays on its children: together (null), or one by one from `from`. */
+export function setStagger(animation: Animation, from: StaggerFrom | null): Command | null {
+  const now = animation.stagger ? (animation.stagger.from ?? "start") : null;
+  if (now === from) return null;
+  const set =
+    from === null
+      ? { stagger: null }
+      : // "start" is the default: stored as no `from`, keeping any gap already set.
+        { stagger: { from: from === "start" ? null : from }, space: null };
+  return updateAnimation(animation.id, set, from === null ? "Play together" : "Play one by one");
+}
+
+/** The gap between children's starts, ms (`null`: back to `$motion.stagger`). */
+export const setStaggerGap = (animation: Animation, each: number | null): Command | null =>
+  animation.stagger ? updateAnimation(animation.id, { stagger: { each } }, "Change gap") : null;
 
 /**
  * Move an animation one place earlier or later in the play order (PowerPoint's Move Earlier

@@ -39,6 +39,15 @@ async function build(agent: Client) {
             position: { x: 800, y: 500 },
             props: { shape: "rect", fill: "$color.primary" },
           },
+          {
+            id: "list",
+            layout: { mode: "stack", direction: "column", gap: 16 },
+            position: { x: 120, y: 500 },
+            children: [
+              { id: "one", type: "text", props: { content: "One" } },
+              { id: "two", type: "text", props: { content: "Two" } },
+            ],
+          },
         ],
       },
     },
@@ -195,6 +204,31 @@ describe.skipIf(problem !== null)(
       await page.keyboard.press("Control+z");
       await expect.poll(() => presets()?.swoop?.title).toBe("Swoop");
       expect(animations().map((a) => a.effect?.name)).toEqual(["swoop", "swoop"]);
+      expect(h.pageErrors).toEqual([]);
+    });
+
+    // ── Layout (D120) ────────────────────────────────────────────────────────────────
+
+    it("plays a stack's animation on its items one by one (D120)", async () => {
+      await selectLayer("list");
+      await panel().getByRole("button", { name: "Fade in", exact: true }).click();
+      await expect.poll(() => animations().at(-1)?.target).toBe("list");
+      await panel().getByRole("combobox", { name: "Children" }).click();
+      await page.getByRole("option", { name: "One by one", exact: true }).click();
+      await expect.poll(() => animations().at(-1)?.stagger).toEqual({});
+      await panel().locator(".animate-row", { hasText: "one by one" }).waitFor();
+      await panel().getByRole("spinbutton", { name: "Gap" }).waitFor();
+    });
+
+    it("makes an item make room as it comes in, as one undo step", async () => {
+      await page.locator('.editor-canvas [data-node-id="two"]').dblclick({ force: true });
+      await panel().getByRole("button", { name: "Fade in", exact: true }).click();
+      await expect.poll(() => animations().at(-1)?.target).toBe("two");
+      await panel().getByRole("switch", { name: "Make room" }).click();
+      await expect.poll(() => animations().at(-1)?.space).toBe("makeRoom");
+      await panel().getByText("It's out of the layout until it comes in").waitFor();
+      await page.keyboard.press("Control+z");
+      await expect.poll(() => animations().at(-1)?.space).toBeUndefined();
       expect(h.pageErrors).toEqual([]);
     });
 

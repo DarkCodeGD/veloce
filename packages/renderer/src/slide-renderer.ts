@@ -278,6 +278,34 @@ export class SlideRenderer {
     return measureSlide(this.#stage, this.#slide.id, els);
   }
 
+  /**
+   * Where each layer's box sits in its parent frame (stage pixels, motion left out) with the
+   * layers in `absent` taken out of the layout (D120): core measures each layout state of a
+   * slide once, so the layers around one that joins or leaves can glide between them. The
+   * slide is laid out for the measurement and put back at once; nothing is re-rendered.
+   */
+  measureLayout(absent: ReadonlySet<string>): Map<string, { x: number; y: number }> {
+    const hidden: { el: HTMLElement; display: string }[] = [];
+    for (const id of absent) {
+      const m = this.#mounted.get(id);
+      if (!m) continue;
+      hidden.push({ el: m.el, display: m.el.style.display });
+      m.el.style.display = "none";
+    }
+    const boxes = new Map<string, { x: number; y: number }>();
+    try {
+      for (const [id, m] of this.#mounted) {
+        if (isFooterId(id) || absent.has(id) || m.el.offsetParent === null) continue;
+        // Layout offsets ignore transforms (motion, rotation, the stage's zoom), which is
+        // what a glide adds to: the move from one layout to the other, in the frame's axes.
+        boxes.set(id, { x: m.el.offsetLeft, y: m.el.offsetTop });
+      }
+    } finally {
+      for (const { el, display } of hidden) el.style.display = display;
+    }
+    return boxes;
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#clear();

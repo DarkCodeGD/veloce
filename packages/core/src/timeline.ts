@@ -9,12 +9,13 @@
  */
 import type { ApplyContext } from "./checks.js";
 import type { ErrorCode } from "./errors.js";
+import { LAYOUT_GLIDE, parentOf, staggerSpread, staggerTargets } from "./layout-motion.js";
 import { type MotionTokens, motionTokens, resolveTime } from "./motion-tokens.js";
 import { expandAnimation, presetOf } from "./presets.js";
 import type { Animation } from "./schema/animation.js";
 import type { Deck, Slide } from "./schema/deck.js";
 import type { Easing, Time } from "./schema/motion.js";
-import { FrameStyleSchema, type Node } from "./schema/node.js";
+import { FrameStyleSchema, isFreeLayer, type Node } from "./schema/node.js";
 import type { Preset, Presets } from "./schema/preset.js";
 import { walkNodes } from "./tree.js";
 
@@ -100,6 +101,8 @@ export function animationProblem(
       hint: "An animation's target is the ID of a layer on the same slide.",
     };
   }
+  const layoutProblem = spaceOrStaggerProblem(slide, animation, target);
+  if (layoutProblem) return layoutProblem;
   if (animation.effect && ctx.validateEffect) {
     const check = ctx.validateEffect(animation.effect, target);
     if (!check.ok) {
@@ -142,6 +145,37 @@ export function animationProblem(
         };
       }
     }
+  }
+  return null;
+}
+
+/**
+ * `space` needs a layer the layout places (in a stack or grid, not free); `stagger` needs a
+ * frame with children to play on (D120).
+ */
+function spaceOrStaggerProblem(
+  slide: Slide,
+  animation: Animation,
+  target: Node,
+): AnimationProblem | null {
+  if (animation.space) {
+    const parent = parentOf(slide.root, target.id);
+    if (!parent || isFreeLayer(target, parent.layout)) {
+      return {
+        code: "INVALID",
+        message: `Animation "${animation.id}": "${target.id}" is placed by its own position, so it has no space in a layout to make or give back`,
+        path: "space",
+        hint: 'Only layers in a stack or grid (not free ones) take space. Remove "space", or put the layer in a stack.',
+      };
+    }
+  }
+  if (animation.stagger && (target.kind !== "frame" || target.children.length === 0)) {
+    return {
+      code: "INVALID",
+      message: `Animation "${animation.id}": "${target.id}" has no children to play on one by one`,
+      path: "stagger",
+      hint: 'Stagger a frame (a stack, grid or group): its children play in turn, in reading order. Or remove "stagger".',
+    };
   }
   return null;
 }
@@ -217,6 +251,15 @@ function setPath(
   };
 }
 
+function staggerSpreadOf(root: Node, animation: Animation, tokens: MotionTokens): number {
+  for (const { node } of walkNodes(root)) {
+    if (node.id === animation.target) {
+      return node.kind === "frame" ? staggerSpread(staggerTargets(node, animation, tokens)) : 0;
+    }
+  }
+  return 0;
+}
+
 // ── Schedule ─────────────────────────────────────────────────────────────────────────
 
 export interface ScheduledAnimation {
@@ -249,12 +292,13 @@ export interface AnimationDefaults {
  * `defaults` gives an effect's own duration to animations that set none.
  */
 export function scheduleSlide(
-  slide: Pick<Slide, "animations">,
+  slide: Pick<Slide, "animations"> & Partial<Pick<Slide, "root">>,
   tokens: MotionTokens = motionTokens(undefined),
   defaults?: (animation: Animation) => AnimationDefaults | undefined,
 ): Step[] {
   const steps: Step[] = [{ animations: [], duration: 0 }];
   let previous: ScheduledAnimation | null = null;
+  const glide = resolveTime(LAYOUT_GLIDE.duration, tokens);
   for (const animation of slide.animations ?? []) {
     const trigger = animation.trigger ?? "onClick";
     if (trigger === "onClick") {
@@ -268,10 +312,20 @@ export function scheduleSlide(
     const forever = animation.repeat === "forever";
     const plays = typeof animation.repeat === "number" ? animation.repeat : 1;
     const duration = animation.duration ?? defaults?.(animation)?.duration ?? DEFAULT_DURATION;
-    const end = start + resolveTime(duration, tokens) * plays;
+    // A staggered animation lasts until its last child's play ends (D120).
+    const spread =
+      animation.stagger && slide.root ? staggerSpreadOf(slide.root, animation, tokens) : 0;
+    const end = start + spread + resolveTime(duration, tokens) * plays;
     const scheduled: ScheduledAnimation = { animation, start, end, forever };
     step.animations.push(scheduled);
-    step.duration = Math.max(step.duration, end);
+    // The others glide after a layer joins or leaves the layout: the step waits for them.
+    const glides =
+      animation.space === "makeRoom"
+        ? start + glide
+        : animation.space === "collapse"
+          ? end + glide
+          : 0;
+    step.duration = Math.max(step.duration, end, glides);
     previous = scheduled;
   }
   return steps;

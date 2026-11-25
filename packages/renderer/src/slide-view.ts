@@ -74,6 +74,11 @@ export class SlideView {
     return this.#renderer.ready();
   }
 
+  /** The slide's layout with some layers taken out, for layout animations (D120). */
+  measureLayout(absent: ReadonlySet<string>): Map<string, { x: number; y: number }> {
+    return this.#renderer.measureLayout(absent);
+  }
+
   measure(): SlideMeasurement | null {
     return this.#renderer.measure();
   }

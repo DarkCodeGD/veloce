@@ -18,6 +18,13 @@
  */
 import { mixColors, rgbaToHex } from "./color-mix.js";
 import { type EasingFunction, easingFunction } from "./easing.js";
+import {
+  compileLayout,
+  type LayoutMeasurer,
+  layoutAt,
+  layoutUntil,
+  staggerTargets,
+} from "./layout-motion.js";
 import { parseCssColor, type Rgba } from "./measure.js";
 import { MOTION_CHANNELS, type MotionState, resolveMotion } from "./motion.js";
 import {
@@ -75,6 +82,12 @@ export type EffectResolver = (effect: EffectRef, context: EffectContext) => Reso
 
 export interface CompileOptions {
   effects?: EffectResolver;
+  /**
+   * Measures the slide's layout with some layers taken out (the renderer's
+   * `measureLayout`), so layers around one that joins or leaves glide (D120). Without it
+   * they jump.
+   */
+  layout?: LayoutMeasurer;
 }
 
 export interface CompiledSlide {
@@ -195,8 +208,21 @@ export function compileSlide(
     for (const { animation, start, forever } of step.animations) {
       const target = nodes.get(animation.target);
       const effect = effects.get(animation.id);
-      const tracks = animation.tracks ?? effect?.tracks;
-      if (!target || !tracks) continue;
+      if (!target) continue;
+      // A staggered animation plays on each child in turn (D120), its effect resolved for
+      // that child; anything else on its own target.
+      const playsOn =
+        animation.stagger && target.kind === "frame"
+          ? staggerTargets(target, animation, tokens).map(({ node, delay }) => ({
+              node,
+              delay,
+              tracks:
+                animation.tracks ??
+                (animation.effect
+                  ? options.effects?.(animation.effect, { animation, target: node, tokens })?.tracks
+                  : undefined),
+            }))
+          : [{ node: target, delay: 0, tracks: animation.tracks ?? effect?.tracks }];
       const easing = resolveEasing(animation.easing ?? effect?.easing ?? DEFAULT_EASING, tokens);
       const duration = resolveTime(
         animation.duration ?? effect?.duration ?? DEFAULT_DURATION,
@@ -207,28 +233,30 @@ export function compileSlide(
         : typeof animation.repeat === "number"
           ? animation.repeat
           : 1;
-      for (const [key, keyframes] of Object.entries(tracks)) {
-        const track = compileTrack(
-          key,
-          keyframes,
-          target,
-          easingFunction(easing),
-          tokens,
-          deck.theme,
-        );
-        if (!track) continue;
-        const byKey = groups.get(target.id) ?? new Map<string, Entry[]>();
-        groups.set(target.id, byKey);
-        const entries = byKey.get(key) ?? [];
-        byKey.set(key, entries);
-        entries.push({
-          step: stepIndex,
-          start,
-          duration,
-          plays,
-          alternate: animation.alternate === true,
-          track,
-        });
+      for (const { node, delay, tracks } of playsOn) {
+        for (const [key, keyframes] of Object.entries(tracks ?? {})) {
+          const track = compileTrack(
+            key,
+            keyframes,
+            node,
+            easingFunction(easing),
+            tokens,
+            deck.theme,
+          );
+          if (!track) continue;
+          const byKey = groups.get(node.id) ?? new Map<string, Entry[]>();
+          groups.set(node.id, byKey);
+          const entries = byKey.get(key) ?? [];
+          byKey.set(key, entries);
+          entries.push({
+            step: stepIndex,
+            start: start + delay,
+            duration,
+            plays,
+            alternate: animation.alternate === true,
+            track,
+          });
+        }
       }
     }
   });
@@ -237,18 +265,46 @@ export function compileSlide(
       entries.sort((x, y) => x.step - y.step || x.start - y.start);
   }
 
-  const at = (position: PlayPosition): SlideFrame => evaluate(groups, position);
-  const layers = [...nodes.keys()].filter((id) => groups.has(id));
+  // Layers that take space only while they're there, and the ones that glide around them.
+  const layout = compileLayout(steps, options.layout, tokens);
+  const layerAt = (id: string, position: PlayPosition): LayerFrame | undefined => {
+    const byKey = groups.get(id);
+    const placed = layout ? layoutAt(layout, id, position) : undefined;
+    if (!byKey && !placed) return undefined;
+    const frame = byKey ? evaluateLayer(byKey, position) : { motion: {}, properties: {} };
+    if (placed) addLayout(frame.motion, placed);
+    return frame;
+  };
+  const layers = [...nodes.keys()].filter((id) => groups.has(id) || layout?.offsets.has(id));
+  const at = (position: PlayPosition): SlideFrame => {
+    const frame = new Map<string, LayerFrame>();
+    for (const id of layers) {
+      const layer = layerAt(id, position);
+      if (layer) frame.set(id, layer);
+    }
+    return frame;
+  };
   return {
     steps,
     layers,
     at,
-    layerAt: (id, position) => {
-      const byKey = groups.get(id);
-      return byKey ? evaluateLayer(byKey, position) : undefined;
-    },
+    layerAt,
     seek: (step, time) => at(seekPosition(steps, step, time)),
-    activity: (clicks) => activity(groups, clicks),
+    activity: (clicks) => {
+      const spans = activity(groups, clicks);
+      if (!layout) return spans;
+      const until = layoutUntil(layout, clicks);
+      if (until === Number.NEGATIVE_INFINITY) return spans;
+      for (const id of layout.offsets.keys()) {
+        const span = spans.get(id) ?? { motion: null, properties: null };
+        span.motion = {
+          until: Math.max(span.motion?.until ?? Number.NEGATIVE_INFINITY, until),
+          period: span.motion?.period ?? null,
+        };
+        spans.set(id, span);
+      }
+      return spans;
+    },
   };
 }
 
@@ -326,10 +382,11 @@ function parseValue(raw: unknown, theme: Theme): Value {
 
 // ── Evaluate ─────────────────────────────────────────────────────────────────────────
 
-function evaluate(groups: Map<string, Map<string, Entry[]>>, position: PlayPosition): SlideFrame {
-  const frame = new Map<string, LayerFrame>();
-  for (const [target, byKey] of groups) frame.set(target, evaluateLayer(byKey, position));
-  return frame;
+/** Layout's offset adds to a layer's own motion; a layer out of the layout is hidden (D120). */
+function addLayout(motion: MotionState, placed: { x: number; y: number; out: boolean }): void {
+  if (placed.x !== 0) motion.x = (motion.x ?? 0) + placed.x;
+  if (placed.y !== 0) motion.y = (motion.y ?? 0) + placed.y;
+  if (placed.out) motion.opacity = 0;
 }
 
 /** When a step started: step 0 as the slide appears, the others at their click. */

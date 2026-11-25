@@ -73,6 +73,11 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   motion (an effect with settings, or tracks, plus timing) that animations play by name.
   `expandAnimation` turns a use into the plain animation it stands for; `compileSlide`
   expands first, so nothing downstream knows about presets.
+- **Layout animations and stagger** (`layout-motion.ts`, D120): `space` makes a layer in a
+  stack or grid join or leave the layout; the others glide as motion offsets added on top
+  of the rest layout (the DOM never reflows while playing), each layout state measured once
+  through a `LayoutMeasurer` (the renderer's `measureLayout`). `stagger` plays a frame's
+  animation on its children in reading order.
 - **2.5D** (D112): `perspective` on frames and `depth` on layers are document fields; the
   renderer draws them (`frameSpaceCss`, `drawnCss`), and the editor's gestures undo the
   depth's magnification (`toLayerSpace`).
@@ -153,7 +158,9 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
   clock: `seek` draws a moment on the main thread (motion, animated properties re-rendered,
   plugins' `seek(t)`), `play`/`next`/`pause` hand planned motion to the renderer's Web
   Animations (`playMotion`) and keep only properties, clock loops and plugins on a frame
-  loop. The render page (`render-main.ts`) uses it, so screenshots take a moment (`at`).
+  loop. It renders a slide before compiling it, so layout animations can measure it
+  (`measureLayout`, D120), and measures again once fonts are in. The render page
+  (`render-main.ts`) uses it, so screenshots take a moment (`at`).
   Proven libraries only draw (D105).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
   `update`, `seek`, `dispose`, and `aiDocs` for agents) and **effect presets** (D117: a Zod

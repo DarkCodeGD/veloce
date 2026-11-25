@@ -103,6 +103,29 @@ export type EffectRef = z.infer<typeof EffectRefSchema>;
 
 export const TriggerSchema = z.enum(["onClick", "withPrevious", "afterPrevious"]);
 
+/**
+ * Whether the layer takes its space in its stack or grid only while it's there (D120):
+ * `"makeRoom"`, it joins as this animation starts and the others glide aside;
+ * `"collapse"`, it leaves when this animation ends and the others glide into the gap.
+ * Default: the layer keeps its space the whole time, seen or not.
+ */
+export const AnimationSpaceSchema = z.enum(["makeRoom", "collapse"]);
+export type AnimationSpace = z.infer<typeof AnimationSpaceSchema>;
+
+export const STAGGER_FROM = ["start", "end", "center", "edges", "random"] as const;
+
+/**
+ * Play on each of the target frame's children in turn, in reading order, instead of on the
+ * frame (D120): a list that comes in item by item.
+ */
+export const StaggerSchema = z.strictObject({
+  /** Between one child's start and the next: ms or a `$motion` time. Default `"$motion.stagger"`. */
+  each: timeSchema().optional(),
+  /** Which child starts first. Default `"start"`, reading order. */
+  from: z.enum(STAGGER_FROM).optional(),
+});
+export type Stagger = z.infer<typeof StaggerSchema>;
+
 /** How many times an animation plays (default 1), or "forever" (until the slide changes). */
 export const RepeatSchema = z.union([z.number().int().min(1).max(1000), z.literal("forever")]);
 export type Trigger = z.infer<typeof TriggerSchema>;
@@ -133,6 +156,10 @@ export const AnimationSchema = z
     repeat: RepeatSchema.optional(),
     /** Repeats play back and forth instead of starting over. */
     alternate: z.boolean().optional(),
+    /** Whether the layer takes its space only while it's there (stacks and grids, D120). */
+    space: AnimationSpaceSchema.optional(),
+    /** Play on the target frame's children one by one instead (D120). */
+    stagger: StaggerSchema.optional(),
   })
   .superRefine((animation, ctx) => {
     if ((animation.effect === undefined) === (animation.tracks === undefined)) {
@@ -142,6 +169,22 @@ export const AnimationSchema = z
         message: animation.effect
           ? 'An animation plays an effect or its own tracks, not both: remove "tracks" or "effect"'
           : 'An animation needs an "effect" (e.g. { "name": "fade-in" }) or keyframe "tracks"',
+      });
+    }
+    if (animation.space && animation.stagger) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["space"],
+        message:
+          'A staggered animation plays on the frame\'s children, so it can\'t move the frame in or out of the layout: remove "space" or "stagger"',
+      });
+    }
+    if (animation.space === "collapse" && animation.repeat === "forever") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["space"],
+        message:
+          'An animation that repeats forever never ends, so "collapse" would never happen: give "repeat" a number, or remove "space"',
       });
     }
   });

@@ -3287,3 +3287,64 @@ workspace stays a roadmap item.
 9. **Agents:** presets work through `apply_ops` today (`preset.save`, effect names, errors
    with the fix); teaching them (docs, the deck summary) and the real-agent retest come with
    the MCP animation item, as for effects (D117 §9).
+
+## D120 — Layout animations: layers that take space only while they're there, and stagger
+
+**Status:** Accepted (2026-11-25). Phase 4, implementing D83 §5's "stacks add layout
+animations (FLIP) and staggering in reading order" and D103 §7.
+
+1. **What changes the layout mid-slide** (the maintainer's choice, over also gliding on any
+   layout-changing keyframe, or deferring FLIP to morph): an animation's `space`.
+   `"makeRoom"`: the layer is out of its stack or grid until this animation starts, then
+   joins, and the others glide aside. `"collapse"`: it leaves when this animation ends, and
+   the others glide into the gap. Default: a layer keeps its space the whole time, seen or
+   not, as before. Framer Motion's `layout` with presence, Apple-keynote lists.
+2. **Layout never changes while a slide plays.** The DOM keeps the rest layout (every layer
+   present, D83 §5). A layer that's out is hidden (opacity 0, whatever its own animation
+   says), and the layers around it are drawn where the smaller layout puts them, as motion
+   offsets **added** to their own motion (FLIP: measure both layouts, animate the
+   difference). **Why not reflow:** display changes are main-thread layout that the
+   compositor can't follow (D107), a reflow per state change costs a layout pass, and
+   seeking would depend on DOM history. As transforms, a glide plans onto the compositor
+   like any motion (`planMotion` samples it), seeking stays pure, and nothing reflows per
+   frame. **Cost:** a hug frame keeps its rest size (its fill doesn't shrink), and a layer
+   whose size changes with the layout (a `fill` item) keeps its rest size, placed by its
+   start corner. Nothing animates width or height (D83 §5).
+3. **Measured once per layout state, at compile time:** `compileSlide` takes a
+   `LayoutMeasurer` (like the effect resolver, so core stays DOM-free): each layer's box
+   relative to its parent frame, untransformed (`offsetLeft/Top`, so motion, rotation and
+   zoom don't count, and a child's offset is in its frame's axes, which is where the
+   motion slot moves it, D103 §4), with given layers taken out. The renderer's
+   `measureLayout` sets `display: none` on them, reads, and puts them back, without
+   re-rendering. `SlidePlayer` renders, then compiles, and measures again once fonts and
+   images are in (`ready`). Without a measurer (no browser), layers still go out and come
+   back, but nothing glides.
+4. **The glide:** `$motion.normal` with `$motion.move` (the theme's own move, scaled by the
+   level). A joining layer is in place at once while the others glide; a glide that's
+   interrupted starts the next from wherever the layer is. Steps last until their glides
+   end, so seeking the next step finds them done. Events keep play order even when a click
+   comes early, so every state the slide passes through is one that was measured.
+5. **Stagger:** an animation on a frame with `stagger: { each?, from? }` plays on each child
+   instead, in reading order (a stack's and grid's order; a free frame's top to bottom, then
+   left to right), `each` apart (default `$motion.stagger`, so it follows the level), from
+   the start, end, center, edges, or a shuffle seeded by the animation's ID. Its effect is
+   resolved per child. It lasts until the last child's play ends. Checked against the frame
+   only (frame-suited effects), so adding a child later never makes a saved deck invalid.
+6. **Rules, with the fix in the error:** `space` only on layers a stack or grid places (not
+   free ones, not the root); `collapse` never with `repeat: "forever"` (it would never
+   happen); `space` and `stagger` not together (a staggered animation moves the children,
+   not the frame).
+7. **Editor:** in the Tune section, **Children** (Together, or one by one from the start,
+   end, middle, edges or shuffled) and **Gap** for a frame's animation; **Make room** on an
+   entrance and **Close the gap** on an exit of a layer in a stack or grid. The steps list
+   says "one by one", "makes room", "closes the gap". Found on the way: undo did nothing
+   right after flipping any switch until focus moved; switches now pass deck keys through,
+   like dropdowns (`deckKeysPassThrough`).
+8. **Tests:** core (`layout-motion.test.ts`, with a fake measurer: collapse, make room,
+   offsets added to own motion, early clicks, no measurer, rules, stagger order); real
+   Chromium through the render page (`phase4-layout-motion.test.ts`): glides land where
+   the real smaller layout puts each layer (the list re-centring included), and the
+   compositor matches the clock mid-glide; the Animate panel (`phase4-animate.test.ts`).
+9. **Agents:** `space` and `stagger` work through `apply_ops` today (schema descriptions,
+   errors with the fix); docs, choreography that uses them, and the real-agent retest
+   come with the MCP animation item (D117 §9).

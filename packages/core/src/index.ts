@@ -19,6 +19,7 @@ export * from "./fields.js";
 export * from "./fonts.js";
 export * from "./ids.js";
 export * from "./json.js";
+export * from "./layout-motion.js";
 export * from "./layouts.js";
 export * from "./lint.js";
 export * from "./measure.js";

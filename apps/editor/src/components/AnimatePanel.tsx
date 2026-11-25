@@ -67,12 +67,17 @@ import {
   moveAnimation,
   removeAnimations,
   SPEEDS,
+  type StaggerFrom,
   type StepRow,
   savedPresets,
   setEffectParam,
   setMotionLevel,
+  setSpace,
+  setStagger,
+  setStaggerGap,
   setTrigger,
   soloAnimations,
+  spaceChoice,
   speedLabel,
   stepsList,
   updateAnimation,
@@ -435,6 +440,7 @@ function TuneSection({
           )
         }
       />
+      <LayoutFields animation={animation} kind={effect?.kind} index={index} tokens={tokens} />
       {effect && <EffectParams deck={deck} animation={animation} />}
       <div className="animate-actions">
         <button
@@ -509,6 +515,75 @@ function TuneSection({
         />
       )}
     </Section>
+  );
+}
+
+const STAGGER_OPTIONS: ReadonlyArray<{ value: StaggerFrom; label: string }> = [
+  { value: "start", label: "One by one" },
+  { value: "end", label: "One by one, from the end" },
+  { value: "center", label: "One by one, from the middle" },
+  { value: "edges", label: "One by one, from the edges" },
+  { value: "random", label: "One by one, shuffled" },
+];
+
+/**
+ * Layout (D120): a frame's animation played on its children one by one, in reading order;
+ * a layer in a stack or grid that makes room as it comes in, or closes the gap once it's
+ * gone, the others gliding.
+ */
+function LayoutFields({
+  animation,
+  kind,
+  index,
+  tokens,
+}: {
+  animation: Animation;
+  kind: EffectSummary["kind"] | undefined;
+  index: SlideIndex;
+  tokens: ReturnType<typeof slideMotionTokens>;
+}) {
+  const target = index.nodes.get(animation.target)?.node;
+  const space = spaceChoice(animation, kind, index);
+  const each = animation.stagger?.each;
+  return (
+    <>
+      {target?.kind === "frame" && target.children.length > 0 && (
+        <SelectField
+          label="Children"
+          value={animation.stagger ? (animation.stagger.from ?? "start") : undefined}
+          defaultLabel="Together"
+          options={STAGGER_OPTIONS}
+          onCommit={(v) => void run(setStagger(animation, (v as StaggerFrom | null) ?? null))}
+        />
+      )}
+      {animation.stagger && (
+        <NumberField
+          label="Gap"
+          value={typeof each === "number" ? each : undefined}
+          placeholder={String(resolveTime(each ?? "$motion.stagger", tokens))}
+          min={0}
+          max={5000}
+          step={10}
+          integer
+          suffix="ms"
+          onCommit={(v) => void run(setStaggerGap(animation, (v as number | null) ?? null))}
+        />
+      )}
+      {space && (
+        <ToggleField
+          label={space === "makeRoom" ? "Make room" : "Close the gap"}
+          value={animation.space === space}
+          onCommit={(v) => void run(setSpace(animation, v ? space : null))}
+        />
+      )}
+      {space && animation.space === space && (
+        <p className="inspector-hint">
+          {space === "makeRoom"
+            ? "It's out of the layout until it comes in; then the layers around it glide aside."
+            : "Once it's gone, the layers around it glide into its space."}
+        </p>
+      )}
+    </>
   );
 }
 

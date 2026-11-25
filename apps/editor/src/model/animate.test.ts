@@ -7,6 +7,7 @@ import {
   type Deck,
   element,
   expandAnimation,
+  frame,
   motionTokens,
 } from "@veloce/core";
 import { describe, expect, it } from "vitest";
@@ -25,8 +26,12 @@ import {
   savePreset,
   setEffectParam,
   setMotionLevel,
+  setSpace,
+  setStagger,
+  setStaggerGap,
   setTrigger,
   soloAnimations,
+  spaceChoice,
   speedLabel,
   stepsList,
   updatePreset,
@@ -341,5 +346,58 @@ describe("saved presets (D119)", () => {
     expect(next).not.toHaveProperty("presets");
     expect(slideOf(next).animations?.[0]).toEqual(tuned);
     expect(deletePreset(next, "swoop")).toBeNull();
+  });
+});
+
+describe("layout: one by one, make room, close the gap (D120)", () => {
+  const list = frame({
+    id: "list",
+    layout: { mode: "stack", direction: "column" },
+    children: [
+      element("text", { content: "One" }, { id: "one" }),
+      element("text", { content: "Two" }, { id: "two" }),
+    ],
+  });
+  const deckOf = (animations: Animation[]) =>
+    createDeck({
+      title: "t",
+      slides: [
+        createSlide({ id: "s", layout: { mode: "absolute" }, children: [list, box], animations }),
+      ],
+    });
+  const fade = (id: string, target: string, name = "fade-in"): Animation => ({
+    id,
+    target,
+    effect: { name },
+  });
+
+  it("offers make room to entrances and close the gap to exits, only for layers in a stack", () => {
+    const deck = deckOf([fade("a1", "two"), fade("a2", "two", "fade-out"), fade("a3", "box")]);
+    const index = indexSlide(slideOf(deck));
+    const [a1, a2, a3] = slideOf(deck).animations ?? [];
+    expect(spaceChoice(a1 as Animation, "entrance", index)).toBe("makeRoom");
+    expect(spaceChoice(a2 as Animation, "exit", index)).toBe("collapse");
+    expect(spaceChoice(a2 as Animation, "emphasis", index)).toBeNull();
+    expect(spaceChoice(a3 as Animation, "entrance", index)).toBeNull(); // box is free
+    const made = apply(deck, setSpace(a2 as Animation, "collapse"));
+    expect(slideOf(made).animations?.[1]?.space).toBe("collapse");
+    const again = slideOf(made).animations?.[1] as Animation;
+    expect(setSpace(again, "collapse")).toBeNull();
+    expect(slideOf(apply(made, setSpace(again, null))).animations?.[1]).not.toHaveProperty("space");
+  });
+
+  it("plays a frame's animation on its children one by one, and back together", () => {
+    let deck = deckOf([fade("a1", "list")]);
+    const a1 = () => slideOf(deck).animations?.[0] as Animation;
+    deck = apply(deck, setStagger(a1(), "start"));
+    expect(a1().stagger).toEqual({});
+    deck = apply(deck, setStaggerGap(a1(), 120));
+    deck = apply(deck, setStagger(a1(), "end"));
+    expect(a1().stagger).toEqual({ each: 120, from: "end" });
+    expect(stepsList(slideOf(deck), indexSlide(slideOf(deck)), describe_)[0]?.rows[0]?.effect).toBe(
+      "Fade in · one by one",
+    );
+    deck = apply(deck, setStagger(a1(), null));
+    expect(a1()).not.toHaveProperty("stagger");
   });
 });

@@ -37,7 +37,9 @@ import type { SlideRenderer } from "./slide-renderer.js";
 export type PlayerTarget = Pick<
   SlideRenderer,
   "render" | "setMotion" | "seek" | "playMotion" | "pauseMotion" | "stopMotion"
->;
+> &
+  // Layout animations (D120) measure the slide; without these, layers jump instead of glide.
+  Partial<Pick<SlideRenderer, "measureLayout" | "ready">>;
 
 export interface SlidePlayerOptions {
   /** Turns effects into tracks (the effect presets). Without it, effects don't move. */
@@ -80,13 +82,17 @@ export class SlidePlayer {
     const slide = deck.slides.find((s) => s.id === slideId) ?? null;
     this.#deck = deck;
     this.#slide = slide;
-    this.#compiled = slide
-      ? compileSlide(deck, slide, this.#options.effects ? { effects: this.#options.effects } : {})
-      : null;
+    // Rendered first: layout animations measure the slide as drawn (D120).
     this.#target.render(deck, slideId);
     this.#patched = false;
+    this.#compiled = slide ? this.#compile(deck, slide) : null;
     this.#position = { time: 0, clicks: [] };
     this.#draw(this.#position);
+    if (slide && this.#target.ready && this.#needsLayout(slide)) {
+      // Fonts and images can still change the layout: measure again once they're in.
+      const loaded = slide;
+      void this.#target.ready().then(() => this.#remeasure(loaded));
+    }
   }
 
   /** Back to the slide at rest, as if it had no animations (thumbnails, editing). */
@@ -183,6 +189,32 @@ export class SlidePlayer {
   }
 
   // ── Internals ───────────────────────────────────────────────────────────────────────
+
+  #compile(deck: Deck, slide: Slide): CompiledSlide {
+    const { effects } = this.#options;
+    const target = this.#target;
+    const measure = target.measureLayout;
+    return compileSlide(deck, slide, {
+      ...(effects && { effects }),
+      ...(measure &&
+        this.#needsLayout(slide) && { layout: (absent) => measure.call(target, absent) }),
+    });
+  }
+
+  /** Whether any of the slide's animations makes a layer join or leave the layout. */
+  #needsLayout(slide: Slide): boolean {
+    return (slide.animations ?? []).some((a) => a.space !== undefined);
+  }
+
+  /** The same slide, measured again (after fonts loaded): carry on from where it is. */
+  #remeasure(slide: Slide): void {
+    if (this.#slide !== slide || !this.#deck) return;
+    const playing = this.playing;
+    const position = this.position;
+    this.#compiled = this.#compile(this.#deck, slide);
+    if (playing) this.play(position);
+    else this.#draw(position);
+  }
 
   #now(): number {
     return (this.#options.now ?? timelineNow)();
