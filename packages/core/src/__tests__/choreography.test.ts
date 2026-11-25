@@ -4,7 +4,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { createDeck, createSlide, element, frame } from "../builders.js";
-import { choreograph, choreographyUnits, replaceAnimationsOps } from "../choreography.js";
+import {
+  choreograph,
+  choreographDeck,
+  choreographyUnits,
+  replaceAnimationsOps,
+} from "../choreography.js";
 import type { Animation } from "../schema/animation.js";
 import type { MotionLevel } from "../schema/motion.js";
 import type { Node } from "../schema/node.js";
@@ -212,5 +217,48 @@ describe("pacing and focus (D121)", () => {
       ops: result.inverse,
     });
     expect(undone.ok && undone.deck.slides[0]?.animations).toEqual([old]);
+  });
+});
+
+describe("animating the whole deck (D121)", () => {
+  const two = () => {
+    const tuned: Animation = { id: "mine", target: "t2", effect: { name: "pulse" } };
+    return createDeck({
+      title: "t",
+      slides: [
+        {
+          ...createSlide({ id: "s1", children: [text("t1", "One", "h1"), text("b1", "Body")] }),
+          motionLevel: "calm" as const,
+        },
+        createSlide({ id: "s2", children: [text("t2", "Two", "h1")], animations: [tuned] }),
+        createSlide({ id: "s3", children: [text("t3", "Three", "h1"), text("b3", "Body")] }),
+      ],
+    });
+  };
+
+  it("animates every slide at its own level, in one transaction, undone in one step", () => {
+    const deck = two();
+    const { ops, slides } = choreographDeck(deck, { pacing: "auto" });
+    expect(slides.map((s) => [s.slideId, s.kept, s.moving])).toEqual([
+      ["s1", false, 2], // calm: the title and the main point
+      ["s2", false, 1],
+      ["s3", false, 2],
+    ]);
+    const result = applyTransaction(deck, { origin: "user", label: "Animate deck", ops });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.deck.slides.every((s) => (s.animations?.length ?? 0) > 0)).toBe(true);
+    expect(result.deck.slides[1]?.animations?.some((a) => a.id === "mine")).toBe(false);
+    const undone = applyTransaction(result.deck, {
+      origin: "user",
+      label: "Undo",
+      ops: result.inverse,
+    });
+    expect(undone.ok && undone.deck).toEqual(deck);
+  });
+
+  it("keeps the slides someone already animated, when asked", () => {
+    const { ops, slides } = choreographDeck(two(), { keepAnimated: true });
+    expect(slides.find((s) => s.slideId === "s2")?.kept).toBe(true);
+    expect(ops.some((op) => op.op === "animation.remove")).toBe(false);
   });
 });

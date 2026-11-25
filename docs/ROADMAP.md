@@ -34,9 +34,9 @@
 - **Last updated:** 2026-11-25
 - **Next:** slide transitions and morph. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide (D121);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (1170 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1174 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -303,8 +303,8 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [x] Layout animations: Make room / Close the gap in stacks and grids (FLIP as motion
       offsets on the rest layout, measured once per state) and a frame's children one by
       one in reading order (D120)
-- [x] Choreography from intent: "Animate this slide" with a pacing (all in, build, focus)
-      and the selection punched, from each layer's role, reading order and the level's
+- [x] Choreography from intent: "Animate this slide" and "Animate whole deck" with a
+      pacing (all in, build, focus) and the selection punched, from each layer's role, reading order and the level's
       reach, effects per layer and ambient; pure core engine, MCP call with the MCP item (D121)
 - [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key);
       a theme's signature transition as a `$motion` token (D111 §6)

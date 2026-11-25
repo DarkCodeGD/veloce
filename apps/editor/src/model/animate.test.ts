@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   addEffect,
+  animateDeck,
   animateSlide,
   changeEffect,
   deletePreset,
@@ -418,5 +419,28 @@ describe("Animate this slide (D121)", () => {
     // Focus: both in as the slide appears, then a click punches the selected box.
     expect(after.at(-1)).toMatchObject({ target: "box", effect: { name: "pulse" } });
     expect(after.at(-1)?.trigger).toBeUndefined(); // on click
+  });
+});
+
+describe("Animate whole deck (D121)", () => {
+  it("animates the slides without animations and says what it kept", () => {
+    const deck = createDeck({
+      title: "t",
+      slides: [
+        createSlide({ id: "a", children: [title] }),
+        createSlide({
+          id: "b",
+          children: [box],
+          animations: [{ id: "x", target: "box", effect: { name: "pulse" } }],
+        }),
+      ],
+    });
+    const kept = animateDeck(deck, "auto", true, registry.hasEffect);
+    expect([kept.animated, kept.kept, kept.command?.label]).toEqual([1, 1, "Animate deck"]);
+    const after = apply(deck, kept.command);
+    expect(after.slides[1]?.animations?.map((a) => a.id)).toEqual(["x"]);
+    // Nothing left to do: no command, and the panel says why.
+    const none = animateDeck(after, "auto", true, registry.hasEffect);
+    expect([none.command, none.tooBig, none.animated]).toEqual([null, false, 0]);
   });
 });

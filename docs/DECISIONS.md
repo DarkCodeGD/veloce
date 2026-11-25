@@ -3403,7 +3403,7 @@ animations (FLIP) and staggering in reading order" and D103 §7.
    - Count-up goes per item when the items are text; a card enters like a visual.
    - Names in `emphasize` that aren't on the slide are skipped, with a note.
    - Notes (what stayed still and why) come back for people and agents.
-6. **Editor:** an **Animate this slide** section under Motion: Pacing, a hint saying what
+6. **Editor:** an **Animate automatically** section under Motion: Pacing, a hint saying what
    it does and which selected layers get the punch, and **Animate slide**. The button reads
    **Replace animations** when the slide already has some. A toast says how many layers
    move, with Undo.
@@ -3411,7 +3411,14 @@ animations (FLIP) and staggering in reading order" and D103 §7.
    emphasis, one undo step). Every slide of the visual reference decks at every level and
    pacing applies through the real registry and validates, and calm never moves more than
    absurd. The Animate panel end to end in Chromium.
-8. **Not yet:**
+8. **Animate whole deck** (added 2026-11-25, at the maintainer's request, so people with no
+   AI subscription can animate a whole deck in one click): `choreographDeck` runs the
+   engine on every slide with the same pacing, each at its own level. It's one transaction
+   (one undo step, up to `MAX_TRANSACTION_OPS`; a bigger deck is told to go slide by slide).
+   **Keep animated slides** (on by default) leaves slides that already have animations
+   alone, so hand-tuned slides survive a later click. Nothing is punched by name: each
+   slide's main point is its own.
+9. **Not yet:**
    - The MCP call, docs and the real-agent retest come with the MCP animation item.
    - Transitions between slides come with their own item.
    - Exits are left out: a slide's content leaves when the slide changes.

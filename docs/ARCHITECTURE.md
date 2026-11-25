@@ -81,8 +81,8 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Choreography** (`choreography.ts`, D121): "Animate this slide". A pure, rule-based
   engine reads a slide's units (layers, cards, lists) and roles in reading order, and turns
   a pacing plus the layers to punch into ordinary animations, as much as the slide's level
-  reaches. `replaceAnimationsOps` swaps them in as one transaction. The editor's Animate
-  panel calls it, and MCP will too.
+  reaches. `replaceAnimationsOps` swaps them in as one transaction; `choreographDeck` does every
+  slide at once. The editor's Animate panel calls it, and MCP will too.
 - **2.5D** (D112): `perspective` on frames and `depth` on layers are document fields; the
   renderer draws them (`frameSpaceCss`, `drawnCss`), and the editor's gestures undo the
   depth's magnification (`toLayerSpace`).

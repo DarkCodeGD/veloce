@@ -59,6 +59,7 @@ import { playOnCanvas, stopOnCanvas, useCanvasPlayback } from "../canvas-playbac
 import { registry } from "../editor-context.js";
 import {
   addEffect,
+  animateDeck,
   animateSlide,
   changeEffect,
   deletePreset,
@@ -89,6 +90,7 @@ import {
 } from "../model/animate.js";
 import { propFields } from "../model/schema-fields.js";
 import { nodeLabel, type SlideIndex } from "../model/slide-index.js";
+import { showToast } from "../toasts.js";
 import { Group, humanize, NumberField, Section, SelectField, ToggleField } from "./fields.js";
 import { SavePresetDialog } from "./SavePresetDialog.js";
 
@@ -253,6 +255,7 @@ function ChoreographySection({
   layers: Node[];
 }) {
   const [pacing, setPacing] = useState<(typeof PACINGS)[number]["value"]>("auto");
+  const [keepAnimated, setKeepAnimated] = useState(true);
   const [busy, setBusy] = useState(false);
   const hasAnimations = (slide.animations?.length ?? 0) > 0;
   const punched = layers.map(nodeLabel);
@@ -269,8 +272,26 @@ function ChoreographySection({
     setBusy(false);
   };
 
+  const animateAll = async () => {
+    const result = animateDeck(deck, pacing, keepAnimated, registry.hasEffect);
+    if (!result.command) {
+      showToast({
+        tone: "info",
+        message: result.tooBig
+          ? "This deck is too big to animate in one go. Animate it a slide at a time."
+          : "Every slide already has animations. Turn off “Keep animated slides” to redo them.",
+      });
+      return;
+    }
+    setBusy(true);
+    const slides = `${result.animated} ${result.animated === 1 ? "slide" : "slides"}`;
+    const kept = result.kept > 0 ? `, kept ${result.kept} you'd animated` : "";
+    await run(result.command, { undoToast: `Animated ${slides}${kept}` });
+    setBusy(false);
+  };
+
   return (
-    <Section title="Animate this slide">
+    <Section title="Animate automatically">
       <SelectField
         label="Pacing"
         value={pacing}
@@ -293,6 +314,27 @@ function ChoreographySection({
         <WandSparkles size={14} aria-hidden />
         {hasAnimations ? "Replace animations" : "Animate slide"}
       </button>
+      <Group title="Whole deck">
+        <ToggleField
+          label="Keep animated slides"
+          value={keepAnimated}
+          onCommit={(v) => setKeepAnimated(v === true)}
+        />
+        <button
+          type="button"
+          className="button animate-slide"
+          disabled={busy || deck.slides.length === 0}
+          onClick={() => void animateAll()}
+        >
+          <WandSparkles size={14} aria-hidden />
+          Animate whole deck
+        </button>
+        <p className="inspector-hint">
+          The same pacing on{" "}
+          {deck.slides.length === 1 ? "its one slide" : `all ${deck.slides.length} slides`}, each at
+          its own level. One undo takes it all back.
+        </p>
+      </Group>
     </Section>
   );
 }

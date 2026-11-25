@@ -28,13 +28,16 @@ export const OriginSchema = z.custom<Origin>(
   { error: 'Origin must be "user", "system" or "agent:<id>"' },
 );
 
+/** Most ops one transaction carries: a whole deck animated at once still fits. */
+export const MAX_TRANSACTION_OPS = 10_000;
+
 export const TransactionSchema = z.strictObject({
   /** Omitted → generated. */
   id: IdSchema.optional(),
   origin: OriginSchema,
   /** Short description shown in history/undo UI, e.g. "Add title slide". */
   label: z.string().min(1).max(200),
-  ops: z.array(OpSchema).min(1).max(10_000),
+  ops: z.array(OpSchema).min(1).max(MAX_TRANSACTION_OPS),
 });
 export type TransactionInput = z.input<typeof TransactionSchema>;
 

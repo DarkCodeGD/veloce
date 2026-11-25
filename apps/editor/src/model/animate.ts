@@ -12,12 +12,14 @@ import {
   animationProblem,
   type ChoreographyPacing,
   choreograph,
+  choreographDeck,
   clearOverridesPatch,
   createId,
   type Deck,
   getPreset,
   inlinePresetOps,
   isFreeLayer,
+  MAX_TRANSACTION_OPS,
   type MotionLevel,
   type MotionTokens,
   type Node,
@@ -548,5 +550,37 @@ export function animateSlide(
     command: { label: "Animate slide", ops: replaceAnimationsOps(slide, result.animations) },
     moving: result.moving,
     notes: result.notes,
+  };
+}
+
+export interface AnimatedDeck {
+  /** Null: nothing to do (every slide kept), or too much for one step (`tooBig`). */
+  command: Command | null;
+  /** Slides animated, slides kept as they were, layers that move in all. */
+  animated: number;
+  kept: number;
+  moving: number;
+  tooBig: boolean;
+}
+
+/**
+ * "Animate whole deck": every slide from the same pacing, each at its own level, as one
+ * undo step. `keepAnimated` leaves slides that already have animations alone.
+ */
+export function animateDeck(
+  deck: Deck,
+  pacing: ChoreographyPacing,
+  keepAnimated: boolean,
+  hasEffect: (name: string) => boolean,
+): AnimatedDeck {
+  const { ops, slides } = choreographDeck(deck, { pacing, keepAnimated }, { hasEffect });
+  const animated = slides.filter((s) => !s.kept);
+  const tooBig = ops.length > MAX_TRANSACTION_OPS;
+  return {
+    command: ops.length === 0 || tooBig ? null : { label: "Animate deck", ops },
+    animated: animated.length,
+    kept: slides.length - animated.length,
+    moving: animated.reduce((n, s) => n + s.moving, 0),
+    tooBig,
   };
 }

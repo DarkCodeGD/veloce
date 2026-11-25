@@ -250,6 +250,23 @@ describe.skipIf(problem !== null)(
       expect(h.pageErrors).toEqual([]);
     });
 
+    it("animates every slide in one click, keeping the ones already animated", async () => {
+      const slides = () => h.latestDeck().slides;
+      const before = slides().map((s) => s.animations?.length ?? 0);
+      await panel().getByRole("button", { name: "Animate whole deck" }).click();
+      // Every slide here is animated already, so with "keep" on there's nothing to do.
+      if (before.every((n) => n > 0)) {
+        await page.getByText("Every slide already has animations").waitFor();
+        await panel().getByRole("switch", { name: "Keep animated slides" }).click();
+        await panel().getByRole("button", { name: "Animate whole deck" }).click();
+      }
+      await page.getByText(/^Animated \d+ slides?/).waitFor();
+      await expect.poll(() => slides().every((s) => (s.animations?.length ?? 0) > 0)).toBe(true);
+      await page.keyboard.press("Control+z");
+      await expect.poll(() => slides().map((s) => s.animations?.length ?? 0)).toEqual(before);
+      expect(h.pageErrors).toEqual([]);
+    });
+
     it("goes back to Design with the inspector as it was", async () => {
       await page.getByRole("tab", { name: "Design" }).click();
       await expect.poll(() => panel().count()).toBe(0);

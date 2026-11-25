@@ -502,3 +502,35 @@ export function replaceAnimationsOps(slide: Slide, animations: readonly Animatio
     ),
   ];
 }
+
+/** One slide's share of a whole deck animated at once. */
+export interface SlideChoreography {
+  slideId: string;
+  /** Left as it was: it already had animations and `keepAnimated` was on. */
+  kept: boolean;
+  moving: number;
+  notes: string[];
+}
+
+/**
+ * "Animate whole deck": every slide choreographed with the same pacing, each at its own
+ * level, as one transaction (one undo step). `keepAnimated` leaves slides that already have
+ * animations as they are, so hand-tuned slides survive. Nothing is punched by name: each
+ * slide's main point is its own.
+ */
+export function choreographDeck(
+  deck: Deck,
+  intent: Pick<ChoreographyIntent, "pacing"> & { keepAnimated?: boolean } = {},
+  options: ChoreographyOptions = {},
+): { ops: Op[]; slides: SlideChoreography[] } {
+  const ops: Op[] = [];
+  const slides = deck.slides.map((slide): SlideChoreography => {
+    if (intent.keepAnimated && (slide.animations?.length ?? 0) > 0) {
+      return { slideId: slide.id, kept: true, moving: 0, notes: [] };
+    }
+    const result = choreograph(deck, slide, { pacing: intent.pacing }, options);
+    ops.push(...replaceAnimationsOps(slide, result.animations));
+    return { slideId: slide.id, kept: false, moving: result.moving, notes: result.notes };
+  });
+  return { ops, slides };
+}
