@@ -2652,7 +2652,8 @@ heavy deck with an absurd amount of them.
 ## D105 — Our own timeline in core; proven libraries draw. Motion-graphics scope
 
 **Status:** Accepted (2026-11-24). Supersedes D100 §1 (Motion as the only animation
-driver); D100 §2 (GSAP isn't shipped) stands.
+driver); D100 §2 (GSAP isn't shipped) stands. §3 amended by D124: the `vector` element moves to
+Phase 4.
 
 **New information:** the user wants 2D animation at motion-graphics level (After Effects,
 not PowerPoint), and three constraints rule out handing the timeline to a library: core
@@ -3582,3 +3583,26 @@ Phase 6 placement of `icon`; both move into Phase 4.
      animation tools are the most leverage for the least work (the engine, presets and
      choreography already exist). Charts and export stay where they are (Phases 6 and 8):
      both sides faked charts, and export matters but didn't decide this test.
+
+## D125 — Roadmap consistency pass: names, parked items and the SVG rule
+
+**Status:** Accepted (2026-11-26). The maintainer confirmed 3D and spell-check stay after 1.0.
+
+1. **The Phase 5 WebGL plugin is `fx`**, not `effects`: `@veloce/plugin-effects` already holds
+   the built-in effect presets (D117). **Why:** two plugins can't share a package name, and
+   the presets were there first.
+2. **3D stays after 1.0** (as D53 already said): `three` and `rive` sit with the parked
+   plugins, not in Phase 6's folder list. **Spell-check suggestions stay after 1.0** too.
+3. **Phase 6's SVG rule travels with `vector` and `icon`** into Phase 4: SVG becomes
+   validated path data or loads through `<img>`, never inlined. **Why:** the rule was
+   written for plugins in Phase 6; moving the items without it would leave the one path
+   where an agent's (or a downloaded deck's) SVG reaches the page unguarded.
+4. **Theme slide variants (D124) and frame style presets (`$style`, after 1.0) are one
+   system**, designed so the second extends the first; both change the format, so the
+   variants land before v3 freezes.
+5. Also fixed: golden rules 5 and 6 now say what's true (guides are hand-written; third
+   parties use the same API from a sandbox), "After 1.0" no longer lists what Present
+   already does (D116), the Phase 7 item for a branded document icon and `preview.png`
+   thumbnails was added (D10 reserved the file; nothing writes it yet), open questions got
+   deadlines (the trademark search before Phase 7), and the head-to-head benchmark is the
+   first case of Phase 9's eval suite.
