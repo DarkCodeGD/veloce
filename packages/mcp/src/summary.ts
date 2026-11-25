@@ -120,6 +120,7 @@ export function slideHeader(
     slide.hidden && "hidden",
     slide.notes && "has notes",
     footer && slide.hideFooter && "no footer",
+    slide.transition && `arrives: ${transitionLabel(slide.transition)}`,
   ]
     .filter(Boolean)
     .join(", ");
@@ -220,4 +221,14 @@ export function formatLint(issues: LintIssue[], visual: string | true): string {
       `- [${i.severity}] ${i.rule} · slide ${i.slideId}${i.nodeIds.length ? ` · ${i.nodeIds.join(", ")}` : ""}: ${i.message} Fix: ${i.fix}`,
   );
   return [head + note, ...body].join("\n");
+}
+
+/** "push up, 500ms" / "morph, $motion.fast, ease-out": what a slide's transition sets. */
+function transitionLabel(t: NonNullable<Slide["transition"]>): string {
+  const head = [t.type, t.direction].filter(Boolean).join(" ");
+  const rest = [
+    t.duration !== undefined && (typeof t.duration === "number" ? `${t.duration}ms` : t.duration),
+    t.easing !== undefined && (typeof t.easing === "string" ? t.easing : JSON.stringify(t.easing)),
+  ].filter(Boolean);
+  return [head, ...rest].join(", ");
 }

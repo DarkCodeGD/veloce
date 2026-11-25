@@ -1133,7 +1133,7 @@ const getDocsTool = defineTool({
   name: "get_docs",
   title: "Get docs",
   description:
-    'Reference docs. Topics: "layout" (frames, sizing, patterns), "design" (rules for good slides), "theme" (tokens), "ops" (apply_ops), "components" (saved components and slide layouts), "sections" (sections, footer, slide numbers, live fields), "lint", "element/<type>" (e.g. "element/text").',
+    'Reference docs. Topics: "layout" (frames, sizing, patterns), "design" (rules for good slides), "theme" (tokens), "ops" (apply_ops), "components" (saved components and slide layouts), "sections" (sections, footer, slide numbers, live fields), "transitions" (how slides arrive, morph), "lint", "element/<type>" (e.g. "element/text").',
   input: z.strictObject({ topic: z.string() }),
   annotations: { readOnlyHint: true },
   async run({ topic }, ctx) {

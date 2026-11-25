@@ -29,11 +29,12 @@ Rules:
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
 - Something repeats (cards, tiles, badges, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
 - Slide layouts (Title, Title and content, Two columns, Section header, Big number, Quote, and the deck's own) start a slide: upsert_slide { "slide": { "use": "Title and content", "with": { "title": "…" }, "children": [ … ] } }.
+- Transitions: every slide arrives with its theme's signature transition. Set "transition" on a slide to change it; { "type": "morph" } glides layers that share a matchKey from the slide before (a logo, a title, a hero image moving between slides). See get_docs("transitions").
 - Sections, slide numbers and footers: "section" on a slide starts a named section; the deck's footer (date, text, slide number on every slide) is one deck.setFooter op; live text like "Slide 3 of 12" uses field runs. See get_docs("sections").
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 - Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
-Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("element/text").`;
+Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("transitions"), get_docs("element/text").`;
 
 const LAYOUT = `# Layout
 
@@ -147,7 +148,7 @@ A slide layout is a component for a whole slide: \`use\` it as the slide in upse
 slide.insert op). Params go in \`with\`; \`children\` fill its slot, except free layers
 (\`positioning: "free"\`), which sit on the slide itself, so any layout takes a corner label or
 a sticker; the slide's own \`id\`,
-\`name\`, \`notes\`, \`background\`, \`hidden\`, \`section\` and \`hideFooter\` sit next to \`use\` (not
+\`name\`, \`notes\`, \`background\`, \`hidden\`, \`section\`, \`hideFooter\` and \`transition\` sit next to \`use\` (not
 \`layout\` or \`style\`: those come from the layout). Inner IDs start with the slide's:
 \`s3-title\`. The root frame's ID is generated: to add a node to the slide itself, give the
 slide's ID as \`parentId\` (node.insert takes it, even for a slide inserted earlier in the same
@@ -219,13 +220,36 @@ footer by staying inside the slide's padding.
 label node> }\`, then put \`{ "use": "Section label" }\` in each slide's \`children\` (it's free,
 so with \`use\` it goes on the slide, not the slot), even on Big number or Quote.`;
 
+const TRANSITIONS = `# Transitions
+
+A transition is how a slide arrives, set on that slide (the one it leads into), as in PowerPoint.
+
+- Omitted: the slide arrives with its theme's **signature** transition (Veloce: fade, Midnight: zoom, Ember and Studio: push, Paper: a slow fade). At the "calm" motion level a theme's push or zoom softens to a fade. Most decks need nothing more.
+- \`"transition": { "type": "fade" | "push" | "zoom" | "morph" | "none" }\`, plus optional \`"duration"\` (ms, or a token: \`"$motion.fast"\`, \`"$motion.normal"\`, \`"$motion.slow"\`, default slow), \`"easing"\` (default \`"$motion.move"\`) and, for push only, \`"direction"\` (\`"left"\` default: the new slide comes in from the right; \`"right"\`, \`"up"\`, \`"down"\`). \`"none"\` cuts.
+- Durations: 0–600000 ms; most transitions want 300–1200 ms (or a token, which follows the deck's motion level).
+- Works on any slide, including one built from a slide layout (\`use\`): \`"transition"\` sits next to \`use\`.
+- Set it in upsert_slide (\`"transition"\` on the slide) or with \`{ "op": "slide.update", "id", "set": { "transition": { "type": "push", "direction": "up" } } }\`. It's a merge patch: \`"transition": null\` goes back to the theme's; switching a push to another type, send \`"direction": null\` too; on a slide with no transition yet, send the \`"type"\` with a duration or easing.
+
+## Morph
+
+Morph moves what two slides share: a layer on the slide before and a layer on this slide that are "the same thing" glide from the old box to the new one (position, size, rotation); everything else on this slide fades in over the old one.
+
+- Layers pair by **matchKey** (set the same \`"matchKey": "logo"\` on both), else by the same name and type. IDs are unique across the deck, so the two layers have different IDs (\`s1-title\`, \`s2-title\`) and the same matchKey. One layer per key per slide: a second one is ignored (lint warns, duplicate-match-key).
+- Morph pairs with the slide shown before (hidden slides skipped). On the first slide, or with nothing that matches, it plays as a fade and lint warns (morph-unpaired).
+- Pairs that look the same (same props) travel as one; pairs that differ (a recolored card) cross-fade as they travel.
+- Great for: a title shrinking into a header, a hero image moving to the side to make room for text, a card expanding into a full slide, a step-by-step diagram where shapes move. Keep the content of the paired layers similar.
+- A layer that has its own entrance animation on this slide isn't morphed: its animation decides when it shows.
+- No pairs: it plays as a fade.
+
+Get a layer's matchKey with get_slide (\`[key "logo"]\`); duplicating a slide in the editor keys copied layers automatically.`;
+
 const OPS = `# Ops (apply_ops)
 
 All edits are ops applied as one atomic transaction (all or nothing), undoable with undo_agent_changes.
 
 - \`{ "op": "slide.insert", "slide": <slide like upsert_slide>, "index"? }\`
 - \`{ "op": "slide.remove", "id" }\`, \`{ "op": "slide.move", "id", "index" }\` (index 0-based: the slide's position after the move)
-- \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"?, "section"?, "hideFooter"? } }\` (\`"section": null\` ends a section there)
+- \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"?, "section"?, "hideFooter"?, "transition"? } }\` (\`"section": null\` ends a section there; transitions: get_docs("transitions"))
 - \`{ "op": "node.insert", "parentId": <frame id, or a slide id for its root frame>, "node": <node>, "index"? }\` (index omitted = last). The node is written as in upsert_slide: \`kind\` and \`id\` are optional (new IDs are returned).
 - \`{ "op": "node.remove", "id" }\`
 - \`{ "op": "node.move", "id", "parentId", "index"? }\`
@@ -321,6 +345,7 @@ export function docTopics(registry: PluginRegistry): string[] {
     "ops",
     "components",
     "sections",
+    "transitions",
     "lint",
     ...registry.types().map((t) => `element/${t}`),
   ];
@@ -348,6 +373,10 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
     case "field":
     case "slide numbers":
       return SECTIONS;
+    case "transitions":
+    case "transition":
+    case "morph":
+      return TRANSITIONS;
     case "theme":
       return themeDocs(deck);
     case "lint":

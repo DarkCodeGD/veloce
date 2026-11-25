@@ -32,9 +32,9 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-25
-- **Next:** slide transitions and morph. Done in Phase 4: visual regression tests (D102), the
+- **Next:** motion lint. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123);
   phases after 4 were renumbered when Motion graphics became Phase 5.
 - **State:** `pnpm check` is green (1181 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
@@ -308,8 +308,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       reach, effects per layer and ambient; pure core engine, MCP call with the MCP item (D121)
 - [x] Sliders: custom stepped and continuous `SliderField`s; the motion level as a slider
       that plays the slide at each level while dragging (Preview levels preference) (D122)
-- [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key);
-      a theme's signature transition as a `$motion` token (D111 §6)
+- [x] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key);
+      a theme's signature transition (`theme.motion.transition`), two-view `SlideShow` in
+      Present, the Transition section with a canvas preview, MCP docs (D123)
 - [ ] Motion lint: a slide doing far more than its level says (more layers, effects or loops
       than its reach) gets a warning with the fix (D111 §7)
 - [ ] Performance lint: agents and people get "this slide will drop frames" with a fix;
@@ -328,6 +329,23 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       docs and outlines (D112 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
 - [ ] MCP: batch previews, `render_preview({ slideIds: [...] })` returning one contact
       sheet, so an agent reviews a whole deck in one call instead of one per slide
+- [ ] Lint false positives that come with morph (agent feedback, black-hole showcase deck,
+      2026-11-26; finished with 0 errors and 24 warnings, all of them intentional):
+  - [ ] `overlap`: a full-bleed image _layer_ at the bottom of the stack (needed so morph can
+        move it; a slide background can't be morphed) warns once per layer on top of it,
+        18 warnings on one slide. Treat a bottom layer covering the slide like a background.
+  - [ ] `off-canvas`: an image deliberately larger than the slide (overscan, the morph's
+        "camera move" into the next slide) warns. Don't flag a layer that covers the whole
+        slide and only overhangs it, or say so in the fix text.
+  - [ ] `empty-space`: counts the top of a slide as empty when a background image fills it
+        (a centred-bottom closer over art). Count background images and full-bleed layers.
+  - Related: "Acknowledge intentional lint findings" in Phase 9 would cover what's left.
+- [ ] MCP input: `"#ff7a45/40"` is rejected; only tokens take `/opacity`. Accept a hex with
+      `/opacity` (normalise to `#rrggbbaa`), or name `#rrggbbaa` in the error. The error was
+      clear enough to fix in one call.
+- [ ] MCP: an agent can't animate the deck it builds (`set_animations` / `choreograph`
+      above). In the showcase deck the maintainer added the animations by hand. This is the
+      biggest gap left for "AI-first" decks.
 - [ ] Determinism test: seek to the same step/time twice → identical screenshots
 
 **Done when:** decks animate in presenter mode at every motion level from `calm` to

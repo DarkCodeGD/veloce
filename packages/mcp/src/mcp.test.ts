@@ -213,6 +213,31 @@ describe("building a deck", () => {
     expect(unkeyed.text).not.toMatch(/duplicate-match-key/);
     await call("apply_ops", { label: "Remove", ops: [{ op: "slide.remove", id: "keys" }] });
 
+    // Transitions (D123): set on the slide, shown in summaries, errors that say how to fix.
+    const arrives = await call("upsert_slide", {
+      slide: { id: "moves", transition: { type: "push", direction: "up" }, children: [] },
+    });
+    expect(arrives.text).toContain("arrives: push");
+    const wrong = await call("apply_ops", {
+      label: "Fade",
+      ops: [{ op: "slide.update", id: "moves", set: { transition: { type: "fade" } } }],
+    });
+    expect(wrong.isError).toBe(true);
+    expect(wrong.text).toContain('in a patch: "direction": null');
+    const right = await call("apply_ops", {
+      label: "Fade",
+      ops: [
+        {
+          op: "slide.update",
+          id: "moves",
+          set: { transition: { type: "fade", direction: null } },
+        },
+      ],
+    });
+    expect(right.isError).toBeFalsy();
+    expect((await call("get_docs", { topic: "morph" })).text).toContain("# Transitions");
+    await call("apply_ops", { label: "Remove", ops: [{ op: "slide.remove", id: "moves" }] });
+
     // Rebuilding a slide keeps the animations of layers still on it (D110).
     await call("upsert_slide", {
       slide: {

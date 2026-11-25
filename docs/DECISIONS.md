@@ -3465,3 +3465,69 @@ slider, and advanced animation options will need one to stay friendly.
    and preview the level and undo works with the slider focused; a drag across three stops
    is one undo step; a stop's name jumps there; double-clicking resets; with the preference
    off, nothing plays.
+
+## D123 — Slide transitions and morph: the theme's signature by default, two views, pure moments
+
+**Status:** Accepted (2026-11-25). The maintainer chose "the theme's signature" as the
+default: a slide with no transition arrives the way its theme moves.
+
+1. **Schema.** `slide.transition?: { type: "none"|"fade"|"push"|"zoom"|"morph", duration?,
+   easing?, direction? }` on the slide it leads into (PowerPoint's model, what people
+   expect). An object patched by key with `slide.update` (D101 §2.6); only push has a
+   direction, and the error says how to drop it in a patch. Optional, so format v3 needs no
+   migration beyond the built-in theme snapshot below.
+2. **Default: the theme's signature** (`theme.motion.transition`, D111 §6): Veloce a quick
+   fade, Midnight a slow zoom, Ember and Studio a push, Paper a slow fade; a theme without
+   one fades. **Why:** a deck should move like its theme with zero setup (D104's "the level
+   is the knob"), and the agent shouldn't have to pick a transition per slide. At `calm`, a
+   theme's push or zoom softens to a fade (the slide's own choice always wins: it was
+   asked for). The v2→v3 migration snapshot gets the same signatures, kept equal by the
+   existing test until v3 freezes.
+3. **Tokens.** Duration and easing are `$motion` tokens (default slow / move) resolved at the
+   arriving slide's level, so a transition follows the level like every other motion.
+4. **Pure core, seekable** (golden rule 3). `transitionInto` resolves; `slidesAt` gives both
+   slides' tween at eased progress (fade: the new one fades in over the old; push: both
+   travel a stage width/height; zoom: the old grows 12% and fades, the new settles from
+   88%); `compileTransition(t).at(ms)` any moment. The renderer samples those moments every
+   frame into Web Animations (a spring's overshoot survives), so transitions run on the
+   compositor like slide motion (D107), and seeking draws the same frame.
+5. **Morph** = FLIP between two slides' measured **rest** boxes (layout offsets up to the
+   stage: no motion, rotation or zoom), through the motion slot (D103), never layout:
+   - Pairs from `morphPairs` (D109). A pair that looks the same draws once (the leaving one
+     hides: no half-faded ghost); a pair that differs cross-fades while both travel.
+   - Text and images keep their proportions (one scale), shapes and frames stretch;
+     rotation differences turn.
+   - **Nested pairs compose:** a travelling card's travelling title is solved against what
+     the card's own move and scale already do (stage maps composed and inverted), so the
+     title lands on its own box, not twice-moved.
+   - Arriving layers nothing matched fade in, as whole subtrees with no pair inside.
+   - Layers the slide's own motion moves or hides at the boundary (an entrance still to
+     come, an exit that played) aren't paired: their animation decides when they show.
+   - The arriving background fades in on a backdrop under its layers (z-index −1 inside
+     the stage, the stage's own background lifted meanwhile), so travellers stay solid.
+   - No pairs: it plays as a fade.
+6. **Two views, taking turns** (`SlideShow`): the next slide is drawn in the back view,
+   measured once its fonts load, then arrives over the old one and they swap; the retired
+   view is cleared so its plugins free their resources. Frames move as whole slides (the
+   view's viewport, not the stage, whose transform is the camera). The arriving slide's
+   step 0 starts once it has landed.
+7. **Presenting** (D116): moving on plays the transition; going back and First/Last cut
+   (PowerPoint and Keynote do the same). A click while one plays lands it at once, then
+   counts as usual, so rushing through a deck never queues up waits.
+8. **Editor.** Animate panel → Transition: Arrives (Theme's (Zoom) / None / Fade / Push /
+   Zoom / Morph), Travels for push, Duration on the continuous slider (D122, resets to the
+   theme's pace), a hint (for morph: how many layers glide from the slide before, or how to
+   make one glide), Preview (the slide before plays into this one on a `SlideShow` laid over
+   the slide on the canvas, the first slide from black, never an op) and Use on every slide
+   (one undo step).
+9. **Agents.** `transition` in upsert_slide's slide, `get_docs("transitions")` (morph
+   recipes included), "arrives: push up, 500ms" in slide summaries. Retested with a real
+   agent (D109 §6): its findings added the `morph-unpaired` lint (a morph on the first slide
+   shown, or with nothing matching the slide before, plays as a fade), errors that say a new
+   transition needs its type and give the duration range with the tokens, and docs for the
+   first slide, `use` slides and deck-unique IDs. The second pass came back clean.
+10. **Tests:** core (resolution, calm, tweens, morph plans, nested composition); the
+    Presentation model (forward plays, back cuts, a click lands it); canvas playback's
+    transition mode; the panel model; MCP; in Chromium, Present morphs, pushes, lands a
+    transition on a click and cuts back, and the panel picks, tunes, previews and applies to
+    every slide.

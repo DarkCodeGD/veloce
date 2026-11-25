@@ -23,6 +23,7 @@
  * composed the same way, as Web Animations this renderer starts, owns and cancels.
  */
 import {
+  type Box,
   type Deck,
   type ElementNode,
   type FieldValues,
@@ -320,6 +321,41 @@ export class SlideRenderer {
       }
     }
     return boxes;
+  }
+
+  /**
+   * Every layer's box on the stage as laid out at rest (stage pixels): motion, rotation and
+   * the stage's zoom left out, so a morph (D123) knows where each layer sits on this slide.
+   * Hidden layers (and the footer) have none.
+   */
+  measureBoxes(): Map<string, Box> {
+    const boxes = new Map<string, Box>();
+    const stage = this.#stage;
+    for (const [id, m] of this.#mounted) {
+      if (isFooterId(id) || m.el.offsetParent === null) continue;
+      // Layout offsets up the positioned ancestors to the stage: no transform counts.
+      let x = 0;
+      let y = 0;
+      let el: HTMLElement | null = m.el;
+      while (el && el !== stage) {
+        x += el.offsetLeft;
+        y += el.offsetTop;
+        const parent = el.offsetParent as HTMLElement | null;
+        if (parent && parent !== stage) {
+          x += parent.clientLeft; // offsets start inside the parent's border
+          y += parent.clientTop;
+        }
+        el = parent;
+      }
+      boxes.set(id, { x, y, width: m.el.offsetWidth, height: m.el.offsetHeight });
+    }
+    return boxes;
+  }
+
+  /** Draw nothing: every layer is disposed (their plugins' resources freed) until `render`. */
+  clear(): void {
+    this.#clear();
+    this.#stage.style.background = "";
   }
 
   dispose(): void {

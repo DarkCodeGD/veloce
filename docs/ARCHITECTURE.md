@@ -63,6 +63,11 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Morph match keys** (`morph.ts`, D109): a layer's key is its `matchKey`, else its ID;
   `morphPairs` says which layers of two slides are the same thing (by key, then name and
   type). Copies inherit their original's key.
+- **Transitions** (`transition.ts`, D123): how a slide arrives (`slide.transition`, else its
+  theme's signature `theme.motion.transition`), resolved with `$motion` tokens at the
+  slide's level (`transitionInto`). Pure and seekable: `slidesAt` tweens whole slides (fade,
+  push, zoom); `planMorph` pairs layers (`morphPairs`) from measured rest boxes and
+  `morphAt` composes nested travellers; `compileTransition` gives any moment.
 - **Fields, the footer and sections** (`fields.ts`, D97): a text run can be a field (slide
   number, date…) whose value depends on where the slide is; the footer is deck settings
   drawn over every slide; a section is a marker on its first slide.
@@ -166,6 +171,10 @@ tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds an
   loop. It renders a slide before compiling it, so layout animations can measure it
   (`measureLayout`, D120), and measures again once fonts are in. The render page
   (`render-main.ts`) uses it, so screenshots take a moment (`at`).
+  **`SlideShow`** (`slide-show.ts`, D123) plays slides one after another in two stacked
+  views taking turns; `SlideTransition` (`slide-transition.ts`) draws core's transition
+  over them (frames animated as whole slides; a morph's layers through the motion slot,
+  measured with `measureBoxes`), seeking on the main thread or sampled onto the compositor.
   Proven libraries only draw (D105).
 - **Plugin API**: a plugin defines element types (a Zod props schema, defaults, `mount`,
   `update`, `seek`, `dispose`, and `aiDocs` for agents) and **effect presets** (D117: a Zod
@@ -194,10 +203,12 @@ A React app (Vite) that is just another client of the server (`sync-client.ts`).
   (`components/AnimatePanel.tsx`, its ops from `model/animate.ts`, saved presets included,
   D119; the level on a slider, `components/Slider.tsx`, D122). Its Play, hover
   previews play on the editor canvas's own view through `canvas-playback.ts` (a
-  `SlidePlayer` the canvas registers), never as ops.
+  `SlidePlayer` the canvas registers), never as ops; a transition preview plays on a
+  `SlideShow` overlaid on the slide (`canvas-transition.ts`, D123).
 - **Presenting** (`components/PresentView.tsx`, `model/presentation.ts`, D116): a fullscreen
-  modal dialog with its own `SlideView` and `SlidePlayer` (D115); the pure `Presentation`
-  model decides what a click or a key does (next step, next slide, back, end screen).
+  modal dialog with a `SlideShow` (two views, so slides arrive with their transitions,
+  D123); the pure `Presentation` model decides what a click or a key does (next step, next
+  slide with its transition, back and jumps cut, end screen).
 
 ## Tests
 

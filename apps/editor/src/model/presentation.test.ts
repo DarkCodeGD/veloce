@@ -140,4 +140,34 @@ describe("presenting (D116)", () => {
     await click;
     expect(log).toEqual(["load a", "play a @0 clicks 0", "click a"]); // the click wasn't lost
   });
+
+  it("plays the transition moving on, cuts going back, and a click lands it at once (D123)", async () => {
+    const { player, log } = fakePlayer(deck);
+    let arrive = () => {};
+    player.transition = (_deck, id) => {
+      log.push(`transition ${id}`);
+      player.load(deck, id);
+      log.pop(); // the transition loads it: logged as the transition alone
+      return new Promise<void>((r) => (arrive = r));
+    };
+    player.finishTransition = () => {
+      log.push("finish");
+      arrive();
+    };
+    const show = new Presentation(deck, player);
+    await show.start(1); // b: one step
+    log.length = 0;
+    const moving = show.next(); // on to c, with its transition
+    await new Promise((r) => setTimeout(r, 0));
+    expect(log).toEqual(["finish", "transition c"]); // not played until it has arrived
+    expect(show.state.index).toBe(2);
+    const click = show.next(); // impatient: lands the transition, then c's next step
+    await moving;
+    await click;
+    expect(log).toEqual(["finish", "transition c", "finish", "play c @0 clicks 0", "click c"]);
+    log.length = 0;
+    await show.previous();
+    await show.previous(); // back to b: a cut
+    expect(log.slice(-2)).toEqual(["load b", "play b @500 clicks 0"]);
+  });
 });

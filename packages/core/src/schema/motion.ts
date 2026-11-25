@@ -44,8 +44,9 @@ const MAX_MS = 600_000;
 
 /** Milliseconds, or a `$motion` time token (scaled by the motion level). */
 export function timeSchema(min = 0) {
-  return z.union([z.number().min(min).max(MAX_MS), z.enum(TIME_TOKENS)], {
-    error: `Milliseconds (${min}–${MAX_MS}), or a theme token: ${TIME_TOKENS.map((t) => `"${t}"`).join(", ")}`,
+  const message = `Milliseconds (${min}–${MAX_MS}), or a theme token: ${TIME_TOKENS.map((t) => `"${t}"`).join(", ")}`;
+  return z.union([z.number().min(min, message).max(MAX_MS, message), z.enum(TIME_TOKENS)], {
+    error: message,
   });
 }
 export type Time = number | TimeToken;
@@ -55,6 +56,44 @@ export const EasingSchema = z.union([EasingValueSchema, z.enum(EASING_TOKENS)], 
   error: `An easing: ${EASING_NAMES.map((n) => `"${n}"`).join(", ")}, { "cubicBezier": [x1, y1, x2, y2] }, { "spring": { "bounce": 0–1 } }, or a theme token: ${EASING_TOKENS.map((t) => `"${t}"`).join(", ")}`,
 });
 export type Easing = z.infer<typeof EasingSchema>;
+
+// ── Slide transitions (D123) ──────────────────────────────────────────────────────────
+// How a slide arrives, set on the slide it leads into (as in PowerPoint). A slide without
+// one arrives with its theme's signature transition (`theme.motion.transition`), so a deck
+// moves like its theme with no setup; `"none"` cuts. An object patched by key
+// (`slide.update`), never replaced as a list (D101 §2.6).
+
+export const TRANSITION_TYPES = ["none", "fade", "push", "zoom", "morph"] as const;
+export type TransitionType = (typeof TRANSITION_TYPES)[number];
+
+export const TRANSITION_DIRECTIONS = ["left", "right", "up", "down"] as const;
+export type TransitionDirection = (typeof TRANSITION_DIRECTIONS)[number];
+
+export const TransitionSchema = z
+  .strictObject({
+    type: z.enum(TRANSITION_TYPES, {
+      error: (issue) =>
+        issue.input === undefined
+          ? `A transition needs a "type" (${TRANSITION_TYPES.map((t) => `"${t}"`).join(", ")}): this slide has none yet, so send it with the duration, easing or direction.`
+          : `A transition: ${TRANSITION_TYPES.map((t) => `"${t}"`).join(", ")}`,
+    }),
+    /** Default `$motion.slow` (the theme's, scaled by the slide's level). */
+    duration: timeSchema().optional(),
+    /** Default `$motion.move`. */
+    easing: EasingSchema.optional(),
+    /** Push only: which way the slides travel. Default `"left"` (the new one comes in from the right). */
+    direction: z.enum(TRANSITION_DIRECTIONS).optional(),
+  })
+  .superRefine((t, ctx) => {
+    if (t.direction !== undefined && t.type !== "push") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["direction"],
+        message: `Only "push" has a direction. Remove it (in a patch: "direction": null), or use "type": "push".`,
+      });
+    }
+  });
+export type Transition = z.infer<typeof TransitionSchema>;
 
 /** A theme's motion personality: every `$motion` token's value. */
 export const ThemeMotionSchema = z.strictObject({
@@ -68,6 +107,8 @@ export const ThemeMotionSchema = z.strictObject({
   enter: EasingValueSchema,
   exit: EasingValueSchema,
   move: EasingValueSchema,
+  /** The signature transition: how slides that set none arrive (D123). Default: a fade. */
+  transition: TransitionSchema.optional(),
 });
 export type ThemeMotion = z.infer<typeof ThemeMotionSchema>;
 

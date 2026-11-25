@@ -5,6 +5,8 @@
  *   the canvas at each level it passes (a preference), letting go sets it; and Play, which
  *   plays the slide on the canvas with the clicks taken for you. **Animate this slide** (D121): the choreography engine
  *   animates the whole slide from a pacing, punching the selected layers.
+ * - **Transition** (D123): how the slide arrives, its theme's signature until it picks its
+ *   own; Preview plays the slide before into it on the canvas.
  * - **Steps**: the slide's animations as they'll play (as the slide appears, then click by
  *   click). A row selects its animation and its layer.
  * - **Animation**: the selected animation, tuned with a few plain controls (effect, start,
@@ -34,6 +36,8 @@ import {
   slideMotionLevel,
   slideMotionTokens,
   type Time,
+  type TransitionDirection,
+  type TransitionType,
   type Trigger,
 } from "@veloce/core";
 import {
@@ -91,11 +95,21 @@ import {
 } from "../model/animate.js";
 import { propFields } from "../model/schema-fields.js";
 import { nodeLabel, type SlideIndex } from "../model/slide-index.js";
+import {
+  DIRECTION_LABELS,
+  morphGliders,
+  setTransitionType,
+  shownTransition,
+  TRANSITION_LABELS,
+  themeTransition,
+  transitionEverywhere,
+  tuneTransition,
+} from "../model/transition.js";
 import { useSettings } from "../settings.js";
 import { showToast } from "../toasts.js";
 import { Group, humanize, NumberField, Section, SelectField, ToggleField } from "./fields.js";
 import { SavePresetDialog } from "./SavePresetDialog.js";
-import { StepSliderField } from "./Slider.js";
+import { RangeSliderField, StepSliderField } from "./Slider.js";
 
 interface Props {
   deck: Deck;
@@ -159,6 +173,7 @@ export function AnimatePanel({ deck, slide, index, selection, onSelect }: Props)
   return (
     <section className="inspector animate-panel" aria-label="Animate">
       <MotionSection deck={deck} slide={slide} playing={playing} />
+      <TransitionSection deck={deck} slide={slide} playing={playing} />
       <ChoreographySection deck={deck} slide={slide} layers={layers} />
       <Section title="Steps">
         {steps.length === 0 ? (
@@ -276,6 +291,108 @@ function MotionSection({
       </p>
     </Section>
   );
+}
+
+// ── Transition (D123) ─────────────────────────────────────────────────────────────────
+
+function TransitionSection({
+  deck,
+  slide,
+  playing,
+}: {
+  deck: Deck;
+  slide: Slide;
+  playing: string | null;
+}) {
+  const shown = shownTransition(deck, slide);
+  const theme = themeTransition(deck, slide);
+  const gliders = shown.type === "morph" ? morphGliders(deck, slide) : null;
+  const moves = shown.type !== "none";
+  const previewing = playing === "transition";
+
+  return (
+    <Section
+      title="Transition"
+      action={
+        <button
+          type="button"
+          className="button animate-play"
+          disabled={!moves && !previewing}
+          onClick={() =>
+            previewing
+              ? stopOnCanvas()
+              : playOnCanvas({ deck, slideId: slide.id, mode: "transition" })
+          }
+        >
+          {previewing ? <Square size={12} aria-hidden /> : <Play size={12} aria-hidden />}
+          {previewing ? "Stop" : "Preview"}
+        </button>
+      }
+    >
+      <SelectField
+        label="Arrives"
+        value={shown.own?.type}
+        defaultLabel={`Theme's (${theme ? TRANSITION_LABELS[theme.type] : "none"})`}
+        options={Object.entries(TRANSITION_LABELS).map(([value, label]) => ({ value, label }))}
+        onCommit={(v) => void run(setTransitionType(slide, (v as TransitionType | null) ?? null))}
+      />
+      {shown.type === "push" && (
+        <SelectField
+          label="Travels"
+          value={shown.direction}
+          options={Object.entries(DIRECTION_LABELS).map(([value, label]) => ({ value, label }))}
+          onCommit={(v) =>
+            void run(
+              tuneTransition(deck, slide, { direction: (v ?? "left") as TransitionDirection }),
+            )
+          }
+        />
+      )}
+      {moves && (
+        <RangeSliderField
+          label="Duration"
+          value={shown.tunedDuration}
+          defaultValue={Math.round(shown.pace)}
+          min={100}
+          max={3000}
+          step={50}
+          suffix="ms"
+          onCommit={(ms) => run(tuneTransition(deck, slide, { duration: ms }))}
+        />
+      )}
+      <p className="inspector-hint">{transitionHint(shown.type, gliders, shown.own === null)}</p>
+      <button
+        type="button"
+        className="button"
+        onClick={() => {
+          const command = transitionEverywhere(deck, slide);
+          if (command) void run(command, { undoToast: "Every slide arrives like this one" });
+          else showToast({ tone: "info", message: "Every slide already arrives like this one." });
+        }}
+      >
+        Use on every slide
+      </button>
+    </Section>
+  );
+}
+
+function transitionHint(type: TransitionType, gliders: number | null, fromTheme: boolean) {
+  const own = fromTheme ? "The theme's signature. " : "";
+  switch (type) {
+    case "none":
+      return `${own}The slide appears at once.`;
+    case "morph":
+      if (gliders === null) return `${own}The first slide fades in as the show starts.`;
+      return gliders === 0
+        ? `${own}Nothing matches the slide before, so it fades. Give a layer the same match key on both slides to make it glide.`
+        : `${own}${gliders} ${gliders === 1 ? "layer glides" : "layers glide"} from the slide before; the rest fades in.`;
+    case "push":
+      return `${own}Both slides travel together.`;
+    case "zoom":
+      return `${own}The slide before grows away as this one settles in.`;
+    default:
+      return `${own}This slide fades in over the one before.`;
+  }
 }
 
 // ── Animate this slide (D121) ─────────────────────────────────────────────────────────

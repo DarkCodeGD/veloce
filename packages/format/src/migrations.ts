@@ -62,6 +62,7 @@ const VELOCE_MOTION = {
   enter: { cubicBezier: [0.16, 1, 0.3, 1] },
   exit: { cubicBezier: [0.7, 0, 0.84, 0] },
   move: { cubicBezier: [0.65, 0, 0.35, 1] },
+  transition: { type: "fade", duration: "$motion.normal" },
 };
 const V3_BUILTIN_MOTION: Readonly<Record<string, Json>> = {
   "Veloce Light": VELOCE_MOTION,
@@ -74,6 +75,7 @@ const V3_BUILTIN_MOTION: Readonly<Record<string, Json>> = {
     enter: { cubicBezier: [0.22, 1, 0.36, 1] },
     exit: { cubicBezier: [0.64, 0, 0.78, 0] },
     move: { cubicBezier: [0.83, 0, 0.17, 1] },
+    transition: { type: "zoom", duration: "$motion.slow" },
   },
   Ember: {
     fast: 180,
@@ -83,6 +85,7 @@ const V3_BUILTIN_MOTION: Readonly<Record<string, Json>> = {
     enter: { spring: { bounce: 0.3 } },
     exit: { cubicBezier: [0.7, 0, 0.84, 0] },
     move: { spring: { bounce: 0.15 } },
+    transition: { type: "push", duration: "$motion.normal" },
   },
   Paper: {
     fast: 240,
@@ -92,6 +95,7 @@ const V3_BUILTIN_MOTION: Readonly<Record<string, Json>> = {
     enter: "ease-out",
     exit: "ease-in",
     move: "ease-in-out",
+    transition: { type: "fade", duration: "$motion.slow" },
   },
   Studio: {
     fast: 150,
@@ -101,6 +105,7 @@ const V3_BUILTIN_MOTION: Readonly<Record<string, Json>> = {
     enter: { cubicBezier: [0.2, 0, 0, 1] },
     exit: { cubicBezier: [0.3, 0, 1, 1] },
     move: { cubicBezier: [0.2, 0, 0, 1] },
+    transition: { type: "push", duration: "$motion.fast" },
   },
 };
 

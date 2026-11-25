@@ -16,7 +16,7 @@ import {
   type Rect,
   type SlideMeasurement,
 } from "./measure.js";
-import { duplicateMatchKeys } from "./morph.js";
+import { duplicateMatchKeys, morphPairs } from "./morph.js";
 import type { Deck, Slide } from "./schema/deck.js";
 import {
   type ElementNode,
@@ -29,6 +29,7 @@ import { TextContentSchema, toPlainText } from "./schema/rich-text.js";
 import type { Theme } from "./schema/theme.js";
 import { suggest } from "./suggest.js";
 import { parseColorToken, parseTokenRef, resolveToken } from "./tokens.js";
+import { transitionInto } from "./transition.js";
 
 export type LintSeverity = "error" | "warning" | "info";
 
@@ -51,6 +52,8 @@ export const LINT_RULES = {
     "Text shows the section's name where that's wrong: on a slide in no section (it's empty), or as the title of a slide that doesn't start the section it names.",
   "duplicate-match-key":
     "Two layers on one slide share a morph match key, so morph pairs only the first of them.",
+  "morph-unpaired":
+    "A slide arrives with morph but no layer matches the slide before it (or there's none), so it plays as a fade.",
   "flat-depth":
     "A layer has a `depth` but its frame has no `perspective`, so the depth shows nothing (2.5D).",
   "depth-behind-viewer":
@@ -116,6 +119,7 @@ export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
       ...sectionFieldRules(deck, slide, index),
       ...positionRules(slide),
       ...matchKeyRules(slide),
+      ...morphRules(deck, slide, index),
       ...depthRules(slide),
       ...tokenRules(slide, deck.theme),
       ...visualRules(slide, options.measurements?.get(slide.id)),
@@ -291,6 +295,30 @@ function matchKeyRules(slide: Slide): LintIssue[] {
     message: `${ids.length} layers on slide "${slide.id}" share the match key "${key}" (${ids.map((id) => `"${id}"`).join(", ")}), so morph pairs only the first.`,
     fix: 'Give each a different "matchKey", or remove the key from the ones that shouldn\'t morph ("matchKey": null).',
   }));
+}
+
+/**
+ * A morph with nothing to glide (D123): no slide before it in the show, or no layer on it
+ * that matches one here. It still plays (as a fade), but that's rarely what was meant.
+ */
+function morphRules(deck: Deck, slide: Slide, index: number): LintIssue[] {
+  if (slide.hidden || transitionInto(deck, slide)?.type !== "morph") return [];
+  const before = deck.slides.slice(0, index).findLast((s) => !s.hidden);
+  if (before && morphPairs(before, slide).length > 0) return [];
+  return [
+    {
+      rule: "morph-unpaired",
+      severity: "warning",
+      slideId: slide.id,
+      nodeIds: [],
+      message: before
+        ? `Slide "${slide.id}" morphs from "${before.id}", but no layer matches one there, so it plays as a fade.`
+        : `Slide "${slide.id}" morphs, but it's the first slide shown: there's nothing to morph from, so it plays as a fade.`,
+      fix: before
+        ? `Give a layer here and its counterpart on "${before.id}" the same "matchKey" (e.g. "logo"), or set "transition": { "type": "fade" }.`
+        : 'Use another transition ("fade", or null for the theme\'s), or move the slide after the one it should morph from.',
+    },
+  ];
 }
 
 /**

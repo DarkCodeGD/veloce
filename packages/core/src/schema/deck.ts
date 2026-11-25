@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { AnimationsSchema } from "./animation.js";
 import { ComponentsSchema } from "./component.js";
-import { MotionLevelSchema } from "./motion.js";
+import { MotionLevelSchema, TransitionSchema } from "./motion.js";
 import { FrameNodeSchema } from "./node.js";
 import { PaintSchema } from "./paint.js";
 import { PresetsSchema } from "./preset.js";
@@ -56,6 +56,10 @@ export const SlideSchema = z.strictObject({
   hideFooter: z.boolean().optional(),
   /** This slide's motion level, instead of the deck's (D111): a wild intro, calm data slides. */
   motionLevel: MotionLevelSchema.optional(),
+  /**
+   * How this slide arrives (D123). Omitted: the theme's signature transition; `"none"` cuts.
+   */
+  transition: TransitionSchema.optional(),
   /**
    * In play order (D110); omitted when the slide has none. Edited only with `animation.*`
    * ops, never patched as a whole (D101 §2.1).

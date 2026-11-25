@@ -27,6 +27,7 @@ import {
   stopOnCanvas,
   useCanvasPlayback,
 } from "../canvas-playback.js";
+import { CanvasTransitionPreview } from "../canvas-transition.js";
 import { enterCrop, exitCrop, pictureOf, useCropping } from "../crop-mode.js";
 import { assetUrl, registry } from "../editor-context.js";
 import { useGradientSession } from "../gradient-edit.js";
@@ -145,7 +146,13 @@ export function EditorCanvas({
     view.current.stage.classList.add("slide-surface");
     // The Animate panel's Play and previews play here, on this view (D118).
     const player = new SlidePlayer(view.current, { effects: registry.resolveEffect });
-    const playback = new CanvasPlayback(player, playbackChanged);
+    // Transitions preview on an overlay over the slide (D123).
+    const transitions = new CanvasTransitionPreview(() => view.current, {
+      registry,
+      assetUrl: (id) => assetUrl(deckIdRef.current, id),
+      effects: registry.resolveEffect,
+    });
+    const playback = new CanvasPlayback(player, playbackChanged, undefined, transitions);
     setCanvasPlayback(playback);
     return () => {
       playback.stop();

@@ -37,6 +37,7 @@ import {
   SizingSchema,
   type Slide,
   SlideSchema,
+  TransitionSchema,
   VeloceError,
 } from "@veloce/core";
 import { z } from "zod";
@@ -149,6 +150,9 @@ export const SlideInputSchema = z.strictObject({
     .boolean()
     .optional()
     .describe("Leaves the deck's footer off this slide (title and section header slides)."),
+  transition: TransitionSchema.optional().describe(
+    'How this slide arrives: { "type": "fade" | "push" | "zoom" | "morph" | "none", "duration"?, "easing"?, "direction"? (push only) }. Omit it to use the theme\'s signature transition. "morph" glides layers with the same matchKey from the slide before. See get_docs("transitions").',
+  ),
   layout: LayoutSchema.optional().describe(
     'Layout of the slide\'s root frame. Default: a column centered top-to-bottom, with "$space.xl" padding and "$space.md" gap. Children stretch across; add align: "center" to center hug-width content.',
   ),

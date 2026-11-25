@@ -12,7 +12,7 @@
  * work) doesn't restart the slide on screen.
  */
 import type { Deck } from "@veloce/core";
-import { SlidePlayer, SlideView } from "@veloce/renderer";
+import { SlideShow } from "@veloce/renderer";
 import { useEffect, useRef, useState } from "react";
 import { assetUrl, registry } from "../editor-context.js";
 import { Presentation, type PresentationState, startIndex } from "../model/presentation.js";
@@ -48,14 +48,15 @@ export function PresentView({
     el.showModal();
     el.focus();
     const { deck, deckId, from } = start.current;
-    const view = new SlideView(box, {
+    // Two views taking turns, so each slide arrives over the last with its transition.
+    const slides = new SlideShow(box, {
       registry,
       padding: 0,
       assetUrl: (id) => assetUrl(deckId, id),
+      effects: registry.resolveEffect,
     });
-    const player = new SlidePlayer(view, { effects: registry.resolveEffect });
-    const show = new Presentation(deck, player, {
-      ready: () => view.ready(),
+    const show = new Presentation(deck, slides, {
+      ready: () => slides.ready(),
       onChange: setState,
     });
     presentation.current = show;
@@ -73,8 +74,7 @@ export function PresentView({
     return () => {
       document.removeEventListener("fullscreenchange", onFullscreen);
       presentation.current = null;
-      player.dispose();
-      view.dispose();
+      slides.dispose();
       if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => {});
       el.close();
     };

@@ -12,6 +12,10 @@
  *
  * Hidden slides are skipped, as every presentation tool does. A slide shown "played out" is
  * still playing: what loops keeps looping.
+ *
+ * Moving on to the next slide plays its transition (D123), when the player has them; going
+ * back and jumping cut, as in PowerPoint and Keynote. A click while a transition plays lands
+ * it at once, then counts as usual.
  */
 import { type Deck, type PlayPosition, type Slide, type Step, seekPosition } from "@veloce/core";
 
@@ -22,6 +26,13 @@ export interface PresentationPlayer {
   next(): boolean;
   readonly steps: readonly Step[];
   readonly position: PlayPosition;
+  /**
+   * Bring `slideId` in over the slide showing, with its transition (D123); resolves once it
+   * has arrived, shown as it appears. Without it, slides cut.
+   */
+  transition?(deck: Deck, slideId: string): Promise<void>;
+  /** End a playing transition now. */
+  finishTransition?(): void;
 }
 
 export interface PresentationState {
@@ -90,11 +101,13 @@ export class Presentation {
 
   /** A click. Resolves false once past the end screen (time to leave). */
   next(): Promise<boolean> {
+    // Impatient clicks land the transition on screen rather than wait for it.
+    this.#player.finishTransition?.();
     return this.#enqueue(async () => {
       if (this.#state.ended) return false;
       if (this.#player.next()) return true;
       if (this.#state.index + 1 < this.#slides.length) {
-        await this.#show(this.#state.index + 1, "start");
+        await this.#show(this.#state.index + 1, "start", true);
       } else {
         this.#set({ index: this.#state.index, ended: true });
       }
@@ -125,12 +138,17 @@ export class Presentation {
     return result;
   }
 
-  async #show(index: number, at: "start" | "end"): Promise<void> {
+  async #show(index: number, at: "start" | "end", transition = false): Promise<void> {
     const slide = this.#slides[index];
     if (!slide) return;
-    this.#player.load(this.#deck, slide.id);
-    this.#set({ index, ended: false });
-    await this.#ready();
+    if (transition && this.#player.transition) {
+      this.#set({ index, ended: false });
+      await this.#player.transition(this.#deck, slide.id);
+    } else {
+      this.#player.load(this.#deck, slide.id);
+      this.#set({ index, ended: false });
+      await this.#ready();
+    }
     const steps = this.#player.steps;
     this.#player.play(
       at === "start" ? { time: 0, clicks: [] } : playedOut(steps, Math.max(0, steps.length - 1)),

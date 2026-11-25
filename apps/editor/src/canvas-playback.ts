@@ -4,18 +4,28 @@
  * or looping while the pointer rests on it). Never ops: the canvas draws motion on top of
  * the document and goes back to it at rest when it ends, so nothing enters undo.
  *
- * `CanvasPlayback` sequences a `SlidePlayer` (D115) on the canvas's own view; the canvas
- * registers it here, and the panel asks for playback through `playOnCanvas`, so neither
+ * `CanvasPlayback` sequences a `SlidePlayer` (D115) on the canvas's own view, and previews
+ * a slide's transition (D123) on an overlay the canvas provides; the canvas registers it here, and the panel asks for playback through `playOnCanvas`, so neither
  * holds the other.
  */
 import type { Deck } from "@veloce/core";
 import { useSyncExternalStore } from "react";
 
-/** What to play: the whole slide, step after step, or a preview once or on a loop. */
+/**
+ * What to play: the whole slide, step after step; a preview once or on a loop; or the
+ * slide's transition, from the slide before it.
+ */
 export interface PlaybackRequest {
   deck: Deck;
   slideId: string;
-  mode: "slide" | "once" | "loop";
+  mode: "slide" | "once" | "loop" | "transition";
+}
+
+/** Plays a slide's transition over the canvas (the canvas's overlay, D123). */
+export interface TransitionPreview {
+  /** Resolves once the slide has arrived. */
+  play(deck: Deck, slideId: string): Promise<void>;
+  stop(): void;
 }
 
 /** The `SlidePlayer` calls playback uses. */
@@ -45,6 +55,7 @@ export class CanvasPlayback {
   readonly #player: PlaybackPlayer;
   readonly #timers: PlaybackTimers;
   readonly #onChange: (mode: PlaybackRequest["mode"] | null) => void;
+  readonly #transitions: TransitionPreview | null;
   #timer: unknown = null;
   #request: PlaybackRequest | null = null;
 
@@ -52,10 +63,12 @@ export class CanvasPlayback {
     player: PlaybackPlayer,
     onChange: (mode: PlaybackRequest["mode"] | null) => void,
     timers: PlaybackTimers = browserTimers,
+    transitions: TransitionPreview | null = null,
   ) {
     this.#player = player;
     this.#onChange = onChange;
     this.#timers = timers;
+    this.#transitions = transitions;
   }
 
   get mode(): PlaybackRequest["mode"] | null {
@@ -64,6 +77,7 @@ export class CanvasPlayback {
 
   start(request: PlaybackRequest): void {
     this.#clearTimer();
+    this.#transitions?.stop();
     this.#request = request;
     this.#onChange(request.mode);
     this.#run(request);
@@ -74,11 +88,19 @@ export class CanvasPlayback {
     this.#clearTimer();
     if (!this.#request) return;
     this.#request = null;
+    this.#transitions?.stop();
     this.#player.unload();
     this.#onChange(null);
   }
 
   #run(request: PlaybackRequest): void {
+    if (request.mode === "transition") {
+      // It arrives, holds a beat as landed, and the canvas is back.
+      void this.#transitions?.play(request.deck, request.slideId).then(() => {
+        if (this.#request === request) this.#wait(END_HOLD_MS, () => this.stop());
+      });
+      return;
+    }
     this.#player.load(request.deck, request.slideId);
     this.#player.play();
     this.#after(0, request);

@@ -79,4 +79,36 @@ describe("playing on the canvas (D118)", () => {
     expect(calls).toEqual(["load", "play", "load", "play"]);
     expect(modes).toEqual(["loop", "once"]);
   });
+
+  it("previews a transition on the canvas's overlay, holds it landed, then goes back (D123)", async () => {
+    const calls: string[] = [];
+    const pending: Array<() => void> = [];
+    let arrive = () => {};
+    const player: PlaybackPlayer = {
+      steps: [],
+      load: () => calls.push("load"),
+      play: () => calls.push("play"),
+      next: () => false,
+      unload: () => calls.push("unload"),
+    };
+    const playback = new CanvasPlayback(
+      player,
+      () => {},
+      { set: (callback) => pending.push(callback), clear: () => pending.splice(0) },
+      {
+        play: (_deck, id) => {
+          calls.push(`transition ${id}`);
+          return new Promise<void>((r) => (arrive = r));
+        },
+        stop: () => calls.push("stop transition"),
+      },
+    );
+    playback.start({ deck, slideId: "s", mode: "transition" });
+    expect(calls).toEqual(["stop transition", "transition s"]); // the slide's own player idles
+    arrive();
+    await Promise.resolve();
+    pending.shift()?.(); // the beat it holds, landed
+    expect(calls.slice(-2)).toEqual(["stop transition", "unload"]);
+    expect(playback.mode).toBeNull();
+  });
 });

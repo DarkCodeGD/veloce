@@ -32,7 +32,7 @@ export const SlideMoveOp = z.strictObject({
   id: IdSchema,
   index: z.number().int().min(0),
 });
-/** Patch a slide's own fields (name, background, notes, hidden). Not its node tree. */
+/** Patch a slide's own fields (name, background, notes, hidden, transition…). Not its node tree. */
 export const SlideUpdateOp = z.strictObject({
   op: z.literal("slide.update"),
   id: IdSchema,

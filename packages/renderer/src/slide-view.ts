@@ -2,7 +2,7 @@
  * SlideView = StageView + SlideRenderer: "show this slide of this deck in that box".
  * What the editor uses for its main canvas and its slide thumbnails.
  */
-import type { Deck, MotionClip, MotionState, SlideMeasurement } from "@veloce/core";
+import type { Box, Deck, MotionClip, MotionState, SlideMeasurement } from "@veloce/core";
 import { SlideRenderer, type SlideRendererOptions } from "./slide-renderer.js";
 import { type Camera, StageView, type StageViewOptions } from "./stage.js";
 
@@ -77,6 +77,16 @@ export class SlideView {
   /** The slide's layout with some layers taken out, for layout animations (D120). */
   measureLayout(absent: ReadonlySet<string>): Map<string, { x: number; y: number }> {
     return this.#renderer.measureLayout(absent);
+  }
+
+  /** Draw nothing until the next `render` (see `SlideRenderer.clear`). */
+  clear(): void {
+    this.#renderer.clear();
+  }
+
+  /** Every layer's box at rest, in stage pixels (see `SlideRenderer.measureBoxes`, D123). */
+  measureBoxes(): Map<string, Box> {
+    return this.#renderer.measureBoxes();
   }
 
   measure(): SlideMeasurement | null {

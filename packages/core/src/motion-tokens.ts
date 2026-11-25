@@ -33,6 +33,8 @@ export const DEFAULT_THEME_MOTION: ThemeMotion = {
   enter: { cubicBezier: [0.16, 1, 0.3, 1] },
   exit: { cubicBezier: [0.7, 0, 0.84, 0] },
   move: { cubicBezier: [0.65, 0, 0.35, 1] },
+  // Quick and clean: a fade, at the theme's normal speed.
+  transition: { type: "fade", duration: "$motion.normal" },
 };
 
 /**

@@ -5,12 +5,15 @@
  * - `StageView` scales a fixed-size stage to fit a viewport.
  * - `SlideView` combines both (editor canvas, thumbnails).
  * - `SlidePlayer` plays a slide's animations on the one clock (D115).
+ * - `SlideShow` plays slides one after another, with transitions between them (D123).
  * - `measureSlide` reports bounds/overflow/text colors for lint.
  */
 export * from "./layout.js";
 export * from "./measure.js";
 export * from "./slide-player.js";
 export * from "./slide-renderer.js";
+export * from "./slide-show.js";
+export * from "./slide-transition.js";
 export * from "./slide-view.js";
 export * from "./stage.js";
 export * from "./theme.js";

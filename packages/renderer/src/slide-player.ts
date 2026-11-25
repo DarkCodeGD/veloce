@@ -105,6 +105,14 @@ export class SlidePlayer {
     this.#position = { time: 0, clicks: [] };
   }
 
+  /**
+   * The motion of every layer at `position` (default: where it is): what's moved, hidden or
+   * not yet in. A transition (D123) leaves those layers to the slide's own motion.
+   */
+  motionAt(position: PlayPosition = this.position): Map<string, MotionState> {
+    return this.#compiled ? motionOf(this.#compiled.at(position)) : new Map();
+  }
+
   /** The slide's steps (step 0 plays as it appears; each click starts the next). */
   get steps(): readonly Step[] {
     return this.#compiled?.steps ?? [];

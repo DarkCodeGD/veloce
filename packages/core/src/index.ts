@@ -40,6 +40,7 @@ export * from "./themes.js";
 export * from "./timeline.js";
 export * from "./tokens.js";
 export * from "./transaction.js";
+export * from "./transition.js";
 export * from "./tree.js";
 export * from "./validate.js";
 export * from "./versions.js";

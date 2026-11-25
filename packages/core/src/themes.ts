@@ -71,6 +71,7 @@ export const MIDNIGHT_THEME: Theme = {
     enter: { cubicBezier: [0.22, 1, 0.36, 1] },
     exit: { cubicBezier: [0.64, 0, 0.78, 0] },
     move: { cubicBezier: [0.83, 0, 0.17, 1] },
+    transition: { type: "zoom", duration: "$motion.slow" },
   },
 };
 
@@ -100,6 +101,7 @@ export const EMBER_THEME: Theme = {
     enter: { spring: { bounce: 0.3 } },
     exit: { cubicBezier: [0.7, 0, 0.84, 0] },
     move: { spring: { bounce: 0.15 } },
+    transition: { type: "push", duration: "$motion.normal" },
   },
 };
 
@@ -143,6 +145,7 @@ export const PAPER_THEME: Theme = {
     enter: "ease-out",
     exit: "ease-in",
     move: "ease-in-out",
+    transition: { type: "fade", duration: "$motion.slow" },
   },
 };
 
@@ -192,6 +195,7 @@ export const STUDIO_THEME: Theme = {
     enter: { cubicBezier: [0.2, 0, 0, 1] },
     exit: { cubicBezier: [0.3, 0, 1, 1] },
     move: { cubicBezier: [0.2, 0, 0, 1] },
+    transition: { type: "push", duration: "$motion.fast" },
   },
 };
 
