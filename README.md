@@ -1,33 +1,54 @@
-# Veloce
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/veloce-lockup-dark.svg">
+    <img src="docs/brand/veloce-lockup-light.svg" alt="Veloce" width="360">
+  </picture>
+</p>
 
-**AI-first, open-source presentation engine.** AI agents build professional, animated decks
-through an MCP server; humans edit the very same deck by hand, even at the same time.
-Runs on Linux, Windows and macOS. Decks are saved as `.veloce` files.
+<p align="center">
+  <strong>AI-first, open-source presentation engine.</strong><br>
+  AI agents build professional, animated decks through an MCP server;<br>
+  humans edit the very same deck by hand, even at the same time.
+</p>
 
-> 🚧 Early development: Veloce runs as a local web app today; the desktop app, animation and
-> export come next. See [docs/ROADMAP.md](docs/ROADMAP.md) for where things stand.
+<p align="center">
+  <img src="docs/brand/icons/badge-status.svg" alt="status: alpha" height="22">
+  <img src="docs/brand/icons/badge-platforms.svg" alt="runs on Linux, Windows and macOS" height="22">
+  <img src="docs/brand/icons/badge-mcp.svg" alt="for agents: MCP server" height="22">
+  <img src="docs/brand/icons/badge-node.svg" alt="node 22+" height="22">
+  <a href="LICENSE"><img src="docs/brand/icons/badge-license.svg" alt="license: Apache 2.0" height="22"></a>
+</p>
+
+> **Alpha.** Veloce runs as a local web app today and decks are saved as `.veloce` files. The
+> desktop app, motion graphics and export come next. See [docs/ROADMAP.md](docs/ROADMAP.md) for
+> where things stand.
 
 ## Why Veloce
 
-- **AI-first, not AI-bolted-on:** the editor and AI agents use the exact same operations, so
-  you can watch an agent build a deck live, edit alongside it, and undo only your own changes.
-- **Structure, not pixels:** slides are frames that lay themselves out (stacks and grids), so
-  edits reflow instead of overlapping, and a theme restyles everything at once.
-- **Animated by design:** motion-graphics animation, from calm to absurd, without lag; you or
-  your agent pick the level, and one deterministic timeline drives everything (Phases 4–5).
-- **Extensible:** element types come from plugins that follow one public contract.
-- **Your own format:** `.veloce` files are open, versioned zips you can keep and share.
+- <img src="docs/brand/icons/ai-first.svg" alt="" width="20" height="20" align="top"> **AI-first, not AI-bolted-on:** the editor and AI agents use the exact same
+  operations, so you can watch an agent build a deck live, edit alongside it, and undo only your
+  own changes.
+- <img src="docs/brand/icons/layout.svg" alt="" width="20" height="20" align="top"> **Structure, not pixels:** slides are frames that lay themselves out (stacks and
+  grids), so edits reflow instead of overlapping, and a theme restyles everything at once.
+- <img src="docs/brand/icons/motion.svg" alt="" width="20" height="20" align="top"> **Animated by design:** motion-graphics animation, from calm to absurd, without
+  lag. You or your agent pick the level, and one deterministic timeline drives everything.
+- <img src="docs/brand/icons/plugin.svg" alt="" width="20" height="20" align="top"> **Extensible:** element types come from plugins that follow one public contract.
+- <img src="docs/brand/icons/format.svg" alt="" width="20" height="20" align="top"> **Your own format:** `.veloce` files are open, versioned zips you can keep and
+  share.
 
 ## What works today
 
 - **For agents (MCP):** build whole slides in one call, batch edits, themes, images, lint
   feedback after every change, slide previews, reusable components and slide layouts,
-  sections, footers and slide numbers, and undo of their own work.
+  sections, footers and slide numbers, slide transitions and morph, and undo of their own work.
 - **In the editor:** slides, layers and an inspector; direct manipulation (move, resize,
   rotate, crop, snapping), auto layout and free layers; rich text; themes, colors and
   gradients; images and fonts; a menu bar, command palette and Preferences; components and
   slide layouts; slide numbers, footers and sections; history with per-person undo; versions
   kept inside the file; and live lint.
+- **Motion:** animations with motion levels (calm to absurd), effect presets, layout
+  animations and stagger, Animate this slide or the whole deck from one pacing, slide
+  transitions and morph, and Present.
 
 ## Quick start
 
