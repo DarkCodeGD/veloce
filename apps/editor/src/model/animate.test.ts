@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   addEffect,
+  animateSlide,
   changeEffect,
   deletePreset,
   describeWithPresets,
@@ -399,5 +400,23 @@ describe("layout: one by one, make room, close the gap (D120)", () => {
     );
     deck = apply(deck, setStagger(a1(), null));
     expect(a1()).not.toHaveProperty("stagger");
+  });
+});
+
+describe("Animate this slide (D121)", () => {
+  it("replaces the slide's animations with the engine's, as one step, punching the selection", () => {
+    const deck = {
+      ...deckWith([{ id: "old", target: "box", effect: { name: "pulse" } }]),
+      motionLevel: "lively" as const,
+    };
+    const slide = deck.slides[0] as (typeof deck.slides)[number];
+    const { command, moving } = animateSlide(deck, slide, "focus", ["box"], registry.hasEffect);
+    expect(command.label).toBe("Animate slide");
+    expect(moving).toBe(2);
+    const after = apply(deck, command).slides[0]?.animations ?? [];
+    expect(after.some((a) => a.id === "old")).toBe(false);
+    // Focus: both in as the slide appears, then a click punches the selected box.
+    expect(after.at(-1)).toMatchObject({ target: "box", effect: { name: "pulse" } });
+    expect(after.at(-1)?.trigger).toBeUndefined(); // on click
   });
 });

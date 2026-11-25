@@ -3353,3 +3353,65 @@ animations (FLIP) and staggering in reading order" and D103 §7.
 9. **Agents:** `space` and `stagger` work through `apply_ops` today (schema descriptions,
    errors with the fix); docs, choreography that uses them, and the real-agent retest
    come with the MCP animation item (D117 §9).
+
+## D121 — Choreography from intent: "Animate this slide", from roles, the level and a pacing
+
+**Status:** Accepted (2026-11-25). Phase 4, making D104 §3 and D111 §7 concrete.
+
+1. **The intent is small and structured** (the maintainer's choice, over a button with no
+   intent, or free text parsed by keyword rules): `pacing` and `emphasize`.
+   - `auto` (the editor calls it "All in"): everything enters as the slide appears,
+     cascading `$motion.fast` apart.
+   - `build`: the title and the scenery come with the slide, then one point per click, a
+     list one item per click.
+   - `focus`: everything enters, then a click punches the main point.
+   - `emphasize`: the layers to punch, which the editor takes from the selection.
+
+   **Why not free text:** rules break on phrasing and only work in English, and agents can
+   already write structure. **Why not intent-less:** an agent couldn't ask for one point
+   per click without editing the result.
+2. **A pure core engine** (`choreography.ts`): `choreograph(deck, slide, intent)` returns
+   ordinary animations, and `replaceAnimationsOps` swaps them in as one transaction, so it's
+   one undo step and everything stays editable. The editor calls it now; MCP calls the same
+   function with the MCP animation item (golden rule 1). There's no AI and no key. The same
+   slide and intent give the same result.
+3. **How it reads a slide:**
+   - **Units in reading order:** a layer; a card (a frame with a fill, stroke or shadow,
+     animated whole); or a list (a stack or grid of two or more alike children, which
+     staggers). Plain frames are see-through.
+   - **Roles:** `title` (the first display, h1 or h2 heading); `number` (a short, large
+     figure such as "42%" or "$4.2M"); `body`; `visual` (images and plugin elements);
+     `accent` (shapes); `backdrop` (a free layer covering half the stage or more). A card or
+     list takes the strongest role inside it.
+   - **Main point:** the first number, else the first visual, else the first body text.
+4. **The level decides how much moves** (D111 §7's table, read from `MOTION_LEVEL_SCALES`):
+   - **Reach:** calm moves the title and the main point only; subtle moves content; lively
+     adds accents; intense and absurd move everything.
+   - **Effects-per-layer cap:** it bounds entrance + emphasis + loop.
+   - **Ambient:** lively's main point drifts, intense's figures and visuals drift, and
+     absurd's everything drifts.
+   - **Entrances:** each level has its own per role, from calm's fades to absurd's flips. A
+     figure counts up from lively on. A list starts from the center at intense and shuffles
+     at absurd.
+   - **Calm brings a list in whole:** one thing moving, not one per item. Found by the test
+     over the reference decks: a bulleted main point made calm move as much as absurd.
+   - **A punch at one effect per layer:** under `focus`, the punched layer enters on the
+     click instead of getting a second effect. Under the other pacings it gets no extra
+     punch, and a note says so.
+5. **It always applies:**
+   - An effect that isn't installed becomes a plain fade.
+   - Count-up goes per item when the items are text; a card enters like a visual.
+   - Names in `emphasize` that aren't on the slide are skipped, with a note.
+   - Notes (what stayed still and why) come back for people and agents.
+6. **Editor:** an **Animate this slide** section under Motion: Pacing, a hint saying what
+   it does and which selected layers get the punch, and **Animate slide**. The button reads
+   **Replace animations** when the slide already has some. A toast says how many layers
+   move, with Undo.
+7. **Tests:** core (roles, reach per level, ambient, count-up, fallback, the three pacings,
+   emphasis, one undo step). Every slide of the visual reference decks at every level and
+   pacing applies through the real registry and validates, and calm never moves more than
+   absurd. The Animate panel end to end in Chromium.
+8. **Not yet:**
+   - The MCP call, docs and the real-agent retest come with the MCP animation item.
+   - Transitions between slides come with their own item.
+   - Exits are left out: a slide's content leaves when the slide changes.

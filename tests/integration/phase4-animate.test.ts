@@ -232,6 +232,24 @@ describe.skipIf(problem !== null)(
       expect(h.pageErrors).toEqual([]);
     });
 
+    // ── Animate this slide (D121) ─────────────────────────────────────────────────────
+
+    it("animates the whole slide in one click, and undoes it in one step", async () => {
+      const before = animations().length;
+      await page.keyboard.press("Escape");
+      await panel().getByRole("combobox", { name: "Pacing" }).click();
+      await page.getByRole("option", { name: "Build", exact: true }).click();
+      await panel().getByText("one point per click").waitFor();
+      await panel().getByRole("button", { name: "Replace animations" }).click();
+      await page.getByText(/Animated the slide: \d+ layers move/).waitFor();
+      await expect.poll(() => animations().some((a) => a.stagger !== undefined)).toBe(false);
+      await expect.poll(() => animations().length).toBeGreaterThan(0);
+      expect(animations().every((a) => a.id.startsWith("an"))).toBe(true);
+      await page.keyboard.press("Control+z");
+      await expect.poll(() => animations().length).toBe(before);
+      expect(h.pageErrors).toEqual([]);
+    });
+
     it("goes back to Design with the inspector as it was", async () => {
       await page.getByRole("tab", { name: "Design" }).click();
       await expect.poll(() => panel().count()).toBe(0);

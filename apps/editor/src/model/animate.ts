@@ -10,6 +10,8 @@ import {
   type AnimationSpace,
   type ApplyContext,
   animationProblem,
+  type ChoreographyPacing,
+  choreograph,
   clearOverridesPatch,
   createId,
   type Deck,
@@ -25,6 +27,7 @@ import {
   presetOf,
   presetOverrides,
   presetTitle,
+  replaceAnimationsOps,
   resolveTime,
   type Slide,
   type STAGGER_FROM,
@@ -508,3 +511,42 @@ export const galleryPreview = (layerIds: readonly string[], effect: EffectSummar
     trigger: "withPrevious",
     effect: { name: effect.name },
   }));
+
+// ── Animate this slide (D121) ─────────────────────────────────────────────────────────
+
+/** The pacings, as the panel offers them. */
+export const PACINGS: ReadonlyArray<{ value: ChoreographyPacing; label: string; hint: string }> = [
+  { value: "auto", label: "All in", hint: "Everything comes in as the slide appears, cascading." },
+  { value: "build", label: "Build", hint: "The title with the slide, then one point per click." },
+  {
+    value: "focus",
+    label: "Focus",
+    hint: "Everything comes in, then a click punches the key point.",
+  },
+];
+
+export interface AnimatedSlide {
+  command: Command;
+  /** How many layers move, for the toast. */
+  moving: number;
+  notes: string[];
+}
+
+/**
+ * "Animate this slide": the choreography engine's animations in place of the slide's own,
+ * as one undo step. `emphasize` is the selection: the layers to punch.
+ */
+export function animateSlide(
+  deck: Deck,
+  slide: Slide,
+  pacing: ChoreographyPacing,
+  emphasize: readonly string[],
+  hasEffect: (name: string) => boolean,
+): AnimatedSlide {
+  const result = choreograph(deck, slide, { pacing, emphasize }, { hasEffect });
+  return {
+    command: { label: "Animate slide", ops: replaceAnimationsOps(slide, result.animations) },
+    moving: result.moving,
+    notes: result.notes,
+  };
+}

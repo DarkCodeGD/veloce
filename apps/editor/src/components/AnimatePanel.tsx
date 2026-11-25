@@ -2,7 +2,8 @@
  * The Animate panel (D106 depths 1 and 2, D118): the right panel of the Animate workspace.
  *
  * - **Motion**: the deck's motion level, and Play, which plays the slide on the canvas with
- *   the clicks taken for you.
+ *   the clicks taken for you. **Animate this slide** (D121): the choreography engine
+ *   animates the whole slide from a pacing, punching the selected layers.
  * - **Steps**: the slide's animations as they'll play (as the slide appears, then click by
  *   click). A row selects its animation and its layer.
  * - **Animation**: the selected animation, tuned with a few plain controls (effect, start,
@@ -49,6 +50,7 @@ import {
   Spline,
   Square,
   Trash,
+  WandSparkles,
   X,
 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -57,6 +59,7 @@ import { playOnCanvas, stopOnCanvas, useCanvasPlayback } from "../canvas-playbac
 import { registry } from "../editor-context.js";
 import {
   addEffect,
+  animateSlide,
   changeEffect,
   deletePreset,
   describeWithPresets,
@@ -65,6 +68,7 @@ import {
   effectSuits,
   galleryPreview,
   moveAnimation,
+  PACINGS,
   removeAnimations,
   SPEEDS,
   type StaggerFrom,
@@ -84,7 +88,7 @@ import {
   updatePreset,
 } from "../model/animate.js";
 import { propFields } from "../model/schema-fields.js";
-import type { SlideIndex } from "../model/slide-index.js";
+import { nodeLabel, type SlideIndex } from "../model/slide-index.js";
 import { Group, humanize, NumberField, Section, SelectField, ToggleField } from "./fields.js";
 import { SavePresetDialog } from "./SavePresetDialog.js";
 
@@ -150,6 +154,7 @@ export function AnimatePanel({ deck, slide, index, selection, onSelect }: Props)
   return (
     <section className="inspector animate-panel" aria-label="Animate">
       <MotionSection deck={deck} slide={slide} playing={playing} />
+      <ChoreographySection deck={deck} slide={slide} layers={layers} />
       <Section title="Steps">
         {steps.length === 0 ? (
           <p className="inspector-hint">
@@ -227,6 +232,67 @@ function MotionSection({
         {MOTION_LEVEL_SCALES[level].summary}
         {slide.motionLevel && ` This slide moves at ${slide.motionLevel}.`}
       </p>
+    </Section>
+  );
+}
+
+// ── Animate this slide (D121) ─────────────────────────────────────────────────────────
+
+/**
+ * One click animates the whole slide: the choreography engine reads each layer's role and
+ * the level, the pacing says when things come in, and the selected layers get the punch.
+ * It replaces the slide's animations as one undo step; everything it writes stays editable.
+ */
+function ChoreographySection({
+  deck,
+  slide,
+  layers,
+}: {
+  deck: Deck;
+  slide: Slide;
+  layers: Node[];
+}) {
+  const [pacing, setPacing] = useState<(typeof PACINGS)[number]["value"]>("auto");
+  const [busy, setBusy] = useState(false);
+  const hasAnimations = (slide.animations?.length ?? 0) > 0;
+  const punched = layers.map(nodeLabel);
+
+  const animate = async () => {
+    setBusy(true);
+    const ids = layers.map((n) => n.id);
+    const { command, moving } = animateSlide(deck, slide, pacing, ids, registry.hasEffect);
+    const toast =
+      moving === 0
+        ? "Nothing on this slide moves at this level"
+        : `Animated the slide: ${moving} ${moving === 1 ? "layer moves" : "layers move"}`;
+    await run(command, { undoToast: toast });
+    setBusy(false);
+  };
+
+  return (
+    <Section title="Animate this slide">
+      <SelectField
+        label="Pacing"
+        value={pacing}
+        defaultValue="auto"
+        options={PACINGS.map(({ value, label }) => ({ value, label }))}
+        onCommit={(v) => setPacing((v as typeof pacing | null) ?? "auto")}
+      />
+      <p className="inspector-hint">
+        {PACINGS.find((p) => p.value === pacing)?.hint}{" "}
+        {punched.length > 0
+          ? `Punches ${punched.join(", ")}.`
+          : "Select a layer first to give it the punch."}
+      </p>
+      <button
+        type="button"
+        className="button button-primary animate-slide"
+        disabled={busy}
+        onClick={() => void animate()}
+      >
+        <WandSparkles size={14} aria-hidden />
+        {hasAnimations ? "Replace animations" : "Animate slide"}
+      </button>
     </Section>
   );
 }

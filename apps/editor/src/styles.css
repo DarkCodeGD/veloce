@@ -5052,6 +5052,13 @@ html.is-scrubbing * {
   padding: 0 10px;
 }
 
+/* Animate this slide (D121): the one-click way in, full width under its pacing. */
+.animate-slide {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+}
+
 /* The steps list: one group per step, a row per animation. */
 .animate-steps {
   display: grid;

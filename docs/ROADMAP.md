@@ -32,11 +32,11 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-25
-- **Next:** choreography from intent, then slide transitions and morph. Done in Phase 4: visual regression tests (D102), the
+- **Next:** slide transitions and morph. Done in Phase 4: visual regression tests (D102), the
   motion slot (D103). The animation direction is set: motion levels and choreography
-  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120);
+  (D104), our own timeline with proven libraries drawing (D105), three UI depths (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide (D121);
   phases after 4 were renumbered when Motion graphics became Phase 5.
-- **State:** `pnpm check` is green (1155 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1170 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 16 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -303,10 +303,9 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
 - [x] Layout animations: Make room / Close the gap in stacks and grids (FLIP as motion
       offsets on the rest layout, measured once per state) and a frame's children one by
       one in reading order (D120)
-- [ ] Choreography from intent: a rule-based engine turns an intent into animations from
-      each layer's role, reading order, the level and the tokens; the level's reach,
-      effects per layer and ambient decide how much moves; the editor's "Animate this
-      slide" and MCP call the same engine (D104 §3, D111 §7)
+- [x] Choreography from intent: "Animate this slide" with a pacing (all in, build, focus)
+      and the selection punched, from each layer's role, reading order and the level's
+      reach, effects per layer and ambient; pure core engine, MCP call with the MCP item (D121)
 - [ ] Slide transitions (fade, push, zoom) + **morph** (nodes matched by their match key);
       a theme's signature transition as a `$motion` token (D111 §6)
 - [ ] Motion lint: a slide doing far more than its level says (more layers, effects or loops
@@ -317,11 +316,11 @@ and `$motion` tokens ship as **one** format version, v3 (D103 §7, D104).
       synced, laser pointer; its slide overview grouped by sections (D97); reduce motion
       plays the calm version (D104 §4)
 - [ ] Animate workspace, the rest (D106, D118 §7): the level in the New deck dialog and
-      per slide; editing the theme's `$motion` values (D111 §6); Animate this slide;
+      per slide; editing the theme's `$motion` values (D111 §6);
       transition thumbnails; dragging steps to reorder; full control (the timeline panel,
       with keyframes); the quick way in from Design (right-click → Animate…, a badge on
       animated layers). Present workspace: rehearse in presenter view
-- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent, the motion level
+- [ ] MCP: `set_animations(slideId, steps)`, choreography from intent (`choreograph`, D121 §2), the motion level
       (docs give each level's summary, D111 §7), effects and the deck's saved presets
       layout (`space`, `stagger`) (D117 §9, D119 §9, D120 §9), `depth` and `perspective` in node input,
       docs and outlines (D112 §7), `render_preview` at a step/time; retested with a real agent (CLAUDE.md)
