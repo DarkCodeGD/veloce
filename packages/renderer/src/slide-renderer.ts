@@ -281,17 +281,29 @@ export class SlideRenderer {
   /**
    * Where each layer's box sits in its parent frame (stage pixels, motion left out) with the
    * layers in `absent` taken out of the layout (D120): core measures each layout state of a
-   * slide once, so the layers around one that joins or leaves can glide between them. The
-   * slide is laid out for the measurement and put back at once; nothing is re-rendered.
+   * slide once, so the layers around one that joins or leaves can glide between them. Their
+   * frame keeps its size. The slide is laid out for the measurement and put back at once;
+   * nothing is re-rendered.
    */
   measureLayout(absent: ReadonlySet<string>): Map<string, { x: number; y: number }> {
+    // The frames around the layers that go are held at their rest size while measuring, as
+    // they're drawn while playing: only those layers' siblings move, never the frame or
+    // anything around it (a re-centred slide would drag its title along).
+    const pinned = new Map<HTMLElement, { width: string; height: string }>();
     const hidden: { el: HTMLElement; display: string }[] = [];
     for (const id of absent) {
       const m = this.#mounted.get(id);
       if (!m) continue;
+      const frame = m.el.parentElement?.closest<HTMLElement>("[data-node-id]");
+      if (frame && !pinned.has(frame)) {
+        pinned.set(frame, { width: frame.style.width, height: frame.style.height });
+        const [width, height] = [frame.offsetWidth, frame.offsetHeight]; // border-box
+        frame.style.width = `${width}px`;
+        frame.style.height = `${height}px`;
+      }
       hidden.push({ el: m.el, display: m.el.style.display });
-      m.el.style.display = "none";
     }
+    for (const entry of hidden) entry.el.style.display = "none";
     const boxes = new Map<string, { x: number; y: number }>();
     try {
       for (const [id, m] of this.#mounted) {
@@ -302,6 +314,10 @@ export class SlideRenderer {
       }
     } finally {
       for (const { el, display } of hidden) el.style.display = display;
+      for (const [frame, { width, height }] of pinned) {
+        frame.style.width = width;
+        frame.style.height = height;
+      }
     }
     return boxes;
   }

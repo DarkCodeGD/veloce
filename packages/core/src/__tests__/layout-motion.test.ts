@@ -66,7 +66,7 @@ describe("layers that take space only while they're there (D120)", () => {
     expect(compiled.steps[1]?.duration).toBe(300 + NORMAL);
   });
 
-  it("makes room: it's out until it enters, then the others glide aside", () => {
+  it("makes room: it's out until its click, the others glide aside, then it enters", () => {
     const fadeIn: Animation = {
       id: "in",
       target: "b",
@@ -81,11 +81,13 @@ describe("layers that take space only while they're there (D120)", () => {
     // Before the click the list is drawn without b: c sits where b would be.
     expect(at(500).get("c")?.motion).toEqual({ y: -100 });
     expect(at(500).get("b")?.motion.opacity).toBe(0);
-    // On the click b takes its place at once and fades in; c glides back down.
-    expect(at(1000, [1000]).get("b")?.motion).toEqual({ opacity: 0 });
-    expect(at(1150, [1000]).get("b")?.motion.opacity).toBeCloseTo(0.5);
+    // On the click c glides back down, while b waits hidden in its place (no overlap)…
     expect(at(1000 + NORMAL / 2, [1000]).get("c")?.motion.y).toBeCloseTo(-50, 0);
+    expect(at(1000 + NORMAL / 2, [1000]).get("b")?.motion.opacity).toBe(0);
     expect(at(1000 + NORMAL, [1000]).get("c")?.motion).toEqual({});
+    // …then fades in, once the room is open.
+    expect(at(1000 + NORMAL + 150, [1000]).get("b")?.motion.opacity).toBeCloseTo(0.5);
+    expect(compiled.steps[1]?.duration).toBe(NORMAL + 300);
   });
 
   it("adds layout's offset to a layer's own motion, and tells the compositor how long", () => {

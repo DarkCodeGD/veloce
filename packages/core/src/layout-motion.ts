@@ -73,13 +73,18 @@ export const staggerSpread = (targets: readonly { delay: number }[]): number =>
 
 /**
  * Where each layer's box sits in its parent frame, in stage pixels, with the layers in
- * `absent` taken out of the layout. Layers not in the map are out (or not drawn).
+ * `absent` taken out of the layout. Layers not in the map are out (or not drawn). The frames
+ * around the absent layers keep their rest size, as they're drawn while playing, so only
+ * those layers' siblings move: never the frame, or what's around it.
  */
 export type LayoutMeasurer = (
   absent: ReadonlySet<string>,
 ) => ReadonlyMap<string, { x: number; y: number }>;
 
-/** A layer joining (`makeRoom` starts) or leaving (`collapse` ends) the layout. */
+/**
+ * A layer joining (as its `makeRoom` animation's room opens, a glide before it plays) or
+ * leaving (once its `collapse` animation ends) the layout.
+ */
 export interface LayoutEvent {
   step: number;
   /** Milliseconds from its step's start. */
@@ -102,8 +107,11 @@ export interface CompiledLayout {
   ease: EasingFunction;
 }
 
-/** The layout changes in a slide's schedule, in play order. */
-export function layoutEvents(steps: readonly Step[]): LayoutEvent[] {
+/**
+ * The layout changes in a slide's schedule, in play order. A layer that makes room joins a
+ * glide before its animation plays (`scheduleSlide` starts it that late).
+ */
+export function layoutEvents(steps: readonly Step[], glide: number): LayoutEvent[] {
   const events: (LayoutEvent & { order: number })[] = [];
   let order = 0;
   steps.forEach((step, index) => {
@@ -112,7 +120,7 @@ export function layoutEvents(steps: readonly Step[]): LayoutEvent[] {
       const joins = animation.space === "makeRoom";
       events.push({
         step: index,
-        time: joins ? start : end,
+        time: joins ? start - glide : end,
         layer: animation.target,
         joins,
         order,
@@ -134,7 +142,8 @@ export function compileLayout(
   measure: LayoutMeasurer | undefined,
   tokens: MotionTokens,
 ): CompiledLayout | null {
-  const events = layoutEvents(steps);
+  const glide = resolveTime(LAYOUT_GLIDE.duration, tokens);
+  const events = layoutEvents(steps, glide);
   if (events.length === 0) return null;
 
   // Which layers are out in each state: one before any event, then one after each.
@@ -185,7 +194,7 @@ export function compileLayout(
   return {
     events,
     offsets,
-    glide: resolveTime(LAYOUT_GLIDE.duration, tokens),
+    glide,
     ease: easingFunction(resolveEasing(LAYOUT_GLIDE.easing, tokens)),
   };
 }
@@ -213,7 +222,8 @@ function eventTimes(layout: CompiledLayout, clicks: readonly number[]): number[]
 
 /**
  * Where layout puts a layer at a moment, as an offset from its rest position, and whether
- * it's out of the layout (then it's hidden). Undefined: layout never moves it.
+ * it's hidden: out of the layout, or just joined and waiting for the room to open (its own
+ * entrance plays once it has). Undefined: layout never moves it.
  */
 export function layoutAt(
   layout: CompiledLayout,
@@ -227,6 +237,7 @@ export function layoutAt(
   let to: Offset = from;
   let start = Number.NEGATIVE_INFINITY;
   let state = 0;
+  let waitsUntil = Number.NEGATIVE_INFINITY;
   const at = (time: number): Offset => {
     const progress = layout.glide > 0 ? Math.min(1, Math.max(0, (time - start) / layout.glide)) : 1;
     const eased = start === Number.NEGATIVE_INFINITY ? 1 : layout.ease(progress);
@@ -241,15 +252,17 @@ export function layoutAt(
       from = now; // out now: it stays where it was, hidden
       to = now;
     } else if ((offsets[state - 1] ?? null) === null) {
-      from = next; // it just joined: in place at once, while the others glide
+      from = next; // it just joined: in place, hidden while the others glide aside
       to = next;
+      waitsUntil = time + layout.glide;
     } else {
       from = now; // glides from wherever it is (even mid-glide) to its new place
       to = next;
     }
     start = time;
   }
-  return { ...at(position.time), out: (offsets[state] ?? null) === null };
+  const out = (offsets[state] ?? null) === null || position.time < waitsUntil;
+  return { ...at(position.time), out };
 }
 
 /** When layout stops moving each layer it moves, given the clicks so far. */

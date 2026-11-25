@@ -308,7 +308,9 @@ export function scheduleSlide(
     const step = steps.at(-1) as Step;
     const from: number =
       previous === null ? 0 : trigger === "afterPrevious" ? previous.end : previous.start;
-    const start: number = from + resolveTime(animation.delay ?? 0, tokens);
+    // A layer that makes room plays once the others have glided aside (D120): no overlap.
+    const room = animation.space === "makeRoom" ? glide : 0;
+    const start: number = from + resolveTime(animation.delay ?? 0, tokens) + room;
     const forever = animation.repeat === "forever";
     const plays = typeof animation.repeat === "number" ? animation.repeat : 1;
     const duration = animation.duration ?? defaults?.(animation)?.duration ?? DEFAULT_DURATION;
@@ -318,14 +320,8 @@ export function scheduleSlide(
     const end = start + spread + resolveTime(duration, tokens) * plays;
     const scheduled: ScheduledAnimation = { animation, start, end, forever };
     step.animations.push(scheduled);
-    // The others glide after a layer joins or leaves the layout: the step waits for them.
-    const glides =
-      animation.space === "makeRoom"
-        ? start + glide
-        : animation.space === "collapse"
-          ? end + glide
-          : 0;
-    step.duration = Math.max(step.duration, end, glides);
+    // The others glide after a layer leaves the layout: the step waits for them.
+    step.duration = Math.max(step.duration, animation.space === "collapse" ? end + glide : end);
     previous = scheduled;
   }
   return steps;

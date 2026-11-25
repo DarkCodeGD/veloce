@@ -69,7 +69,10 @@ function build(): Deck {
     slides: [
       createSlide({
         id: "collapse",
-        children: [stack("list1", ["a1", "b1", "c1"])],
+        children: [
+          element("text", { content: "Title" }, { id: "title" }),
+          stack("list1", ["a1", "b1", "c1"]),
+        ],
         animations: [fade("out", "b1", true, { space: "collapse" })],
       }),
       createSlide({
@@ -164,10 +167,11 @@ describe.skipIf(problem !== null)("Phase 4: layout animations (D120)", { timeout
     const clock = await drawn("collapse", { step: 1, time: mid, playback: "clock" });
     const compositor = await drawn("collapse", { step: 1, time: mid, playback: "compositor" });
     const after = await drawn("collapse", { step: 1, time: 200 + glide + 50, playback: "clock" });
-    // Where the smaller layout puts it: right under a (100 px + the 20 px gap), the shorter
-    // list re-centred on the slide as the real layout would, so a moves down half the gap.
-    expect((after.c1?.top ?? 0) - (after.a1?.top ?? 0)).toBeCloseTo(120, 0);
-    expect(after.a1?.top).toBeCloseTo((rest.a1?.top ?? 0) + 60, 0);
+    // Into b's place: the list keeps its size and place (its centred slide doesn't re-centre
+    // it), so only what's below b moves, and the title above it never does.
+    expect(after.c1?.top).toBeCloseTo(rest.b1?.top ?? 0, 0);
+    expect(after.a1?.top).toBeCloseTo(rest.a1?.top ?? 0, 1);
+    expect(after.title?.top).toBeCloseTo(rest.title?.top ?? 0, 1);
     expect(after.b1?.opacity).toBe(0);
     const [from, to] = [rest.c1?.top ?? 0, after.c1?.top ?? 0];
     expect(clock.c1?.top).toBeLessThan(from - 1);
@@ -175,17 +179,20 @@ describe.skipIf(problem !== null)("Phase 4: layout animations (D120)", { timeout
     expect(Math.abs((compositor.c1?.top ?? 0) - (clock.c1?.top ?? 0))).toBeLessThan(0.5);
   });
 
-  it("makes room: the stack starts closed up, and opens as the layer comes in", async () => {
+  it("makes room: the stack starts closed up, opens, then the layer comes in", async () => {
     const rest = await drawn("room");
     const start = await drawn("room", { step: 0, time: 0, playback: "clock" });
     expect(start.b2?.opacity).toBe(0);
-    expect((start.c2?.top ?? 0) - (start.a2?.top ?? 0)).toBeCloseTo(120, 0); // closed up
+    expect(start.a2?.top).toBeCloseTo(rest.a2?.top ?? 0, 1); // the list stays put…
+    expect(start.c2?.top).toBeCloseTo(rest.b2?.top ?? 0, 0); // …closed up where b goes
     const mid = await drawn("room", { step: 1, time: glide / 2, playback: "compositor" });
-    const gap = (mid.c2?.top ?? 0) - (mid.a2?.top ?? 0);
-    expect(gap).toBeGreaterThan(121);
-    expect(gap).toBeLessThan(239);
-    const end = await drawn("room", { step: 1, time: glide + 50, playback: "clock" });
-    expect(end.c2?.top).toBeCloseTo(rest.c2?.top ?? 0, 1);
+    expect(mid.c2?.top).toBeGreaterThan((rest.b2?.top ?? 0) + 1);
+    expect(mid.c2?.top).toBeLessThan((rest.c2?.top ?? 0) - 1);
+    expect(mid.b2?.opacity).toBe(0); // waits for the room: nothing overlaps
+    const open = await drawn("room", { step: 1, time: glide + 100, playback: "clock" });
+    expect(open.c2?.top).toBeCloseTo(rest.c2?.top ?? 0, 1);
+    expect(open.b2?.opacity).toBeCloseTo(0.5, 1); // halfway through its 200 ms fade
+    const end = await drawn("room", { step: 1, time: glide + 250, playback: "clock" });
     expect(end.b2?.opacity).toBe(1);
   });
 

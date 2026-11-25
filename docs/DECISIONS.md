@@ -3303,7 +3303,10 @@ animations (FLIP) and staggering in reading order" and D103 §7.
    present, D83 §5). A layer that's out is hidden (opacity 0, whatever its own animation
    says), and the layers around it are drawn where the smaller layout puts them, as motion
    offsets **added** to their own motion (FLIP: measure both layouts, animate the
-   difference). **Why not reflow:** display changes are main-thread layout that the
+   difference). **Only the layer's siblings move:** its frame keeps its rest size and place
+   while measuring, as it's drawn while playing. (The first cut measured the real smaller
+   layout, so a centred slide re-centred the shorter list and its title glided too: correct
+   pixels, wrong feel. Found building the sample deck.) **Why not reflow:** display changes are main-thread layout that the
    compositor can't follow (D107), a reflow per state change costs a layout pass, and
    seeking would depend on DOM history. As transforms, a glide plans onto the compositor
    like any motion (`planMotion` samples it), seeking stays pure, and nothing reflows per
@@ -3315,13 +3318,15 @@ animations (FLIP) and staggering in reading order" and D103 §7.
    relative to its parent frame, untransformed (`offsetLeft/Top`, so motion, rotation and
    zoom don't count, and a child's offset is in its frame's axes, which is where the
    motion slot moves it, D103 §4), with given layers taken out. The renderer's
-   `measureLayout` sets `display: none` on them, reads, and puts them back, without
-   re-rendering. `SlidePlayer` renders, then compiles, and measures again once fonts and
+   `measureLayout` holds their frames at their rest size, sets `display: none` on them,
+   reads, and puts everything back, without re-rendering. `SlidePlayer` renders, then compiles, and measures again once fonts and
    images are in (`ready`). Without a measurer (no browser), layers still go out and come
    back, but nothing glides.
 4. **The glide:** `$motion.normal` with `$motion.move` (the theme's own move, scaled by the
-   level). A joining layer is in place at once while the others glide; a glide that's
-   interrupted starts the next from wherever the layer is. Steps last until their glides
+   level). **A layer that makes room enters after the glide:** on its trigger the others
+   glide aside, and its own animation plays a glide later, so nothing overlaps (the first
+   cut played both at once, and a pop-in landed on its neighbour). It's hidden while it
+   waits. A glide that's interrupted starts the next from wherever the layer is. Steps last until their glides
    end, so seeking the next step finds them done. Events keep play order even when a click
    comes early, so every state the slide passes through is one that was measured.
 5. **Stagger:** an animation on a frame with `stagger: { each?, from? }` plays on each child
