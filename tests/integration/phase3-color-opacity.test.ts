@@ -44,6 +44,16 @@ async function build(agent: Client) {
 
 const canvasNode = (id: string) => page.locator(`.editor-canvas [data-node-id='${id}']`);
 
+/**
+ * Wait until the server stored the glow's fill, and the editor has it too: the next edit
+ * builds on what the editor shows (a new color keeps its opacity), so acting before the
+ * editor caught up would build on the old value (seen in CI).
+ */
+async function glowFill(fill: string) {
+  await expect.poll(() => h.stored("glow").props?.fill).toBe(fill);
+  await h.synced();
+}
+
 /** The glow shape's painted background color, as [r, g, b, a] (0–255, alpha 0–1). */
 async function glowPaint() {
   const css = await canvasNode("glow").evaluate((root) => {
@@ -100,29 +110,29 @@ describe.skipIf(problem !== null)("Phase 3: colors at an opacity", { timeout: 60
 
     await opacity.fill("60");
     await opacity.press("Enter");
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("$color.primary/60");
+    await glowFill("$color.primary/60");
 
     // A swatch changes the color, not the opacity; the picked swatch shows as on.
     const accent = page.getByRole("button", { name: "Fill: accent" });
     await accent.click();
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("$color.accent/60");
+    await glowFill("$color.accent/60");
     await expect.poll(() => accent.getAttribute("aria-pressed")).toBe("true");
 
     // Arrow keys nudge; 100% is the plain token again.
     await opacity.press("ArrowUp");
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("$color.accent/61");
+    await glowFill("$color.accent/61");
     await opacity.fill("100");
     await opacity.press("Enter");
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("$color.accent");
+    await glowFill("$color.accent");
 
     // A typed hex takes the opacity as its alpha byte.
     const hex = page.getByRole("textbox", { name: "Fill", exact: true });
     await hex.fill("#ff3366");
     await hex.press("Enter");
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("#ff3366");
+    await glowFill("#ff3366");
     await opacity.fill("50");
     await opacity.press("Enter");
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("#ff336680");
+    await glowFill("#ff336680");
     expect(h.pageErrors).toEqual([]);
   });
 
@@ -131,7 +141,7 @@ describe.skipIf(problem !== null)("Phase 3: colors at an opacity", { timeout: 60
     await hex.fill("accent");
     await hex.press("Enter");
     // Typed without an opacity: it keeps the current one (50%, from the last test).
-    await expect.poll(() => h.stored("glow").props?.fill).toBe("$color.accent/50");
+    await glowFill("$color.accent/50");
     await expect.poll(() => hex.inputValue()).toBe("accent");
   });
 
