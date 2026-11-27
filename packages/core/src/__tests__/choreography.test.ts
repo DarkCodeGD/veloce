@@ -359,6 +359,39 @@ describe("agents' second animation test (D126)", () => {
     expect(steps.slice(1).map((step) => step[0])).toEqual(["body", "art", "star"]);
   });
 
+  it("reads vectors like shapes and lines as accents; a drawing of them is one visual (D127)", () => {
+    const at = (x: number, y: number) => ({ positioning: "free" as const, position: { x, y } });
+    const s = slide([
+      text("title", "How it flows", "h1"),
+      element("vector", { d: "M0 0 L10 10" }, { id: "logo", width: 400, height: 400 }),
+      element("vector", { d: "M0 0 L10 10" }, { id: "icon", width: 48, height: 48 }),
+      element("line", { end: "triangle" }, { id: "arrow", width: 600, height: 40 }),
+      frame({
+        id: "diagram",
+        layout: { mode: "absolute" },
+        children: [
+          element(
+            "vector",
+            { d: "M0 0 L10 10" },
+            { id: "a", width: 200, height: 200, ...at(0, 0) },
+          ),
+          element("line", {}, { id: "link", width: 200, height: 40, ...at(200, 80) }),
+          element(
+            "vector",
+            { d: "M0 0 L10 10" },
+            { id: "b", width: 200, height: 200, ...at(400, 0) },
+          ),
+        ],
+      }),
+    ]);
+    const units = choreographyUnits(s, stage);
+    const role = (id: string) => units.find((u) => u.node.id === id);
+    expect(role("logo")?.role).toBe("visual");
+    expect(role("icon")?.role).toBe("accent");
+    expect(role("arrow")?.role).toBe("accent"); // however long: a connector isn't the hero
+    expect(role("diagram")).toMatchObject({ role: "visual", drawing: true });
+  });
+
   it("loops the visual, never reading text, below absurd", () => {
     const s = slide([
       text("title", "Black holes", "h1"),

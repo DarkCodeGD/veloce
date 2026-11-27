@@ -38,11 +38,13 @@
 
 ## What works today
 
-- **For agents (MCP):** build whole slides in one call, batch edits, themes, images, lint
-  feedback after every change, slide previews, reusable components and slide layouts,
-  sections, footers and slide numbers, slide transitions and morph, and undo of their own work.
+- **For agents (MCP):** build whole slides in one call, batch edits, themes, images, shapes,
+  lines and arrows, and drawings from SVG paths, lint feedback after every change, slide
+  previews, reusable components and slide layouts, sections, footers and slide numbers, slide
+  transitions and morph, and undo of their own work.
 - **In the editor:** slides, layers and an inspector; direct manipulation (move, resize,
-  rotate, crop, snapping), auto layout and free layers; rich text; themes, colors and
+  rotate, crop, snapping), auto layout and free layers; shapes (stars, polygons, arrows and
+  more), and lines and arrows drawn by their ends; rich text; themes, colors and
   gradients; images and fonts; a menu bar, command palette and Preferences; components and
   slide layouts; slide numbers, footers and sections; history with per-person undo; versions
   kept inside the file; and live lint.
@@ -109,7 +111,7 @@ the import or (if the architecture changed on purpose) update it and record a de
 | `packages/core`       | Deck schema, ops, transactions, undo, theme tokens, lint rules (pure TS) |
 | `packages/format`     | `.veloce` file read/write, assets, migrations, versions                  |
 | `packages/plugin-api` | Plugin contract, registry, conformance kit                               |
-| `packages/builtins`   | The built-in plugin set (text, shape, image)                             |
+| `packages/builtins`   | The built-in plugin set (text, shape, line, vector, image, effects)      |
 | `packages/renderer`   | Deck → DOM rendering, layout, motion, measurement                        |
 | `packages/images`     | Image optimization on import                                             |
 | `packages/doc-server` | Document ownership, transactions, sync, autosave                         |

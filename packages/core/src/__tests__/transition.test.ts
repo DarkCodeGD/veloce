@@ -117,6 +117,19 @@ describe("morph (D123)", () => {
     expect(end.backdrop).toBe(1);
   });
 
+  it("keeps a fitted vector's proportions while it travels; lines and stretched paths stretch (D127)", () => {
+    const path = (id: string, fit?: "stretch") =>
+      element("vector", { d: "M0 0 L10 10", ...(fit && { fit }) }, { id, matchKey: id });
+    const line = (id: string) => element("line", {}, { id, matchKey: id });
+    const p = plan(
+      [path("logo"), path("blob", "stretch"), line("rule")],
+      [path("logo"), path("blob", "stretch"), line("rule")],
+      { logo: box(0, 0), blob: box(0, 0), rule: box(0, 0) },
+    );
+    const uniform = Object.fromEntries(p.to.map((l) => [l.id, l.uniform]));
+    expect(uniform).toEqual({ logo: true, blob: false, rule: false });
+  });
+
   it("cross-fades a pair that looks different, and leaves animated layers to their own motion", () => {
     const p = plan([shape("a1", "k", "#f00")], [shape("b1", "k", "#00f")], {
       a1: box(0, 0),

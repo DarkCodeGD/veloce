@@ -10,6 +10,7 @@
  */
 import { type Color, ColorSchema, PointSchema } from "@veloce/core";
 import { cssColor, defineElement, svgElement, z } from "@veloce/plugin-api";
+import { watchBoxSize } from "./box-size.js";
 
 export const LINE_ENDS = ["none", "arrow", "triangle", "circle", "square", "bar"] as const;
 export type LineEnd = (typeof LINE_ENDS)[number];
@@ -169,19 +170,11 @@ export const lineElement = defineElement<LineProps>({
     });
     container.append(svg);
     let current = props;
-    // The box's layout size (not its drawn size: zoom and rotation don't change it).
-    let size = { width: container.clientWidth, height: container.clientHeight };
-    const draw = () => drawLine(svg, size.width, size.height, current);
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(() => {
-            const next = { width: container.clientWidth, height: container.clientHeight };
-            if (next.width === size.width && next.height === size.height) return;
-            size = next;
-            draw();
-          });
-    observer?.observe(container);
+    const draw = () => {
+      const { width, height } = box.size();
+      drawLine(svg, width, height, current);
+    };
+    const box = watchBoxSize(container, draw);
     draw();
     return {
       update(next) {
@@ -190,7 +183,7 @@ export const lineElement = defineElement<LineProps>({
       },
       seek: () => {},
       dispose() {
-        observer?.disconnect();
+        box.dispose();
         svg.remove();
       },
     };

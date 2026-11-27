@@ -27,6 +27,7 @@ import {
 import type { Deck, Slide } from "./schema/deck.js";
 import type { EasingValue, Transition, TransitionDirection } from "./schema/motion.js";
 import type { Node } from "./schema/node.js";
+import { isGraphic } from "./vector/graphics.js";
 
 /** A transition with its tokens resolved, ready to play. */
 export interface ResolvedTransition {
@@ -421,8 +422,15 @@ function byDepth(layers: readonly MorphLayer[]): MorphLayer[] {
   return [...layers].sort((a, b) => depth(a) - depth(b));
 }
 
-/** Text and images keep their proportions while they travel; boxes and shapes stretch. */
-const keepsProportions = (node: Node): boolean => node.kind === "element" && node.type !== "shape";
+/**
+ * Text, images and fitted paths keep their proportions while they travel; boxes, shapes,
+ * lines and stretched paths stretch.
+ */
+const keepsProportions = (node: Node): boolean => {
+  if (node.kind !== "element") return false;
+  if (node.type === "vector") return node.props.fit !== "stretch";
+  return !isGraphic(node);
+};
 
 /** Whether two layers draw the same (their own look, not where they sit or how big). */
 function looksSame(a: Node, b: Node): boolean {

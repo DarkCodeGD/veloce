@@ -34,7 +34,8 @@ Rules:
 - Use theme tokens ("$color.primary", "$text.h1", "$space.lg"), not raw colors and font sizes.
 - One idea per slide, short text, strong hierarchy. Detail goes in speaker notes.
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
-- Something repeats (cards, tiles, badges, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
+- Drawings and diagrams: "shape" draws rects, ellipses, triangles, polygons, stars, block arrows and chevrons; "line" draws lines and arrows between two points (connectors, timelines); "vector" draws any SVG path (icons, logos, curves). See get_docs("element/shape"), get_docs("element/line"), get_docs("element/vector").
+- Something repeats (cards, tiles, badges, an icon, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
 - Slide layouts (Title, Title and content, Two columns, Section header, Big number, Quote, and the deck's own) start a slide: upsert_slide { "slide": { "use": "Title and content", "with": { "title": "…" }, "children": [ … ] } }.
 - Motion: once the slides are built, animate them. animate_deck({ "level": "lively", "pacing": "build" }) animates every slide in one call; set_animations animates one slide, from an intent ({ "choreograph": { "pacing": "focus" } }) or as exact steps (steps[0] as the slide appears, then one step per click); upsert_slide also takes "steps". render_preview with step and time shows a moment of the motion. See get_docs("animation").
 - Transitions: every slide arrives with its theme's signature transition. Set "transition" on a slide to change it; { "type": "morph" } glides layers that share a matchKey from the slide before (a logo, a title, a hero image moving between slides). See get_docs("transitions").
@@ -42,11 +43,11 @@ Rules:
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 - Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
-Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("animation"), get_docs("transitions"), get_docs("element/text").`;
+Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("animation"), get_docs("transitions"), get_docs("element/text"), get_docs("element/vector").`;
 
 const LAYOUT = `# Layout
 
-A slide's content is a tree. **Frames** lay out their children; **elements** (text, shape, image…) draw things.
+A slide's content is a tree. **Frames** lay out their children; **elements** (text, shape, line, vector, image…) draw things.
 Describe structure and let the engine compute positions: content reflows when text changes.
 
 ## Frame layouts (\`layout\`)
@@ -102,7 +103,7 @@ const DESIGN = `# Design rules
 - **Consistency:** same layout for slides of the same kind; same title position across content slides.
 - **Color:** text on $color.background or $color.surface uses $color.text/$color.muted; text on $color.primary uses $color.on-primary. Accent colors for emphasis only.
 - **Translucent color:** add an opacity in percent to a color token: "$color.primary/15" for a tinted card, "$color.secondary/30" for a glow or glass layer. It follows theme switches; a hex with alpha doesn't.
-- **Icons:** there is no icon element yet. Don't use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font. Use shapes, numbers or short words instead.
+- **Icons:** draw them as a \`vector\` (path data in a 24-unit viewBox, the way icon sets are drawn; get_docs("element/vector")), and save one you reuse as a component. Arrows between things are a \`line\` with a head. Never use symbol characters (arrows, dingbats, emoji) as icons: the bundled fonts only cover text, so they render in a mismatched fallback font.
 - **Structure:** in a longer deck, start each part with \`section: "<name>"\` on its first slide (upsert_slide), often a Section header slide. Slide numbers and a footer line come from the deck's footer, set once with deck.setFooter (get_docs("sections")), never drawn by hand on each slide; Title and Section header slides leave it off.
 - **Numbers:** show a big number ($text.display, $color.primary) with a short caption instead of a sentence.
 - **Check your work:** fix every lint error; run render_preview on slides with images, many elements or custom layouts.`;
@@ -339,7 +340,7 @@ ${about}Slides animate in **steps**: step 0 plays as the slide appears, then eac
 3. **set_animations** \`{ "slideId", "steps": [...] }\` (or \`"steps"\` in upsert_slide's slide): exactly what you write.
 
 Pacings: \`auto\` (default): everything comes in as the slide appears, cascading; \`build\`: the heading (with its kicker and subtitle) with the slide, then one point per click (a list one item per click; a slide whose headline is a big number opens with it and its caption); \`focus\`: everything comes in, then a click punches the main point.
-Choreography leaves morph partners to the morph (no entrance on a layer arriving by morph, no loop on one leaving by it), loops only the slide's visual below \`intense\`, and treats big shapes and free-form frames of shapes (a drawing) as visuals.
+Choreography leaves morph partners to the morph (no entrance on a layer arriving by morph, no loop on one leaving by it), loops only the slide's visual below \`intense\`, and treats big shapes and vectors, and free-form frames of shapes, lines and vectors (a drawing), as visuals; lines and small icons are accents.
 
 A good flow: build the slides, animate_deck once, then hand-tune the slides that matter most (the title, the key number, the big reveal) with set_animations or animation.update. The results list every animation's ID; get_slide and the deck summary list them too.
 
@@ -550,7 +551,7 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
         .map(([rule, what]) => `- \`${rule}\`: ${what}`)
         .join(
           "\n",
-        )}\n\nVisual rules (overflow, off-canvas, overlap, contrast, small text, empty-space) need the headless renderer.\n\nHow they measure:\n- **Contrast:** each text run against what's drawn behind it, translucent layers composited down to the slide. On a gradient, only the part under the text counts. Over an image it can't be measured (check with render_preview).\n- **Overlap:** text and images covering each other. Shapes don't count (they're usually backgrounds or decoration).\n- **off-canvas:** elements, and frames that draw something (fill, stroke, shadow), reported once per box.\n- **empty-space:** an empty band over 40% of the slide's height above or below the content (unless the bands above and below are about equal: centred content is fine). Content means elements, frames that draw something, and free layers taller than 8% of the slide (a small page number doesn't count).`;
+        )}\n\nVisual rules (overflow, off-canvas, overlap, contrast, small text, empty-space) need the headless renderer.\n\nHow they measure:\n- **Contrast:** each text run against what's drawn behind it, translucent layers composited down to the slide. On a gradient, only the part under the text counts. Over an image it can't be measured (check with render_preview).\n- **Overlap:** text and images covering each other. Shapes, lines and vectors don't count (backgrounds, decoration, arrows pointing at things, icons on cards).\n- **off-canvas:** elements, and frames that draw something (fill, stroke, shadow), reported once per box.\n- **empty-space:** an empty band over 40% of the slide's height above or below the content (unless the bands above and below are about equal: centred content is fine). Content means elements, frames that draw something, and free layers taller than 8% of the slide (a small page number doesn't count).`;
   }
   if (key.startsWith("element/")) {
     const registered = registry.get(key.slice("element/".length));

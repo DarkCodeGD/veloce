@@ -36,6 +36,7 @@ import type { Theme } from "./schema/theme.js";
 import { suggest } from "./suggest.js";
 import { parseColorToken, parseTokenRef, resolveToken } from "./tokens.js";
 import { morphPartners, transitionInto } from "./transition.js";
+import { isGraphic } from "./vector/graphics.js";
 
 export type LintSeverity = "error" | "warning" | "info";
 
@@ -739,8 +740,9 @@ function visualRules(slide: Slide, m: SlideMeasurement | undefined): LintIssue[]
     if (issues.length > before) offCanvas.add(node.id);
   }
 
-  // Overlap between content elements. Shapes are excluded: they're usually backgrounds/decor.
-  const content = elements.filter((x) => x.node.type !== "shape");
+  // Overlap between content elements. Graphics are excluded: shapes are usually backgrounds
+  // or decor, lines and arrows point at things, and icons sit on cards (D127).
+  const content = elements.filter((x) => !isGraphic(x.node));
   for (let i = 0; i < content.length; i++) {
     for (let j = i + 1; j < content.length; j++) {
       const a = content[i];

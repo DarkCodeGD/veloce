@@ -3828,3 +3828,22 @@ Amends D124's single `vector` element: one roadmap item, three element kinds.
      (the other end stays put, one `node.update`); in a stack or grid, or turned, the
      layout owns the box and the end moves inside it. **Why:** that's how Figma and
      PowerPoint behave, and a box that hugs the line keeps hit-testing and snapping honest.
+   - **A vector draws in pixels too.** Core's `vector/transform.ts` fits the viewBox into
+     the box (`contain` like SVG's `xMidYMid meet`, or `stretch`) and moves the path there
+     (arcs stay arcs under a plain scale, and become curves under a turn, flip or skew).
+     The fill is a CSS-painted box covering the drawing's area, not the whole layer, so a
+     gradient spans the drawing, clipped with `clip-path: path(<fill-rule>, "…")` in
+     pixels. It redraws when the box resizes (the same `watchBoxSize` as `line`). The
+     stroke is an SVG path on top, **centered on the outline** as in SVG, not inside it
+     like a shape's. **Why centered:** a vector is often a pasted or agent-written SVG, and
+     it has to look the way it did there (outline icons are strokes on open paths, which
+     have no inside). `fillRule`, `cap` and `join` are props because SVG import needs them.
+   - **Lines and vectors are graphics, like shapes** (`isGraphic` in core): lint's
+     `overlap` skips them (an arrow points at a card, an icon sits on one), choreography
+     reads a line as an accent and a vector by its size like a shape, a free frame of them
+     is one drawing, and morph keeps a `contain` vector's proportions while a line or a
+     stretched path stretches. **Why one list:** four places named `"shape"` on their own,
+     and each new graphic type would have slipped past one of them.
+   - **`vector` isn't in the Add menu on its own.** An empty path isn't a useful insert
+     without a pen tool (parked after 1.0). People get vectors by pasting SVG; agents
+     write `d` or import an SVG.

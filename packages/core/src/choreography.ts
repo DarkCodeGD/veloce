@@ -38,6 +38,7 @@ import type { MotionLevel, Time } from "./schema/motion.js";
 import { type ElementNode, type FrameNode, isFreeLayer, type Node } from "./schema/node.js";
 import { toPlainText } from "./schema/rich-text.js";
 import { morphPartners } from "./transition.js";
+import { isGraphic } from "./vector/graphics.js";
 
 type StaggerFrom = NonNullable<NonNullable<Animation["stagger"]>["from"]>;
 
@@ -149,9 +150,10 @@ export function choreographyUnits(slide: Slide, stage: Deck["stage"]): Choreogra
 
   const elementRole = (node: ElementNode, parent: FrameNode): LayerRole => {
     if (isBackdrop(node, parent, stage)) return "backdrop";
-    // A shape big enough to look at is the slide's visual (a planet, a star); small ones
-    // (dots, rules, badges) decorate.
-    if (node.type === "shape") return sized(node, HERO_SHAPE) ? "visual" : "accent";
+    // A shape or a drawing big enough to look at is the slide's visual (a planet, a logo);
+    // small ones (dots, rules, badges, icons) decorate, and so do lines and arrows.
+    if (node.type === "line") return "accent";
+    if (isGraphic(node)) return sized(node, HERO_SHAPE) ? "visual" : "accent";
     if (node.type !== "text") return "visual";
     const style = textStyle(node) ?? "body";
     const text = textOf(node);
@@ -239,7 +241,7 @@ function isDrawing(frame: FrameNode, shown: readonly Node[]): boolean {
   let shapes = 0;
   for (const child of shown) {
     if (child.kind !== "element") return false;
-    if (child.type === "shape" || child.type === "image") shapes++;
+    if (isGraphic(child) || child.type === "image") shapes++;
     else if (child.type !== "text" || !LABELS.has(textStyle(child) ?? "body")) return false;
   }
   return shapes >= 2;

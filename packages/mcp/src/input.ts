@@ -94,7 +94,7 @@ export const ElementInputSchema = z.strictObject({
   ...nodeCommon,
   kind: z.literal("element").optional(),
   type: ElementTypeSchema.describe(
-    'Element type, e.g. "text", "shape", "image" (see list_element_types).',
+    'Element type, e.g. "text", "shape", "line", "vector", "image" (see list_element_types).',
   ),
   props: z
     .record(z.string(), z.unknown())

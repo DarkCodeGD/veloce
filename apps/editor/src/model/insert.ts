@@ -113,8 +113,11 @@ export const BUILTIN_INSERTABLES: readonly Insertable[] = [
   },
 ];
 
-/** Element types the built-in entries already cover. */
-const COVERED = new Set(["text", "shape", "line", "image"]);
+/**
+ * Element types the built-in entries already cover. `vector` isn't offered on its own: a
+ * path comes from an agent or a pasted SVG, not an empty insert (no pen tool yet, D127).
+ */
+const COVERED = new Set(["text", "shape", "line", "vector", "image"]);
 
 /**
  * Everything the Add menu offers: the built-ins, then one entry per other registered

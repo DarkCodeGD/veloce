@@ -20,6 +20,7 @@ import {
   LockOpen,
   type LucideIcon,
   MoveUpRight,
+  PenTool,
   Rows3,
   Slash,
   Square,
@@ -240,6 +241,7 @@ function LayerIcon({ node }: { node: Node }) {
       <Slash size={14} />
     );
   if (node.type === "image") return <Image size={14} />;
+  if (node.type === "vector") return <PenTool size={14} />;
   if (node.type === "shape") {
     const Icon = SHAPE_ICONS[String(node.props.shape)] ?? Square;
     return <Icon size={14} />;

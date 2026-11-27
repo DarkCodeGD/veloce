@@ -484,6 +484,34 @@ describe("lint: visual rules (with measurements)", () => {
     expect(overlap?.fix).toMatch(/width: "hug"/);
   });
 
+  it("doesn't call a line, an arrow or an icon over text an overlap (D127)", () => {
+    const annotated = createDeck({
+      title: "t",
+      slides: [
+        createSlide({
+          id: "s",
+          rootId: "root",
+          children: [
+            text("name", "Revenue"),
+            element("line", { end: "triangle" }, { id: "arrow" }),
+            element("vector", { d: "M0 0 L10 10" }, { id: "icon" }),
+            element("image", { src: "asset:x" }, { id: "photo" }),
+          ],
+        }),
+      ],
+    });
+    const m = measured("s", {
+      name: box(96, 96, 600, 60),
+      arrow: box(300, 80, 400, 80),
+      icon: box(100, 100, 50, 50),
+      photo: box(500, 96, 400, 300),
+    });
+    const overlaps = lintDeck(annotated, { measurements: new Map([["s", m]]) })
+      .filter((i) => i.rule === "overlap")
+      .map((i) => i.nodeIds.join("+"));
+    expect(overlaps).toEqual(["name+photo"]); // the image still counts
+  });
+
   it("uses the large-text threshold (3:1) for big text", () => {
     const sample = { color: "rgb(130, 130, 130)", background: "#ffffff", fontWeight: 400 };
     const lint = (fontSize: number) =>

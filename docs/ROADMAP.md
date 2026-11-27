@@ -32,11 +32,12 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-27
-- **Next:** the head-to-head block (D124: vector, icons, fonts, visual rhythm).
+- **Next:** SVG import (D127 §4), then vector docs and a real-agent retest; then icons,
+  fonts and visual rhythm (D124).
 - **Done in Phase 4:** visual regression tests (D102), the motion slot (D103), the animation
   direction (D104), our own timeline with proven libraries drawing (D105), three UI depths
-  (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123); the head-to-head with Claude's slides (D124); a consistency pass (D125); agents animate over MCP (D126).
-- **State:** `pnpm check` is green (1228 tests, including real-Chromium lint, preview, editor
+  (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123); the head-to-head with Claude's slides (D124); a consistency pass (D125); agents animate over MCP (D126); vector so far: path data, shape kinds, `line`, `vector` (D127).
+- **State:** `pnpm check` is green (1272 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 18 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -105,7 +106,7 @@ veloce/
 │   ├── format/          .veloce zip read/write, manifest, content-hashed assets, migrations
 │   ├── images/          image optimization on import (WebAssembly codecs, SSIM, worker thread)
 │   ├── plugin-api/      Plugin contract types, registry, conformance test kit
-│   ├── builtins/        the built-in plugin set (bundles plugins/text, shape, image, effects)
+│   ├── builtins/        the built-in plugin set (bundles plugins/text, shape, image, vector, effects)
 │   ├── renderer/        Deck → DOM, stage scaling, plugin host, timeline clock, measurement
 │   ├── doc-server/      Open documents, apply transactions, versioning, WebSocket sync, autosave
 │   └── mcp/             MCP tools/resources/instructions, mounted inside doc-server's process
@@ -319,12 +320,15 @@ block (D124) widens what agents and people can draw; its schema changes land bef
       `get_docs("animation")`; retested with real agents four times (D126)
 - [ ] From the head-to-head with Claude's slides (D124; it won on looks, we won on cost,
       speed and polish):
-  - [ ] `vector` element (moved from Phase 5): paths, polygons, stars, chevrons, block
-        arrows, **lines and arrows** (two ends, a stroke and arrowheads, drawn with a tool
-        and dragged by their ends), with a strict path-data validator; an agent's SVG
-        imports as safe vector shapes: parsed into validated path data, never inlined, so
-        scripts in an SVG can't run (Phase 6's rule). Connectors that stay attached wait for
-        after 1.0
+  - [ ] Vector (moved from Phase 5, D127):
+    - [x] Strict path data in core: parse, bounds, transforms, fitting a viewBox (D127 §3)
+    - [x] Shape kinds: triangle, polygon, star, block arrow, chevron, settings per kind (D127 §5)
+    - [x] `line`: two ends, six heads; Line (L) and Arrow (Shift+L) tools, end knobs (D127 §7)
+    - [x] `vector`: any path, any paint, `evenodd` holes, a stroke that never stretches (D127 §7)
+    - [ ] SVG import: our own strict parser in core (no entities, DOCTYPE or scripts), an
+          MCP route for agents and paste in the editor; never inlined (D125 §3)
+    - [ ] Docs, then a real-agent retest of shapes, lines, paths and import. Connectors that
+          stay attached wait for after 1.0
   - [ ] `icon` plugin (moved from Phase 6; Lucide, ISC): agents stop drawing icons from
         squares and stop using symbol characters. Icons draw through `<img>` or as validated
         path data, never inlined SVG
@@ -560,6 +564,9 @@ user moves one into a phase.
 - Find and replace across the deck; auto-fit text (shrink to fit its box)
 - Right-to-left and CJK text layout
 - Connectors: lines that stay attached to shapes and reroute when they move
+- Pen tool and point editing: draw a path by hand (click for corners, drag for curves) and
+  edit a `vector`'s points afterwards, plus "turn a shape into a path". Until then, paths
+  come from agents and pasted SVG (D127)
 - Apply a layout to an existing slide, mapping its content into the layout's slots (D95 §7)
 - Frame style presets in the theme (`$style.card`), decided together with components
 - A user component library shared between decks (`~/.config/veloce/library/`)
