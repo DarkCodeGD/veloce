@@ -121,7 +121,7 @@ export const MOTION_LEVEL_SCALES: Readonly<Record<MotionLevel, MotionLevelScale>
   },
   absurd: {
     summary:
-      "Everything moves, all the time: kinetic text, particles, camera moves, loops everywhere.",
+      "Everything moves, all the time: the biggest entrances, bounces, 3D flips where there's perspective, loops everywhere.",
     reach: "all",
     effectsPerLayer: null,
     ambient: "all",

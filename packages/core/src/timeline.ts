@@ -7,6 +7,7 @@
  * animation starts the next step. Inside a step, times are milliseconds from the click.
  * Pure and deterministic: the clock (`seek`) and the editor's steps list both read this.
  */
+
 import type { ApplyContext } from "./checks.js";
 import type { ErrorCode } from "./errors.js";
 import { LAYOUT_GLIDE, parentOf, staggerSpread, staggerTargets } from "./layout-motion.js";
@@ -17,6 +18,7 @@ import type { Deck, Slide } from "./schema/deck.js";
 import type { Easing, Time } from "./schema/motion.js";
 import { FrameStyleSchema, isFreeLayer, type Node } from "./schema/node.js";
 import type { Preset, Presets } from "./schema/preset.js";
+import { suggest } from "./suggest.js";
 import { walkNodes } from "./tree.js";
 
 /** An animation's duration and easing when it (and its effect) give none (D111). */
@@ -75,6 +77,25 @@ export interface AnimationProblem {
  * and a `props.*` or `style.*` track must give values the target's own schema accepts
  * (golden rule 5): each keyframe is tried in place of the property.
  */
+/**
+ * An unknown effect's hint, with the deck's saved presets (D119) in it: the registry only
+ * knows installed effects, so a typo of a preset's name got no "did you mean" (D126).
+ */
+function withPresets(
+  hint: string | undefined,
+  animation: Animation,
+  presets: Presets | undefined,
+): string | undefined {
+  const names = Object.keys(presets ?? {});
+  if (!animation.effect || names.length === 0) return hint;
+  const close = suggest(animation.effect.name, names);
+  if (close.length) {
+    return `Did you mean the saved preset ${close.map((n) => `"${n}"`).join(" or ")}?`;
+  }
+  const shown = names.slice(0, 20).map((n) => `"${n}"`);
+  return `${hint ? `${hint} ` : ""}Saved presets: ${shown.join(", ")}${names.length > 20 ? ` (+${names.length - 20} more)` : ""}.`;
+}
+
 export function animationProblem(
   slide: Slide,
   animation: Animation,
@@ -106,11 +127,15 @@ export function animationProblem(
   if (animation.effect && ctx.validateEffect) {
     const check = ctx.validateEffect(animation.effect, target);
     if (!check.ok) {
+      const hint =
+        check.reason === "unknown-effect"
+          ? withPresets(check.hint, animation, presets)
+          : check.hint;
       return {
         code: check.reason === "unknown-effect" ? "NOT_FOUND" : "INVALID",
         message: `Animation "${animation.id}": ${check.message}`,
         path: check.reason === "invalid-params" ? "effect.params" : "effect.name",
-        ...(check.hint && { hint: check.hint }),
+        ...(hint && { hint }),
         ...(check.reason === "unknown-effect" && { missing: true as const }),
       };
     }

@@ -143,9 +143,12 @@ version and validated. A broken version is skipped, never fatal.
 ## Agents (`packages/mcp`)
 
 Few, high-leverage, batch-friendly tools (`tools.ts`): `upsert_slide` builds a whole slide,
-`apply_ops` batches any edits, plus deck, theme, asset, lint, preview, components and undo
-tools. Agent input is friendlier than core's (`input.ts`: optional IDs, kinds and layouts,
-`use` for components) and is normalized into plain ops before it reaches core.
+`apply_ops` batches any edits, `set_animations` and `animate_deck` animate a slide or the
+whole deck, plus deck, theme, asset, lint, preview, components and undo tools. Agent input
+is friendlier than core's (`input.ts`: optional IDs, kinds and layouts, `use` for
+components; `motion.ts`: animations as steps, effects by name, readable animation IDs) and
+is normalized into plain ops before it reaches core. Choreography is core's
+`choreograph`, the same function the editor's "Animate slide" calls (D121, D126).
 
 - Every edit returns lint for the slides it changed; errors say how to fix the call.
 - The docs agents read (`docs.ts`: server instructions plus `get_docs` topics) are partly

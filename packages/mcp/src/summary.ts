@@ -38,6 +38,7 @@ export function deckSummary(deck: Deck): string {
   lines.push(
     `Slide layouts: ${layouts.join(", ")}. Start a slide with { "use": name, "with": { … } } in upsert_slide.`,
   );
+  lines.push(motionLine(deck));
   const footer = footerLine(deck.footer);
   // Said either way (3 tokens): "none" tells a removed footer from one left out of the outline.
   lines.push(footer ?? "Footer: none.");
@@ -46,9 +47,25 @@ export function deckSummary(deck: Deck): string {
   const firstSection = deck.slides.findIndex((s) => s.section !== undefined);
   deck.slides.forEach((slide, i) => {
     const noSection = i === 0 && firstSection > 0 ? firstSection : 0;
-    lines.push("", slideOutline(slide, i, { noSection, footer: footer !== null }));
+    lines.push("", slideOutline(slide, i, { noSection, footer: footer !== null, deck }));
   });
   return lines.join("\n");
+}
+
+/**
+ * How the deck moves (D126): its level, and its saved presets (played by name like any
+ * effect, D119). Said either way, so an agent knows motion is there to use.
+ */
+function motionLine(deck: Deck): string {
+  const level = deck.motionLevel
+    ? `Motion level: ${deck.motionLevel}.`
+    : "Motion level: subtle (the default).";
+  const presets = Object.entries(deck.presets ?? {}).map(
+    ([name, p]) =>
+      `"${name}"${p.effect ? ` (${p.effect.name})` : " (keyframes)"}${p.description ? `: ${p.description}` : ""}`,
+  );
+  const saved = presets.length ? ` Saved presets (use as effects): ${presets.join(", ")}.` : "";
+  return `${level}${saved} Animate with animate_deck or set_animations (get_docs("animation")).`;
 }
 
 /** What the footer shows (D97), or null without one. */
@@ -82,6 +99,19 @@ function metaLines(meta: Deck["meta"]): string[] {
 export function slideOutline(slide: Slide, index: number, marks: HeaderMarks = {}): string {
   const lines = [slideHeader(slide, index, marks)];
   for (const child of slide.root.children) outline(child, slide.root.layout, 1, lines);
+  // How it moves, in one line: the full steps (IDs, timing) are in get_slide, so a long
+  // deck's summary stays cheap (D126).
+  const animations = slide.animations ?? [];
+  if (marks.deck && animations.length > 0) {
+    // Each click starts a step: an animation with no trigger is on click (D110).
+    const clicks = animations.filter((a) => (a.trigger ?? "onClick") === "onClick").length;
+    const targets = [...new Set(animations.map((a) => a.target))];
+    const shown = `${targets.slice(0, 8).join(", ")}${targets.length > 8 ? ` (+${targets.length - 8})` : ""}`;
+    const steps = clicks === 0 ? "no clicks" : `${clicks} click${clicks === 1 ? "" : "s"}`;
+    lines.push(
+      `  animations: ${animations.length} (${steps}) on ${shown}; get_slide lists their steps`,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -108,6 +138,8 @@ export interface HeaderMarks {
   noSection?: number;
   /** The deck has a footer: say which slides leave it off. Default true. */
   footer?: boolean;
+  /** The deck the slide is in: when given, a line says how the slide moves. */
+  deck?: Pick<Deck, "theme" | "motionLevel" | "presets">;
 }
 
 export function slideHeader(
@@ -121,6 +153,7 @@ export function slideHeader(
     slide.notes && "has notes",
     footer && slide.hideFooter && "no footer",
     slide.transition && `arrives: ${transitionLabel(slide.transition)}`,
+    slide.motionLevel && `level ${slide.motionLevel}`,
   ]
     .filter(Boolean)
     .join(", ");
@@ -130,7 +163,8 @@ export function slideHeader(
       : noSection
         ? `[no section: ${noSection === 1 ? "slide 1" : `slides 1–${noSection}`}] `
         : "";
-  return `${section}${index + 1}. slide ${slide.id}${name} · root frame ${slide.root.id} (${layoutLabel(slide.root)})${flags ? ` · ${flags}` : ""}`;
+  const perspective = slide.root.perspective ? ` [perspective ${slide.root.perspective}]` : "";
+  return `${section}${index + 1}. slide ${slide.id}${name} · root frame ${slide.root.id} (${layoutLabel(slide.root)})${perspective}${flags ? ` · ${flags}` : ""}`;
 }
 
 /** " from top-right" for anchored layers ("" for the default top-left). */
@@ -154,10 +188,14 @@ function outline(node: Node, parent: Layout, depth: number, lines: string[]): vo
   const placed = isFreeLayer(node, parent) || node.anchor !== undefined;
   const free = node.positioning === "free" ? ` [free at ${at}]` : placed ? ` [at ${at}]` : "";
   const turned = node.rotation ? ` [rotated ${node.rotation}°]` : "";
+  // 2.5D (D112): how near a layer sits, and the viewer's distance a frame gives its children.
+  const near = node.depth ? ` [depth ${node.depth}]` : "";
+  const view =
+    node.kind === "frame" && node.perspective ? ` [perspective ${node.perspective}]` : "";
   // A match key pairs the layer with others for morph (D109): on copies made by Duplicate
   // slide it's the original's ID.
   const key = node.matchKey === undefined ? "" : ` [key "${node.matchKey}"]`;
-  const hidden = `${free}${turned}${key}${node.hidden ? " [hidden]" : ""}`;
+  const hidden = `${free}${turned}${near}${view}${key}${node.hidden ? " [hidden]" : ""}`;
   if (node.kind === "frame") {
     lines.push(`${indent}- ${node.id}: frame (${layoutLabel(node)})${hidden}`);
     for (const child of node.children) outline(child, node.layout, depth + 1, lines);

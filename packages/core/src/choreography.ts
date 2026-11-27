@@ -29,6 +29,7 @@
  * caller says one isn't installed, a plain fade stands in, so the result always applies.
  */
 import { createId } from "./ids.js";
+import { parentOf } from "./layout-motion.js";
 import { MOTION_LEVEL_SCALES, slideMotionLevel } from "./motion-tokens.js";
 import type { Op } from "./ops/schema.js";
 import type { Animation } from "./schema/animation.js";
@@ -94,8 +95,13 @@ export interface ChoreographyUnit {
 
 const HEADINGS = new Set(["display", "h1"]);
 const LARGE = new Set(["display", "h1", "h2", "h3", "lead"]);
-/** A figure: digits with at most a few symbols or a unit word around them ("42%", "$4.2M", "3×", "12k users"). */
-const FIGURE = /^[^\p{L}\d]{0,3}[\d.,]+\s?[\p{L}%×x+]{0,6}$/u;
+/**
+ * A figure: digits with at most a few symbols or one unit word around them ("42%",
+ * "$4.2M", "3×", "12k users", "70 cherries", "1,200 °C"). A year with a word ("2026 roadmap") is a
+ * heading, not a figure: counting a year up from 0 looks broken.
+ */
+const FIGURE = /^[^\p{L}\d]{0,3}[\d.,]+\s?[\p{L}%×x+°]{0,12}$/u;
+const YEAR_HEADING = /^(?:19|20)\d\d\s+\p{L}/u;
 
 const textStyle = (node: ElementNode): string | undefined => {
   const style = node.props.style;
@@ -139,7 +145,9 @@ export function choreographyUnits(slide: Slide, stage: Deck["stage"]): Choreogra
     if (node.type !== "text") return "visual";
     const style = textStyle(node) ?? "body";
     const text = textOf(node);
-    if (LARGE.has(style) && text.length <= 16 && FIGURE.test(text)) return "number";
+    if (LARGE.has(style) && text.length <= 16 && FIGURE.test(text) && !YEAR_HEADING.test(text)) {
+      return "number";
+    }
     if (!titled && (HEADINGS.has(style) || style === "h2")) {
       titled = true;
       return "title";
@@ -375,13 +383,23 @@ export function choreograph(
 
   // ── Timing ──────────────────────────────────────────────────────────────────────
   const out: Animation[] = [];
+  const flattened = new Set<string>();
   const play = (
     target: string,
     move: Move,
     timing: Pick<Animation, "trigger" | "delay" | "stagger" | "repeat">,
   ): Animation => {
+    // A flip turns in 3D: without a perspective on the layer's frame it draws as a flat
+    // squash, so it zooms instead, and a note says how to get the flip (D126).
+    // A staggered list flips its items, which sit in the list's own frame.
+    const space = timing.stagger
+      ? units.find((u) => u.node.id === target)?.node
+      : parentOf(slide.root, target);
+    const flat = move.effect === "flip-in" && !(space?.kind === "frame" && space.perspective);
+    if (flat) flattened.add(target);
+    const wanted: Move = flat ? { ...move, effect: "zoom-in" } : move;
     // An effect that isn't installed: a plain fade in its place, so the result applies.
-    const m: Move = installed(move.effect) ? move : { effect: "", duration: move.duration };
+    const m: Move = installed(wanted.effect) ? wanted : { effect: "", duration: wanted.duration };
     const animation: Animation = {
       id: newId(),
       target,
@@ -477,6 +495,11 @@ export function choreograph(
   const oneByOne = pacing === "build" || level !== "calm";
   const moving = planned.reduce((n, p) => n + (oneByOne ? (p.unit.items?.length ?? 1) : 1), 0);
   if (planned.length === 0) notes.push("Nothing on this slide animates at this level.");
+  if (flattened.size > 0) {
+    notes.push(
+      `${[...flattened].map((id) => `"${id}"`).join(", ")} zoom in instead of flipping: a flip turns in 3D, which needs a perspective on its frame. Give the slide (or that frame) "perspective": 1200 and animate again to flip.`,
+    );
+  }
   return { animations: out, level, moving, notes };
 }
 

@@ -15,9 +15,11 @@ import {
   type AssetInfo,
   assetKind,
   BUILTIN_THEMES,
+  CHOREOGRAPHY_PACINGS,
   type Component,
   ComponentNameSchema,
   type ComponentParam,
+  choreograph,
   collectIds,
   type Deck,
   deckSections,
@@ -32,12 +34,16 @@ import {
   hasFieldRuns,
   IdSchema,
   MAX_ASSET_BYTES,
+  MAX_TRANSACTION_OPS,
+  MOTION_LEVEL_SCALES,
+  MotionLevelSchema,
   type Node,
   notFoundHint,
   type Op,
   type Origin,
   ParamNameSchema,
   ParamTargetSchema,
+  replaceAnimationsOps,
   type Slide,
   sectionAt,
   slideLayouts,
@@ -66,6 +72,15 @@ import {
   SlideInputSchema,
   withFieldText,
 } from "./input.js";
+import {
+  animationIdMaker,
+  levelLabel,
+  StepsInputSchema,
+  schemaHint,
+  slideSteps,
+  stepsOutline,
+  stepsToAnimations,
+} from "./motion.js";
 import { boundsTable, componentOutline, deckSummary, formatLint, slideOutline } from "./summary.js";
 
 export interface ToolContext {
@@ -310,18 +325,43 @@ interface CommitErrors {
   asSlide?: boolean;
   /** The agent sent a component (save_component): paths point into what it sent. */
   asComponent?: boolean;
+  /**
+   * The agent sent steps (D126): where each of the slide's stored animations came from
+   * (`slide.steps[1][0]`), so `slide.animations[3]` in an error reads as what it wrote.
+   */
+  stepPaths?: readonly string[];
+  /** An op the tool made from one of the agent's steps: op index → `steps[1][0]`. */
+  opPaths?: ReadonlyMap<number, string>;
 }
 
 /** The "How to fix" for arguments that don't match a tool's schema: the likeliest mix-up first. */
 function invalidArgumentsHint(
   tool: string,
   message: string,
-  issues: readonly { path: readonly PropertyKey[] }[],
+  issues: readonly { path: readonly PropertyKey[]; code?: string; keys?: readonly string[] }[],
 ): string {
   // `{ "type": "frame", "layout", "children" }`: read as an element with stray keys.
   if (/Unrecognized keys?: .*"(?:children|layout)"/.test(message)) {
     return 'A frame has no "type" (that\'s for elements): write { "layout": { … }, "children": [ … ] }, optionally with "kind": "frame". See get_docs("layout").';
   }
+  // The two ways of saying when an animation starts, mixed up (steps vs the stored list).
+  const stray = issues.flatMap((i) => (i.code === "unrecognized_keys" ? (i.keys ?? []) : []));
+  if (tool === "apply_ops" && stray.includes("start")) {
+    return 'In apply_ops an animation says when it starts with "trigger": "onClick" (default: a new step), "withPrevious" or "afterPrevious". "start" is for set_animations steps.';
+  }
+  if (tool !== "apply_ops" && stray.includes("trigger")) {
+    return 'In steps, a step\'s first animation starts it (as the slide appears, or on its click); the rest say "start": "with" (default) or "after".';
+  }
+  // A preset's effect: an object, as stored (a name alone is for animations).
+  if (tool === "apply_ops" && issues[0]?.path[2] === "preset") {
+    return 'A preset is { "effect": { "name": "pop-in", "params": { … } }, "duration"?, "easing"? … }: its effect is an installed effect, written as an object.';
+  }
+  // An animation written as a step or an animation.insert: the fix for that field.
+  const first = issues[0]?.path ?? [];
+  if (tool === "set_animations" && first[0] === "steps" && first.length > 3) {
+    return schemaHint(first.slice(3));
+  }
+  if (tool === "apply_ops" && first[2] === "animation") return schemaHint(first.slice(3));
   if (tool === "apply_ops") {
     return issues.some((i) => i.path[2] === "footer")
       ? 'footer is { "date"?: true, "text"?: "…", "slideNumber"?: true }, or null to remove it (get_docs("sections")).'
@@ -335,15 +375,25 @@ function invalidArgumentsHint(
 
 /** Rewrites a core error into the terms of what the agent actually sent. */
 function presentError(
-  error: ErrorLike,
-  { generated, asSlide, asComponent }: CommitErrors,
+  error: ErrorLike & { opIndex?: number | undefined },
+  { generated, asSlide, asComponent, stepPaths, opPaths }: CommitErrors,
 ): ErrorLike {
   let { message, path } = error;
+  const fromStep = error.opIndex === undefined ? undefined : opPaths?.get(error.opIndex);
+  if (fromStep) {
+    message = message
+      .replace(/^ops\[\d+\] \([a-z.]+\): /i, "")
+      .replace(/\bops\[\d+\]\.animation\b/g, fromStep);
+    path = path?.replace(/^ops\[\d+\](\.animation)?/, fromStep);
+  }
   if (generated?.size) {
-    message = message.replace(
-      /Element "([^"]+)" \(([^)]+)\)/g,
-      (whole, id: string, type: string) => (generated.has(id) ? `The ${type} element` : whole),
-    );
+    message = message
+      .replace(/Element "([^"]+)" \(([^)]+)\)/g, (whole, id: string, type: string) =>
+        generated.has(id) ? `The ${type} element` : whole,
+      )
+      .replace(/Animation "([^"]+)"(:)? /g, (whole, id: string, colon?: string) =>
+        generated.has(id) ? (colon ? "" : "This animation ") : whole,
+      );
   }
   if (asSlide) {
     message = message.replace(/^ops\[\d+\] \([a-z.]+\): /i, "");
@@ -353,7 +403,19 @@ function presentError(
     message = message.replace(/^ops\[\d+\] \([a-z.]+\): /i, "");
     path = path?.replace(/^ops\[\d+\]\.(component\.)?/, "").replace(/^ops\[\d+\]$/, "");
   }
-  return { ...error, message, path: path || undefined };
+  if (stepPaths || fromStep) {
+    // The agent never saw the ID made for an animation it wrote as a step.
+    message = message
+      .replace(/^Animation "[^"]+": /, "")
+      .replace(/^Animation "[^"]+" /, "This animation ");
+  }
+  if (stepPaths) {
+    const step = (_: string, i: string) => stepPaths[Number(i)] ?? `slide.animations[${i}]`;
+    message = message.replace(/\b(?:slide\.)?animations\[(\d+)\]/g, step);
+    path = path?.replace(/^(?:slide\.)?animations\[(\d+)\]/, step);
+  }
+  const { opIndex: _, ...rest } = error;
+  return { ...rest, message, path: path || undefined };
 }
 
 const removerName = (remover: Origin, self: Origin) =>
@@ -454,6 +516,7 @@ const getSlide = defineTool({
     const open = await currentDeck(ctx);
     const { slide } = requireSlide(open.deck, slideId);
     const parts = [JSON.stringify(slide)];
+    if (slide.animations?.length) parts.push(stepsReport(open.deck, slide, ctx));
     if (ctx.render) {
       try {
         const [m] = await ctx.render.measure(open.deck, { deckId: open.id, slideIds: [slideId] });
@@ -478,6 +541,7 @@ const upsertSlide = defineTool({
     "Omitted IDs are generated and returned; give stable IDs to nodes you may change later.",
     'A node can also be a copy of a saved component: { "use": "<name>", "with": { <param>: <value> } } (see list_components).',
     "Replacing rebuilds the whole slide: to fix or tweak an existing slide, use apply_ops (node.update by ID) instead.",
+    'Add "steps" to animate it in the same call (steps[0] as the slide appears, then one per click; get_docs("animation")).',
     "Returns the slide outline and lint issues to fix.",
     'Example: { "slide": { "children": [ { "type": "text", "props": { "content": "Hello", "style": "$text.display" } } ] } }',
   ].join(" "),
@@ -506,11 +570,13 @@ const upsertSlide = defineTool({
     const taken = collectIds(open.deck);
     const replaced = input.id === undefined ? undefined : findSlide(open.deck, input.id)?.slide;
     if (replaced) for (const { node } of walkNodes(replaced.root)) taken.delete(node.id);
+    const stepPaths = new Map<string, string[]>();
     const normalized = normalizeSlide(input, {
       generated,
       deck: open.deck,
       validateElement: ctx.registry.validateElement,
       taken,
+      stepPaths,
     });
     const existing = findSlide(open.deck, normalized.id);
     const remover = open.removedBy(normalized.id);
@@ -538,11 +604,19 @@ const upsertSlide = defineTool({
     // Replacing keeps the slide's root frame ID, so references to the slide frame stay valid,
     // and the animations of layers that are still there (same ID): rebuilding a slide's
     // content shouldn't throw away how it plays (D110). The rest go with their layers.
-    const kept = existing ? keptAnimations(existing.slide, normalized) : [];
-    const dropped = (existing?.slide.animations?.length ?? 0) - kept.length;
+    // Steps sent with the slide replace them all (D126).
+    const animated = input.steps !== undefined;
+    const kept = existing && !animated ? keptAnimations(existing.slide, normalized) : [];
+    const dropped = animated ? 0 : (existing?.slide.animations?.length ?? 0) - kept.length;
+    // A rebuild keeps the slide's own motion level unless the new slide sets one (D126).
+    const level =
+      existing?.slide.motionLevel && input.motionLevel === undefined
+        ? existing.slide.motionLevel
+        : undefined;
     const slide: Slide = existing
       ? {
           ...normalized,
+          ...(level && { motionLevel: level }),
           ...(kept.length > 0 && { animations: kept }),
           root: { ...normalized.root, id: existing.slide.root.id },
         }
@@ -564,13 +638,23 @@ const upsertSlide = defineTool({
           },
         ];
     const label = `${existing ? "Replace" : "Add"} slide ${slide.name ? `"${slide.name}"` : slide.id}`;
-    const { after } = await commit(ctx, open, label, ops, { generated, asSlide: true });
+    const { after } = await commit(ctx, open, label, ops, {
+      generated,
+      asSlide: true,
+      stepPaths: stepPaths.get(slide.id),
+    });
     ctx.session.markCreated(open.id, [slide.id]); // rebuilt by this session: its own now
     const position = after.slides.findIndex((s) => s.id === slide.id);
     const saved = after.slides[position];
     return text(
       `${label}: done.${animationNote(kept.length, dropped)}`,
-      saved ? slideOutline(saved, position, { footer: !!after.footer }) : "",
+      saved
+        ? slideOutline(saved, position, {
+            footer: !!after.footer,
+            ...(!animated && { deck: after }),
+          })
+        : "",
+      saved && animated ? stepsReport(after, saved, ctx) : "",
       await lintReport(ctx, open, [slide.id]),
     );
   },
@@ -592,6 +676,17 @@ function animationNote(kept: number, dropped: number): string {
   return parts.length > 0 ? ` (${parts.join("; ")})` : "";
 }
 
+/** A slide's steps with their timing (D126), or that it has none. */
+function stepsReport(deck: Deck, slide: Slide, ctx: ToolContext): string {
+  const lines = stepsOutline(deck, slide, { effects: ctx.registry.resolveEffect, indent: "  " });
+  if (lines.length === 0) return `No animations on ${slide.id} (${levelLabel(deck, slide)}).`;
+  const clicks = slideSteps(deck, slide, ctx.registry.resolveEffect).length - 1;
+  return [
+    `Steps of ${slide.id} (${levelLabel(deck, slide)}; ${clicks === 0 ? "no clicks: it all plays as the slide appears" : `${clicks} click${clicks === 1 ? "" : "s"}`}):`,
+    ...lines,
+  ].join("\n");
+}
+
 const OP_TYPES = [
   "slide.insert",
   "slide.remove",
@@ -601,8 +696,15 @@ const OP_TYPES = [
   "node.remove",
   "node.move",
   "node.update",
+  "animation.insert",
+  "animation.update",
+  "animation.remove",
+  "animation.move",
   "deck.updateMeta",
   "deck.setFooter",
+  "deck.setMotionLevel",
+  "preset.save",
+  "preset.remove",
 ] as const;
 
 const applyOps = defineTool({
@@ -610,7 +712,7 @@ const applyOps = defineTool({
   title: "Apply edits",
   description: [
     "Apply a batch of edits atomically (all or nothing) as one undoable step.",
-    'Ops: slide.insert/remove/move/update, node.insert/remove/move/update, deck.updateMeta, deck.setFooter. node.update uses JSON Merge Patch: { "op": "node.update", "id": "title", "set": { "props": { "content": "New" } } } (null deletes a field).',
+    'Ops: slide.insert/remove/move/update, node.insert/remove/move/update, animation.insert/update/remove/move, deck.updateMeta, deck.setFooter, deck.setMotionLevel, preset.save/remove. node.update uses JSON Merge Patch: { "op": "node.update", "id": "title", "set": { "props": { "content": "New" } } } (null deletes a field).',
     'Full reference: get_docs("ops"). Returns lint issues for the slides that changed.',
   ].join(" "),
   input: z.strictObject({
@@ -660,9 +762,250 @@ const applyOps = defineTool({
     });
     const changed = changedSlides(before, after);
     const regrouped = sectionMoves(before, after);
+    const animations = ops.flatMap((op) => {
+      const o = op as { op: string; animation?: { id: string }; slide?: Slide };
+      if (o.op === "animation.insert" && o.animation) return [o.animation.id];
+      return o.slide?.animations?.map((a) => a.id) ?? [];
+    });
+    // Slides whose animations changed: their steps as they play now (D126).
+    const animated = changed.filter((id) => {
+      const was = findSlide(before, id)?.slide.animations;
+      return was !== findSlide(after, id)?.slide.animations;
+    });
+    const levelChanged = before.motionLevel !== after.motionLevel;
     return text(
-      `Applied "${label}" (${ops.length} op${ops.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}${slides.length ? ` New slides: ${slides.join("; ")}.` : ""}${regrouped.length ? ` Sections: ${regrouped.join("; ")}.` : ""}`,
+      `Applied "${label}" (${ops.length} op${ops.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}${animations.length ? ` New animation IDs: ${animations.join(", ")}.` : ""}${slides.length ? ` New slides: ${slides.join("; ")}.` : ""}${regrouped.length ? ` Sections: ${regrouped.join("; ")}.` : ""}`,
+      levelChanged ? levelNote(after) : "",
+      ...animated.slice(0, 5).flatMap((id) => {
+        const slide = findSlide(after, id)?.slide;
+        return slide ? [stepsReport(after, slide, ctx)] : [];
+      }),
       changed.length ? await lintReport(ctx, open, changed) : "",
+    );
+  },
+});
+
+// ── Motion (D126) ───────────────────────────────────────────────────────────────────
+
+/** The level's one-line summary (D111 §7), and what changing it does to written animations. */
+function levelNote(deck: Deck): string {
+  const level = deck.motionLevel ?? "subtle";
+  return `Motion level: ${level}${deck.motionLevel ? "" : " (the default)"}. ${MOTION_LEVEL_SCALES[level].summary} Speeds and distances of animations already written follow it; which layers move doesn't: animate_deck with keepAnimated: false re-picks them for this level.`;
+}
+
+const PacingInput = z
+  .enum(CHOREOGRAPHY_PACINGS)
+  .optional()
+  .describe(
+    '"auto" (default): everything comes in as the slide appears, cascading; "build": the title with the slide, then one point per click (a list one item per click); "focus": everything comes in, then a click punches the main point.',
+  );
+
+/** Whose animations a slide has, if replacing them would discard someone else's work. */
+function othersAnimations(open: OpenDeck, slide: Slide, ctx: ToolContext): string | null {
+  if (!slide.animations?.length) return null;
+  const editor = open.lastEditor(slide.id);
+  if (editor === ctx.origin) return null;
+  if (editor) return `was last edited by ${editor === "user" ? "the user" : editor}`;
+  return ctx.session.created(open.id, slide.id)
+    ? null
+    : "existed before this session (the user's work or an earlier session's)";
+}
+
+const setAnimations = defineTool({
+  name: "set_animations",
+  title: "Animate a slide",
+  description: [
+    "Set how one slide animates, replacing its animations, in one undoable step. Either:",
+    '`steps`: exact animations. steps[0] plays as the slide appears, each later step is one click; inside a step they start together unless "start": "after". e.g. [[{ "target": "title", "effect": "fade-in" }, { "target": "sub", "effect": "slide-in", "start": "after" }], [{ "target": "chart", "effect": "scale-in" }]].',
+    "`choreograph`: the engine writes them from each layer's role (title, number, visual…), the motion level and a pacing.",
+    '`level` sets this slide\'s own motion level. Returns the steps with their timing; check a moment with render_preview (step, time). Effects, fields, recipes: get_docs("animation").',
+  ].join(" "),
+  input: z.strictObject({
+    slideId: z.string(),
+    steps: StepsInputSchema.optional(),
+    choreograph: z
+      .strictObject({
+        pacing: PacingInput,
+        emphasize: z
+          .array(z.string())
+          .max(50)
+          .optional()
+          .describe("Layers to punch (node IDs). Default: the slide's main point."),
+      })
+      .optional()
+      .describe("Let the engine animate the slide from an intent, instead of `steps`."),
+    level: MotionLevelSchema.nullable()
+      .optional()
+      .describe(
+        "This slide's own motion level (calm | subtle | lively | intense | absurd), over the deck's; null goes back to the deck's. Set it before or with choreograph: it decides how much moves.",
+      ),
+    overwrite: z
+      .boolean()
+      .optional()
+      .describe(
+        "Replace animations the user (or another agent) made, or that were there before this session. Only when they asked.",
+      ),
+  }),
+  async run({ slideId, steps, choreograph: intent, level, overwrite }, ctx) {
+    const open = await currentDeck(ctx);
+    const { slide } = requireSlide(open.deck, slideId);
+    if (steps !== undefined && intent !== undefined) {
+      throw new ToolError({
+        message: "Give `steps` or `choreograph`, not both",
+        hint: "`steps` writes exact animations; `choreograph` lets the engine write them. Tune the engine's afterwards with apply_ops animation.update.",
+      });
+    }
+    if (steps === undefined && intent === undefined && level === undefined) {
+      throw new ToolError({
+        message: "Nothing to set",
+        hint: 'Give `steps` (exact animations), `choreograph` (e.g. { "pacing": "build" }) or `level`.',
+      });
+    }
+    const replacing = steps !== undefined || intent !== undefined;
+    const whose = replacing && !overwrite ? othersAnimations(open, slide, ctx) : null;
+    if (whose) {
+      throw new ToolError({
+        message: `Slide ${slideId} has ${slide.animations?.length} animations and ${whose}; replacing them would discard that work.`,
+        hint: "Change single animations with apply_ops (animation.update / animation.insert / animation.remove by ID: get_slide lists them), or pass overwrite: true if the user asked to redo this slide's motion.",
+      });
+    }
+    const ops: Op[] = [];
+    if (level !== undefined && level !== (slide.motionLevel ?? null)) {
+      ops.push({ op: "slide.update", id: slideId, set: { motionLevel: level } });
+    }
+    const { motionLevel: _own, ...base } = slide;
+    const leveled: Slide =
+      level === undefined ? slide : level === null ? base : { ...base, motionLevel: level };
+    const opPaths = new Map<number, string>();
+    let notes: string[] = [];
+    let moving: number | null = null;
+    if (replacing) {
+      const old = slide.animations ?? [];
+      const newId = animationIdMaker(
+        open.deck,
+        slideId,
+        old.map((a) => a.id),
+      );
+      let animations: Animation[];
+      if (steps !== undefined) {
+        const made = stepsToAnimations(steps, newId);
+        animations = made.animations;
+        const first = ops.length + old.length;
+        for (const [i, path] of made.paths.entries()) opPaths.set(first + i, path);
+      } else {
+        const result = choreograph(open.deck, leveled, intent, {
+          hasEffect: ctx.registry.hasEffect,
+          newId,
+        });
+        animations = result.animations;
+        notes = result.notes;
+        moving = result.moving;
+      }
+      ops.push(...replaceAnimationsOps(slide, animations));
+    }
+    if (ops.length === 0) {
+      return text(`Nothing changed on ${slideId}.`, stepsReport(open.deck, slide, ctx));
+    }
+    const name = slide.name ? `"${slide.name}"` : slideId;
+    const label = replacing ? `Animate slide ${name}` : `Set motion level of slide ${name}`;
+    const { after } = await commit(ctx, open, label, ops, { opPaths });
+    const saved = findSlide(after, slideId)?.slide ?? slide;
+    const count = saved.animations?.length ?? 0;
+    return text(
+      `${label}: done.${moving !== null ? ` ${moving} layer${moving === 1 ? "" : "s"} move.` : ""}`,
+      stepsReport(after, saved, ctx),
+      notes.length ? `Notes: ${notes.join(" ")}` : "",
+      count > 0
+        ? `See a moment: render_preview({ "slideId": "${slideId}", "step": ${slideSteps(after, saved, ctx.registry.resolveEffect).length > 1 ? 1 : 0}, "time": 300 }). Tune one: apply_ops animation.update { "id", "set": { … } }.`
+        : "",
+    );
+  },
+});
+
+const animateDeck = defineTool({
+  name: "animate_deck",
+  title: "Animate the whole deck",
+  description: [
+    "Animate every slide in one call (one undoable step): the choreography engine writes each slide's animations from its layers' roles, the motion level and a pacing.",
+    "Optionally set the deck's motion level first (it decides how much moves). Slides that already have animations stay as they are unless keepAnimated: false.",
+    'Then tune slides with set_animations or apply_ops animation.update. get_docs("animation").',
+  ].join(" "),
+  input: z.strictObject({
+    level: MotionLevelSchema.nullable()
+      .optional()
+      .describe(
+        'The deck\'s motion level: "calm" (only the key content moves, soft fades), "subtle" (default: content in reading order), "lively", "intense", "absurd" (everything, all the time). null: back to the default.',
+      ),
+    pacing: PacingInput,
+    keepAnimated: z
+      .boolean()
+      .optional()
+      .describe("Default true: slides that already have animations stay as they are."),
+  }),
+  async run({ level, pacing, keepAnimated = true }, ctx) {
+    const open = await currentDeck(ctx);
+    const deck = open.deck;
+    const ops: Op[] = [];
+    if (level !== undefined && level !== (deck.motionLevel ?? null)) {
+      ops.push({ op: "deck.setMotionLevel", level });
+    }
+    const { motionLevel: _level, ...rest } = deck;
+    const leveled: Deck =
+      level === undefined ? deck : level === null ? rest : { ...rest, motionLevel: level };
+    const taken = collectIds(deck);
+    const kept: string[] = [];
+    const results: Array<{ slideId: string; moving: number; notes: string[] }> = [];
+    for (const slide of deck.slides) {
+      if (keepAnimated && (slide.animations?.length ?? 0) > 0) {
+        kept.push(slide.id);
+        continue;
+      }
+      const old = (slide.animations ?? []).map((a) => a.id);
+      const newId = animationIdMaker(deck, slide.id, old, taken);
+      const result = choreograph(
+        leveled,
+        slide,
+        { ...(pacing && { pacing }) },
+        {
+          hasEffect: ctx.registry.hasEffect,
+          newId,
+        },
+      );
+      ops.push(...replaceAnimationsOps(slide, result.animations));
+      results.push({ slideId: slide.id, moving: result.moving, notes: result.notes });
+    }
+    if (ops.length > MAX_TRANSACTION_OPS) {
+      throw new ToolError({
+        message: `That's ${ops.length} edits, more than one step can hold (${MAX_TRANSACTION_OPS})`,
+        hint: "Animate the slides a few at a time with set_animations { choreograph }.",
+      });
+    }
+    if (ops.length === 0) {
+      return text(
+        deck.slides.length === 0
+          ? "The deck has no slides yet."
+          : `Nothing changed: every slide already has animations (kept: ${kept.join(", ")}). Pass keepAnimated: false to re-animate them.`,
+      );
+    }
+    const label = results.length ? "Animate deck" : "Set motion level";
+    const { after } = await commit(ctx, open, label, ops);
+    const moving = results.reduce((n, r) => n + r.moving, 0);
+    // One line per slide, no timing: the whole deck at a glance without the token cost
+    // (get_slide gives one slide's steps with their timing).
+    const lines = results.map(({ slideId, notes }) => {
+      const slide = findSlide(after, slideId)?.slide;
+      const steps = slide ? stepsOutline(after, slide, { timing: false }) : [];
+      const own = slide?.motionLevel ? ` (level ${slide.motionLevel})` : "";
+      return `${slideId}${own}: ${steps.length ? steps.join(" | ") : "nothing moves"}${notes.length ? `\n  Notes: ${notes.join(" ")}` : ""}`;
+    });
+    const pace = pacing ?? "auto";
+    return text(
+      `${label}: done. ${results.length} slide${results.length === 1 ? "" : "s"} animated, pacing "${pace}", ${moving} layer${moving === 1 ? "" : "s"} move${kept.length ? `; kept as they were: ${kept.join(", ")}` : ""}.`,
+      levelNote(after),
+      ...lines,
+      results.length
+        ? "get_slide shows a slide's steps with their timing. Check a moment with render_preview { slideId, step, time }; tune with set_animations or apply_ops animation.update."
+        : "",
     );
   },
 });
@@ -1053,11 +1396,15 @@ const lint = defineTool({
   },
 });
 
+/** A step with an animation that repeats forever: it keeps moving past its end. */
+const hasLoop = (step: { animations: readonly { forever: boolean }[] }) =>
+  step.animations.some((a) => a.forever);
+
 const renderPreview = defineTool({
   name: "render_preview",
   title: "Render slide preview",
   description:
-    "Screenshot of a slide as the audience will see it. Use it to check visual balance after lint is clean, especially for slides with images or custom layouts.",
+    "Screenshot of a slide as the audience will see it. Use it to check visual balance after lint is clean, especially for slides with images or custom layouts. With `step` (and `time`), a moment of its animations: step 0 is as the slide appears, 1 after the first click.",
   input: z.strictObject({
     slideId: z.string(),
     width: z
@@ -1067,26 +1414,66 @@ const renderPreview = defineTool({
       .max(1920)
       .optional()
       .describe("Image width in pixels. Default 960."),
+    step: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "A moment of the slide's animations: 0 = as the slide appears, 1 = the first click… Every step before it has played out. Default: the slide at rest (where everything ends up).",
+      ),
+    time: z
+      .number()
+      .min(0)
+      .max(600_000)
+      .optional()
+      .describe(
+        "Milliseconds into `step` (0 = its start, before anything in it moved). Default: the step's end.",
+      ),
   }),
   annotations: { readOnlyHint: true },
-  async run({ slideId, width }, ctx) {
+  async run({ slideId, width, step, time }, ctx) {
     const open = await currentDeck(ctx);
-    requireSlide(open.deck, slideId);
+    const { slide } = requireSlide(open.deck, slideId);
     if (!ctx.render) {
       return errorResult({
         message: `Previews are unavailable: ${ctx.renderUnavailable ?? "no renderer"}`,
         hint: "Rely on lint instead, or ask the user to look at the editor.",
       });
     }
+    const steps = slideSteps(open.deck, slide, ctx.registry.resolveEffect);
+    let at: { step: number; time: number } | undefined;
+    let caption = `Slide ${slideId} at rest (deck version ${open.version}).`;
+    if (step !== undefined || time !== undefined) {
+      const n = step ?? 0;
+      const played = steps[n];
+      if (!played) {
+        throw new ToolError({
+          message: `Slide ${slideId} has no step ${n}`,
+          path: "step",
+          hint: slide.animations?.length
+            ? `Its steps: 0 (as the slide appears)${steps.length > 1 ? ` to ${steps.length - 1} (one per click)` : ""}. get_slide lists them.`
+            : "It has no animations yet: animate it with set_animations, or preview it at rest (no step).",
+        });
+      }
+      // Past the step's end nothing more happens in it (loops aside): show its end, and say so.
+      const past = time !== undefined && time > played.duration && !hasLoop(played);
+      at = { step: n, time: past ? played.duration : (time ?? played.duration) };
+      const name = n === 0 ? "as the slide appears" : `click ${n}`;
+      caption = `Slide ${slideId}, step ${n} (${name}) at ${Math.round(at.time)}ms of ${Math.round(played.duration)}ms${past ? ` (${time}ms is past the step's end, so this is its end)` : ""} (deck version ${open.version}).`;
+    } else if (slide.animations?.length) {
+      caption += ` It animates in ${steps.length} step${steps.length === 1 ? "" : "s"}: pass step (0 = as it appears) and time (ms into the step) to see a moment.`;
+    }
     const shot = await ctx.render.screenshot(open.deck, {
       deckId: open.id,
       slideId,
       width: width ?? 960,
+      ...(at && { at }),
     });
     return {
       content: [
         { type: "image", data: Buffer.from(shot.data).toString("base64"), mimeType: shot.mimeType },
-        { type: "text", text: `Slide ${slideId} (deck version ${open.version}).` },
+        { type: "text", text: caption },
       ],
     };
   },
@@ -1133,7 +1520,7 @@ const getDocsTool = defineTool({
   name: "get_docs",
   title: "Get docs",
   description:
-    'Reference docs. Topics: "layout" (frames, sizing, patterns), "design" (rules for good slides), "theme" (tokens), "ops" (apply_ops), "components" (saved components and slide layouts), "sections" (sections, footer, slide numbers, live fields), "transitions" (how slides arrive, morph), "lint", "element/<type>" (e.g. "element/text").',
+    'Reference docs. Topics: "layout" (frames, sizing, patterns), "design" (rules for good slides), "theme" (tokens), "ops" (apply_ops), "components" (saved components and slide layouts), "sections" (sections, footer, slide numbers, live fields), "animation" (steps, effects, the motion level, presets, 2.5D, recipes), "transitions" (how slides arrive, morph), "lint", "element/<type>" (e.g. "element/text").',
   input: z.strictObject({ topic: z.string() }),
   annotations: { readOnlyHint: true },
   async run({ topic }, ctx) {
@@ -1215,6 +1602,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   getSlide,
   upsertSlide,
   applyOps,
+  setAnimations,
+  animateDeck,
   saveComponent,
   listComponents,
   listElementTypes,

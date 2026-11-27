@@ -262,3 +262,37 @@ describe("animating the whole deck (D121)", () => {
     expect(ops.some((op) => op.op === "animation.remove")).toBe(false);
   });
 });
+
+describe("agents' retest findings (D126)", () => {
+  const effectOf = (animations: Animation[], target: string) =>
+    animations.find((a) => a.target === target)?.effect?.name;
+
+  it("counts up a figure with a longer unit word, but not a year heading", () => {
+    const s = slide([
+      text("kpi", "70 cherries", "display"),
+      text("year", "2026 roadmap", "h1"),
+      text("heat", "1,200 °C", "display"),
+    ]);
+    const roles = choreographyUnits(s, { width: 1920, height: 1080 });
+    expect(roles.find((u) => u.node.id === "kpi")?.role).toBe("number");
+    expect(roles.find((u) => u.node.id === "heat")?.role).toBe("number");
+    expect(roles.find((u) => u.node.id === "year")?.role).toBe("title");
+    expect(effectOf(run("lively", {}, s).animations, "kpi")).toBe("count-up");
+  });
+
+  it("zooms instead of flipping where there's no perspective, and says how to flip", () => {
+    const flat = run("absurd");
+    expect(effectOf(flat.animations, "title")).toBe("zoom-in");
+    expect(flat.animations.some((a) => a.effect?.name === "flip-in")).toBe(false);
+    expect(flat.notes.join(" ")).toMatch(/"title".*zoom in instead of flipping[\s\S]*perspective/);
+
+    const base = slide();
+    const deep = { ...base, root: { ...base.root, perspective: 1200 } };
+    const turned = run("absurd", {}, deep);
+    expect(effectOf(turned.animations, "title")).toBe("flip-in");
+    // Only the slide's own children are in its perspective: the cards in the stats row
+    // still have none, and the note names that frame.
+    expect(turned.notes.join(" ")).not.toMatch(/"title"/);
+    expect(turned.notes.join(" ")).toMatch(/"stats" zoom in instead of flipping/);
+  });
+});

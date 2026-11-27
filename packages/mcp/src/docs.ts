@@ -9,7 +9,14 @@ import {
   type Deck,
   deckFontFamilies,
   deckFontStack,
+  EASING_NAMES,
+  type EasingValue,
   LINT_RULES,
+  MOTION_CHANNELS,
+  MOTION_LEVEL_SCALES,
+  MOTION_LEVELS,
+  motionTokens,
+  STAGGER_FROM,
   type TextStyle,
   type Theme,
 } from "@veloce/core";
@@ -29,12 +36,13 @@ Rules:
 - Use the IDs returned by tools to edit nodes (apply_ops with node.update / node.insert / node.remove).
 - Something repeats (cards, tiles, badges, a drawing made of shapes)? Build it once, save_component it with params, then insert copies with { "use": "<name>", "with": { … } } wherever a node goes. Copies are plain nodes you edit like any other.
 - Slide layouts (Title, Title and content, Two columns, Section header, Big number, Quote, and the deck's own) start a slide: upsert_slide { "slide": { "use": "Title and content", "with": { "title": "…" }, "children": [ … ] } }.
+- Motion: once the slides are built, animate them. animate_deck({ "level": "lively", "pacing": "build" }) animates every slide in one call; set_animations animates one slide, from an intent ({ "choreograph": { "pacing": "focus" } }) or as exact steps (steps[0] as the slide appears, then one step per click); upsert_slide also takes "steps". render_preview with step and time shows a moment of the motion. See get_docs("animation").
 - Transitions: every slide arrives with its theme's signature transition. Set "transition" on a slide to change it; { "type": "morph" } glides layers that share a matchKey from the slide before (a logo, a title, a hero image moving between slides). See get_docs("transitions").
 - Sections, slide numbers and footers: "section" on a slide starts a named section; the deck's footer (date, text, slide number on every slide) is one deck.setFooter op; live text like "Slide 3 of 12" uses field runs. See get_docs("sections").
 - Users edit the same deck. Don't undo or overwrite their changes; undo_agent_changes only reverts yours. upsert_slide only replaces slides you created in this session.
 - Tool results start with what the user (or another agent) changed since your last call. A revert or a deleted slide is the user's decision: don't redo that work unless they ask.
 
-Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("transitions"), get_docs("element/text").`;
+Docs: get_docs("layout"), get_docs("design"), get_docs("theme"), get_docs("ops"), get_docs("components"), get_docs("sections"), get_docs("animation"), get_docs("transitions"), get_docs("element/text").`;
 
 const LAYOUT = `# Layout
 
@@ -249,18 +257,158 @@ All edits are ops applied as one atomic transaction (all or nothing), undoable w
 
 - \`{ "op": "slide.insert", "slide": <slide like upsert_slide>, "index"? }\`
 - \`{ "op": "slide.remove", "id" }\`, \`{ "op": "slide.move", "id", "index" }\` (index 0-based: the slide's position after the move)
-- \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"?, "section"?, "hideFooter"?, "transition"? } }\` (\`"section": null\` ends a section there; transitions: get_docs("transitions"))
+- \`{ "op": "slide.update", "id", "set": { "name"?, "background"?, "notes"?, "hidden"?, "section"?, "hideFooter"?, "transition"?, "motionLevel"? } }\` (\`"section": null\` ends a section there; transitions: get_docs("transitions"))
 - \`{ "op": "node.insert", "parentId": <frame id, or a slide id for its root frame>, "node": <node>, "index"? }\` (index omitted = last). The node is written as in upsert_slide: \`kind\` and \`id\` are optional (new IDs are returned).
 - \`{ "op": "node.remove", "id" }\`
 - \`{ "op": "node.move", "id", "parentId", "index"? }\`
 - \`{ "op": "node.update", "id", "set": { … } }\`: JSON Merge Patch. Objects merge, \`null\` deletes a field.
   e.g. \`{ "op": "node.update", "id": "title", "set": { "props": { "content": "New title" }, "width": "fill" } }\`
+- \`{ "op": "animation.insert", "slideId", "animation": { "target", "effect": "fade-in" | { "name", "params" }, "trigger"?, "delay"?, "duration"?, … }, "index"? }\`: one animation at \`index\` in the slide's play order (omitted = last). \`trigger\`: \`"onClick"\` (default: starts a new step), \`"withPrevious"\`, \`"afterPrevious"\`. \`id\` is optional (a readable one is returned). To set a whole slide's animations at once, use set_animations.
+- \`{ "op": "animation.update", "id", "set": { "duration": "$motion.slow", "effect": { "params": { "direction": "left" } } } }\`: merge patch, like node.update (\`null\` removes a field). \`{ "op": "animation.remove", "id" }\`, \`{ "op": "animation.move", "id", "index" }\`. IDs: get_slide or the deck summary.
+- \`{ "op": "deck.setMotionLevel", "level": "calm" | "subtle" | "lively" | "intense" | "absurd" | null }\`: the deck's motion level. A slide's own: slide.update \`{ "motionLevel": "intense" }\`.
+- \`{ "op": "preset.save", "name": "big-bounce", "preset": { "title"?, "description"?, "effect": { "name": "pop-in", "params": { … } } | "tracks": { … }, "duration"?, "easing"?, "repeat"?, "alternate"? } }\`: a tuned animation saved in the deck, played by name like any effect (\`"effect": "big-bounce"\`). Changing it changes every animation that plays it. \`{ "op": "preset.remove", "name" }\`.
 - \`{ "op": "deck.updateMeta", "set": { "title"?, "description"?, "authors"?, "language"? } }\`
 - \`{ "op": "deck.setFooter", "footer": { "text"?, "slideNumber"?: true, "date"?: true } }\`: a footer along the bottom of every slide (date left, text centered, number right), drawn inside the slide's margin; \`"footer": null\` removes it. Slides with \`hideFooter\` leave it off.
 
 Notes:
 - IDs are shared by slides and nodes and unique per deck. Slide roots are frames: insert into them with the root's ID (see get_slide).
 - To replace a whole slide, use upsert_slide instead.`;
+
+/** "spring (bounce 0.3)", "ease-out", "cubic-bezier(…)": a theme easing, readable. */
+function easingLabel(easing: EasingValue): string {
+  if (typeof easing === "string") return easing;
+  if ("spring" in easing) return `spring (bounce ${easing.spring.bounce ?? 0})`;
+  return `cubic-bezier(${easing.cubicBezier.join(", ")})`;
+}
+
+/** The effect gallery, from the plugins installed (golden rule 5: it can't drift). */
+function effectGallery(registry: PluginRegistry): string {
+  const effects = registry.describeEffects();
+  const kinds = [
+    ["entrance", "Entrances (a layer arrives; it's hidden until it plays)"],
+    ["emphasis", "Emphasis (a layer that's already there moves, then comes back to rest)"],
+    ["exit", "Exits (a layer leaves; it stays gone until the slide changes)"],
+  ] as const;
+  return kinds
+    .map(([kind, title]) => {
+      const lines = effects
+        .filter((e) => e.kind === kind)
+        .map((e) => {
+          const props = Object.keys(
+            (e.paramsJsonSchema as { properties?: Record<string, unknown> }).properties ?? {},
+          );
+          const only = e.targets ? ` (${e.targets.join(", ")} only)` : "";
+          const params = props.length ? ` Params: ${props.join(", ")}.` : "";
+          return `- \`${e.name}\`${only}: ${e.aiDocs}${params}`;
+        });
+      return lines.length ? `### ${title}\n${lines.join("\n")}` : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** The deck's saved presets, if any. */
+function presetDocs(deck: Deck | null): string {
+  const presets = Object.entries(deck?.presets ?? {});
+  if (presets.length === 0) return "This deck has no saved presets yet.";
+  return `This deck's presets:\n${presets
+    .map(
+      ([name, p]) =>
+        `- \`${name}\`${p.effect ? ` (${p.effect.name})` : " (keyframes)"}${p.description ? `: ${p.description}` : ""}`,
+    )
+    .join("\n")}`;
+}
+
+function animationDocs(registry: PluginRegistry, deck: Deck | null): string {
+  const level = deck?.motionLevel ?? "subtle";
+  const tokens = motionTokens(deck?.theme, level);
+  const themeName = deck?.theme.name ?? "Veloce";
+  const levels = MOTION_LEVELS.map(
+    (l) => `- \`${l}\`${l === level ? " (this deck)" : ""}: ${MOTION_LEVEL_SCALES[l].summary}`,
+  ).join("\n");
+  return `# Animation
+
+Slides animate in **steps**: step 0 plays as the slide appears, then each click plays the next step. The **motion level** (deck-wide, or per slide) decides how much moves and how fast; the theme gives the motion its personality (\`$motion\` tokens).
+
+## Three ways, from quickest to most exact
+1. **animate_deck** \`{ "level": "lively", "pacing": "build" }\`: every slide at once, written by the choreography engine from each layer's role (title, big number, visual, body, accent, backdrop), reading order and the level. Slides that already have animations stay (\`keepAnimated: false\` redoes them).
+2. **set_animations** \`{ "slideId", "choreograph": { "pacing": "focus", "emphasize": ["kpi"] } }\`: the same engine on one slide, with the layers to punch.
+3. **set_animations** \`{ "slideId", "steps": [...] }\` (or \`"steps"\` in upsert_slide's slide): exactly what you write.
+
+Pacings: \`auto\` (default): everything comes in as the slide appears, cascading; \`build\`: the title with the slide, then one point per click (a list one item per click); \`focus\`: everything comes in, then a click punches the main point.
+
+A good flow: build the slides, animate_deck once, then hand-tune the slides that matter most (the title, the key number, the big reveal) with set_animations or animation.update. The results list every animation's ID; get_slide and the deck summary list them too.
+
+## Motion levels
+${levels}
+Set the deck's with animate_deck \`level\` or apply_ops \`deck.setMotionLevel\`; one slide's with set_animations \`level\` (a calm deck with one absurd finale). Set the level **before** choreographing: it picks which layers move. Changing it later rescales speeds and distances of what's written, not which layers move.
+
+## Steps
+\`\`\`json
+{ "slideId": "s3", "steps": [
+  [ { "target": "s3-title", "effect": "fade-in" },
+    { "target": "s3-sub", "effect": "slide-in", "start": "after" } ],
+  [ { "target": "chart", "effect": "scale-in" },
+    { "target": "chart-label", "effect": { "name": "slide-in", "params": { "direction": "left" } }, "delay": 150 } ],
+  [ { "target": "kpi", "effect": "count-up" } ]
+] }
+\`\`\`
+- \`steps[0]\`: as the slide appears (\`[]\` if nothing should). Each later step: one click, never empty. \`"steps": []\` removes every animation.
+- Inside a step everything starts together; \`"start": "after"\` waits for the animation before it to end. \`delay\` (ms) shifts one.
+- Fields: \`target\` (a node ID on the slide), \`effect\` (a name, or \`{ "name", "params" }\`) or \`tracks\` (your own keyframes), \`delay\`, \`duration\`, \`easing\`, \`repeat\` (a count or \`"forever"\`), \`alternate\`, \`space\`, \`stagger\`, \`id\` (optional).
+- \`delay\` counts from where the animation would start: with the one before it, from that one's start; with \`"start": "after"\`, from its end; the first of a step, from the step's start.
+- After a loop (\`"repeat": "forever"\`), \`"start": "after"\` waits for one play of it.
+- A layer can have several animations: an entrance, then an emphasis on a later click, then an exit.
+- Layers with an entrance are hidden until it plays. A layer with no animation is simply there.
+
+## Steps and triggers (apply_ops, get_slide)
+Stored, a slide's animations are one list in play order, each with a \`trigger\`: \`"onClick"\` (the default when it's left out) starts a new step, \`"withPrevious"\` and \`"afterPrevious"\` join the step of the animation before it. Animations before the first \`onClick\` are step 0 (as the slide appears). So steps map to triggers like this: steps[0]'s animations are \`withPrevious\`, each later step's first is \`onClick\` and the rest \`withPrevious\` (or \`afterPrevious\` for \`"start": "after"\`).
+That's why \`animation.insert\` and \`animation.move\` can regroup steps: an \`onClick\` animation inserted or moved to index 0 makes the old step 0 part of click 1, and a \`withPrevious\` one put first starts a step 0. To reshape steps, prefer set_animations with the whole list; use the ops for one change in place (\`animation.update\` of its \`duration\`, \`effect\` or \`trigger\`). Every result shows the steps as they now play.
+
+## Timing: \`$motion\` tokens
+Durations and easings are best given as tokens: they follow the theme and the level. At ${themeName}, level ${level}: \`$motion.fast\` ${tokens.fast}ms, \`$motion.normal\` ${tokens.normal}ms, \`$motion.slow\` ${tokens.slow}ms, \`$motion.stagger\` ${tokens.stagger}ms; easings \`$motion.enter\` ${easingLabel(tokens.enter)}, \`$motion.exit\` ${easingLabel(tokens.exit)}, \`$motion.move\` ${easingLabel(tokens.move)}.
+Numbers (ms, up to 600000) are used as given at every level.
+**Springs arrive early.** A spring (some themes' \`$motion.enter\`) covers most of the way in its first fifth and spends the rest settling, so a longer \`duration\` alone barely looks slower. For a slow, visible move, give an easing as well: \`"easing": "ease-in-out"\` (or \`"linear"\` for a steady one) with \`"duration": 2000\`. Easings: ${EASING_NAMES.map((n) => `"${n}"`).join(", ")}, \`{ "cubicBezier": [x1, y1, x2, y2] }\`, \`{ "spring": { "bounce": 0.4 } }\` (0–1), or a token.
+
+## Effects
+Effects without params follow the level (how far a slide travels, how hard a pop bounces); a number you give is used as is.
+Text-only effects (\`count-up\`, \`typewriter\`) go on text layers: for a card or a list, animate the text inside it (one animation each), or give the frame an effect for any layer. \`count-up\` needs a number in the text (choreography counts up a figure: digits with an optional sign, symbol or short unit, like "75 %", "$4.2M", "1,200 °C", "70 cherries"; "1 in 3 bites" reads as text, so ask for \`count-up\` yourself), and doesn't hide its layer: until it plays the layer shows its numbers at 0 (add a \`fade-in\` with it on the same click to keep it hidden until then). \`flip-in\`/\`flip-out\` turn in 3D: give the layer's frame (or the slide) a \`perspective\`, or they read as a flat squash; choreography zooms instead where there's none, and says so.
+
+${effectGallery(registry)}
+
+## Lists, cards and the layout
+- **One by one:** put the animation on the list's frame with \`"stagger": { "each"?: ms or "$motion.stagger", "from"?: ${STAGGER_FROM.map((f) => `"${f}"`).join(" | ")} }\`: its children play in reading order. One animation instead of one per item.
+- **One item per click:** one step per item instead.
+- **Make room / close the gap** (layers in a stack or grid): \`"space": "makeRoom"\` on an entrance keeps the layer out of the layout until it plays, then the others glide aside; \`"space": "collapse"\` on an exit closes the gap after it. Not on free layers, not with \`stagger\`, and \`collapse\` never with \`repeat: "forever"\`.
+
+**Scaling text:** \`pulse\`, \`pop-in\` and other scale effects grow a layer from its centre. Text fills its frame's width by default, so a left-aligned line scales from the middle of the slide and can drift off its left edge: give text you scale \`"width": "hug"\`.
+
+## Ambient motion and loops
+\`"repeat": "forever"\` (with \`"alternate": true\` for back and forth) keeps a layer moving after it arrives: \`float\` on a hero image, \`pulse\` on a call to action. Use them sparingly below \`intense\`: one or two per slide.
+
+## Keyframes (\`tracks\`)
+For motion no effect gives: \`{ "target": "logo", "duration": 1200, "tracks": { "rotate": [{ "at": 0, "value": -90 }, { "at": 1, "value": 0 }], "opacity": [{ "at": 0, "value": 0 }] } }\`.
+- Keys: motion channels ${MOTION_CHANNELS.map((c) => `\`${c}\``).join(", ")} (stage pixels, degrees, 1 = own size, opacity 0–1, blur in px), drawn on top of the layout; or a property path: \`"props.fill"\` (elements), \`"style.fill"\` (frames), any number or color the layer has.
+- \`at\` is 0–1 of the duration, in order. An end with no keyframe is the layer's own value, so \`{ "opacity": [{ "at": 0, "value": 0 }] }\` fades in to however opaque it is. Each keyframe may have its own \`easing\`.
+
+## 2.5D: depth and perspective
+Give a frame \`"perspective": 1200\` (the viewer's distance for its own children; 800 is strong, 2000 gentle; on a slide, set it on the slide) and its children \`"depth"\` (stage pixels towards the viewer, negative away). Nearer layers are drawn bigger and drift more in moves and 3D turns (\`rotateX\`/\`rotateY\` tracks, \`flip-in\`). Layer order still decides what's in front. Lint flags depth without perspective (flat-depth) and depth at or past it (depth-behind-viewer). A layer with depth takes only its own size in the layout, though it's drawn bigger: keep gaps generous so near layers don't cover their neighbours.
+
+## Saved presets
+Tune an animation once, save it with apply_ops \`preset.save\`, then play it by name anywhere: \`"effect": "big-bounce"\`. Linked: changing the preset changes every animation that plays it. An animation's own fields win over the preset's. ${presetDocs(deck)}
+
+## Checking it
+- render_preview \`{ "slideId", "step": 1, "time": 200 }\`: the slide 200ms into the first click (every step before it played out). \`time\` omitted, or past the step's end: the end of that step (a loop's step lasts one play of it). \`"step": 0, "time": 0\`: before anything entered. Look mid-motion for overlaps and landings; at the end for the final state.
+- Transitions between slides (and morph) are separate: get_docs("transitions"). A layer with an entrance animation isn't morphed.
+
+## Recipes
+- **Title slide:** title \`blur-in\` or \`scale-in\`, subtitle \`slide-in\` with \`"start": "after"\`.
+- **Big number:** \`count-up\` on the figure, the caption \`fade-in\` with it; at lively and up, \`pulse\` it on the next click.
+- **Bullets:** the list frame with \`slide-in\` and \`stagger\` (all in), or one step per item (build).
+- **Hero image:** \`zoom-in\` as the slide appears, then \`float\` with \`"repeat": "forever", "alternate": true\`.
+- **Replace one thing with another:** the old layer \`fade-out\` with \`"space": "collapse"\`, then the new one \`pop-in\` with \`"space": "makeRoom"\` on the same click.
+- **Calm, professional:** level \`calm\` or \`subtle\`, pacing \`build\`, fades and slides only. **Keynote energy:** \`lively\`, springy \`pop-in\`s, one ambient loop per slide. **Show-off:** \`intense\`/\`absurd\` with 2.5D depth and \`flip-in\`.`;
+}
 
 /**
  * The color pairs agents actually use, in one line. Shown wherever a theme takes effect, so an
@@ -345,6 +493,7 @@ export function docTopics(registry: PluginRegistry): string[] {
     "ops",
     "components",
     "sections",
+    "animation",
     "transitions",
     "lint",
     ...registry.types().map((t) => `element/${t}`),
@@ -373,6 +522,18 @@ export function getDocs(topic: string, registry: PluginRegistry, deck: Deck | nu
     case "field":
     case "slide numbers":
       return SECTIONS;
+    case "animation":
+    case "animations":
+    case "animate":
+    case "motion":
+    case "effects":
+    case "effect":
+    case "steps":
+    case "choreography":
+    case "presets":
+    case "2.5d":
+    case "depth":
+      return animationDocs(registry, deck);
     case "transitions":
     case "transition":
     case "morph":

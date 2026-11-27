@@ -258,7 +258,7 @@ export class PluginRegistry {
         ok: false,
         reason: "wrong-target",
         message: `"${effect.name}" plays on ${targets.map((t) => `${t} elements`).join(" or ")}, and "${target.id}" is ${what}`,
-        hint: `Effects for any layer: ${fits.join(", ")}.`,
+        hint: `${target.kind === "frame" ? `Animate the ${targets.join(" or ")} layers inside "${target.id}" instead (one animation each), or use an effect for any layer: ` : "Effects for any layer: "}${fits.join(", ")}.`,
       };
     }
     const parsed = definition.paramsSchema.safeParse(effect.params ?? {});
@@ -267,7 +267,7 @@ export class PluginRegistry {
       ok: false,
       reason: "invalid-params",
       message: `"${effect.name}": ${formatIssues(parsed.error.issues, ["params"])}`,
-      hint: `Its params, all optional: ${Object.keys(definition.defaultParams).join(", ") || "none"}. Defaults: ${JSON.stringify(definition.defaultParams)}.`,
+      hint: `Its params, all optional: ${paramNames(definition.paramsSchema).join(", ") || "none"}. Defaults: ${JSON.stringify(definition.defaultParams)}.`,
     };
   };
 
@@ -365,4 +365,12 @@ export class PluginRegistry {
     }
     return lock;
   }
+}
+
+/** Every param an effect takes (not only those with a default: `distance` follows the level). */
+function paramNames(schema: z.ZodType): string[] {
+  const json = z.toJSONSchema(schema, { unrepresentable: "any" }) as {
+    properties?: Record<string, unknown>;
+  };
+  return Object.keys(json.properties ?? {});
 }

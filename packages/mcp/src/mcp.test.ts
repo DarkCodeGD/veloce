@@ -118,6 +118,8 @@ describe("tool listing", () => {
     expect(size("apply_ops")).toBeLessThan(1000);
     expect(size("upsert_slide")).toBeLessThan(16_000);
     expect(size("save_component")).toBeLessThan(1500);
+    expect(size("set_animations")).toBeLessThan(7000);
+    expect(size("animate_deck")).toBeLessThan(1500);
     const instructions = client.getInstructions();
     expect(instructions).toMatch(/upsert_slide/);
   });
@@ -1277,5 +1279,484 @@ describe("decks the user deletes (D99)", () => {
       /The user moved your current deck \(\w+\) to the trash: that's their decision/,
     );
     expect(after.text).toMatch(/How to fix: list_decks, then open_deck/);
+  });
+});
+
+describe("animation (D126)", () => {
+  const deckNow = async () => (await workspace.get(workspace.activeDeckId ?? "")).deck;
+  const slideNow = async (id: string) => (await deckNow()).slides.find((s) => s.id === id);
+
+  /** A title, a subtitle, a three-item list and a big number. */
+  async function buildSlide(id = "s1") {
+    await call("upsert_slide", {
+      slide: {
+        id,
+        children: [
+          { id: `${id}-title`, type: "text", props: { content: "Q3", style: "$text.h1" } },
+          { id: `${id}-sub`, type: "text", props: { content: "Revenue", style: "$text.h3" } },
+          {
+            id: `${id}-list`,
+            children: ["A", "B", "C"].map((t, i) => ({
+              id: `${id}-item${i}`,
+              type: "text",
+              props: { content: t },
+            })),
+          },
+          { id: `${id}-kpi`, type: "text", props: { content: "42%", style: "$text.display" } },
+        ],
+      },
+    });
+  }
+
+  it("sets a slide's animations as steps, with readable IDs, triggers and timing", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    const result = await call("set_animations", {
+      slideId: "s1",
+      steps: [
+        [
+          { target: "s1-title", effect: "fade-in" },
+          {
+            target: "s1-sub",
+            effect: { name: "slide-in", params: { direction: "left" } },
+            start: "after",
+          },
+        ],
+        [{ target: "s1-list", effect: "slide-in", stagger: { from: "start" } }],
+        [{ target: "s1-kpi", effect: "count-up", duration: 900 }],
+      ],
+    });
+    expect(result.isError).toBe(false);
+    expect(result.text).toMatch(/Animate slide s1: done/);
+    expect(result.text).toMatch(/Steps of s1 \(level subtle; 2 clicks\)/);
+    expect(result.text).toMatch(
+      /As the slide appears \(\d+ms\): s1-a1 s1-title fade-in; s1-a2 s1-sub slide-in\(direction left\) \[after\]/,
+    );
+    expect(result.text).toMatch(
+      /Click 1 \(\d+ms\): s1-a3 s1-list slide-in \[one by one from start\]/,
+    );
+    expect(result.text).toMatch(/Click 2 \(900ms\): s1-a4 s1-kpi count-up \[for 900ms\]/);
+    expect((await slideNow("s1"))?.animations).toMatchObject([
+      { id: "s1-a1", trigger: "withPrevious", effect: { name: "fade-in" } },
+      { id: "s1-a2", trigger: "afterPrevious" },
+      { id: "s1-a3", target: "s1-list" },
+      { id: "s1-a4", duration: 900 },
+    ]);
+    // A click step's first animation is stored without a trigger: on click, as the editor does.
+    expect((await slideNow("s1"))?.animations?.[2]).not.toHaveProperty("trigger");
+
+    // Replacing reuses the IDs it frees; [] removes them all; both are one undo step each.
+    await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-kpi", effect: "pop-in" }]],
+    });
+    expect((await slideNow("s1"))?.animations?.map((a) => a.id)).toEqual(["s1-a1"]);
+    const cleared = await call("set_animations", { slideId: "s1", steps: [] });
+    expect(cleared.text).toMatch(/No animations on s1/);
+    await call("undo_agent_changes");
+    expect((await slideNow("s1"))?.animations).toHaveLength(1);
+
+    // The outline lists them by step; get_slide adds the timing.
+    expect((await call("get_deck_summary")).text).toMatch(
+      /Motion level: subtle \(the default\)[\s\S]*animations: 1 \(no clicks\) on s1-kpi; get_slide lists their steps/,
+    );
+    expect((await call("get_slide", { slideId: "s1" })).text).toMatch(
+      /Steps of s1[\s\S]*As the slide appears \(\d+ms\)/,
+    );
+  });
+
+  it("says what's wrong in the steps the agent wrote, and how to fix it", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    const unknown = await call("set_animations", {
+      slideId: "s1",
+      steps: [[], [{ target: "s1-title", effect: "fade-inn" }]],
+    });
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toMatch(/Unknown effect "fade-inn"/);
+    expect(unknown.text).toMatch(/At: steps\[1\]\[0\]/);
+    expect(unknown.text).toMatch(/fade-in/);
+
+    const typewriter = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-list", effect: "typewriter" }]],
+    });
+    expect(typewriter.text).toMatch(/plays on text elements/);
+    expect(typewriter.text).toMatch(/At: steps\[0\]\[0\]/);
+
+    const empty = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-title", effect: "fade-in" }], []],
+    });
+    expect(empty.text).toMatch(/steps\[1\] is empty[\s\S]*How to fix: Remove the empty step/);
+
+    const neither = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-title" }]],
+    });
+    expect(neither.text).toMatch(/steps\[0\]\[0\]: An animation needs an "effect"/);
+
+    const both = await call("set_animations", {
+      slideId: "s1",
+      steps: [],
+      choreograph: { pacing: "build" },
+    });
+    expect(both.text).toMatch(/Give `steps` or `choreograph`, not both/);
+
+    const missing = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "nope", effect: "fade-in" }]],
+    });
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toMatch(/nope/);
+    expect(missing.text).toMatch(/At: steps\[0\]\[0\]/);
+    expect((await slideNow("s1"))?.animations).toBeUndefined();
+  });
+
+  it("choreographs a slide from an intent, at the slide's own level", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    const result = await call("set_animations", {
+      slideId: "s1",
+      level: "lively",
+      choreograph: { pacing: "build", emphasize: ["s1-kpi", "ghost"] },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.text).toMatch(/\d+ layers? move/);
+    expect(result.text).toMatch(/level lively \(this slide's own\)/);
+    expect(result.text).toMatch(/Click 1/);
+    expect(result.text).toMatch(/Notes: .*ghost/);
+    const slide = await slideNow("s1");
+    expect(slide?.motionLevel).toBe("lively");
+    expect(slide?.animations?.every((a) => a.id.startsWith("s1-a"))).toBe(true);
+    // Level and animations went in as one step.
+    await call("undo_agent_changes");
+    expect(await slideNow("s1")).not.toHaveProperty("motionLevel");
+    expect((await slideNow("s1"))?.animations).toBeUndefined();
+
+    // Level alone; the slide header says it.
+    const level = await call("set_animations", { slideId: "s1", level: "calm" });
+    expect(level.text).toMatch(/Set motion level of slide s1: done/);
+    expect((await call("get_deck_summary")).text).toMatch(/1\. slide s1 .*level calm/);
+  });
+
+  it("animates the whole deck in one step, keeping slides that already move", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide("s1");
+    await buildSlide("s2");
+    await buildSlide("s3");
+    await call("set_animations", {
+      slideId: "s2",
+      steps: [[{ target: "s2-kpi", effect: "flash" }]],
+    });
+    const result = await call("animate_deck", { level: "intense", pacing: "focus" });
+    expect(result.isError).toBe(false);
+    expect(result.text).toMatch(/Animate deck: done\. 2 slides animated, pacing "focus"/);
+    expect(result.text).toMatch(/kept as they were: s2/);
+    expect(result.text).toMatch(/Motion level: intense\./);
+    expect(result.text).toMatch(/s1: As the slide appears: s1-a1 /);
+    expect(result.text).not.toMatch(/\(\d+ms\)/); // the deck at a glance: no timing
+    const deck = await deckNow();
+    expect(deck.motionLevel).toBe("intense");
+    expect(deck.slides[1]?.animations).toEqual([
+      expect.objectContaining({ effect: { name: "flash" } }),
+    ]);
+    expect(deck.slides[2]?.animations?.[0]?.id).toMatch(/^s3-a\d+$/);
+
+    await call("undo_agent_changes");
+    expect((await deckNow()).motionLevel).toBeUndefined();
+    expect((await slideNow("s1"))?.animations).toBeUndefined();
+
+    const redo = await call("animate_deck", { keepAnimated: false });
+    expect(redo.text).toMatch(/3 slides animated, pacing "auto"/);
+    expect((await call("animate_deck", {})).text).toMatch(/Nothing changed: every slide already/);
+  });
+
+  it("won't replace animations the user made unless asked", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    const open = await workspace.get(workspace.activeDeckId ?? "");
+    open.apply({
+      origin: "user",
+      label: "Add effect",
+      ops: [
+        {
+          op: "animation.insert",
+          slideId: "s1",
+          animation: { id: "mine", target: "s1-title", effect: { name: "pop-in" } },
+        },
+      ],
+    });
+    const refused = await call("set_animations", { slideId: "s1", choreograph: {} });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/last edited by the user[\s\S]*overwrite: true/);
+    // A level alone never touches them.
+    expect((await call("set_animations", { slideId: "s1", level: "lively" })).isError).toBe(false);
+    const asked = await call("set_animations", { slideId: "s1", choreograph: {}, overwrite: true });
+    expect(asked.isError).toBe(false);
+    expect((await slideNow("s1"))?.animations?.some((a) => a.id === "mine")).toBe(false);
+  });
+
+  it("takes animation ops, the level and presets in apply_ops, with shorthand", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    const added = await call("apply_ops", {
+      label: "Animate",
+      ops: [
+        {
+          op: "animation.insert",
+          slideId: "s1",
+          animation: { target: "s1-title", effect: "fade-in" },
+        },
+        { op: "deck.setMotionLevel", level: "absurd" },
+        {
+          op: "preset.save",
+          name: "big-pop",
+          preset: { effect: { name: "pop-in" }, duration: "$motion.slow" },
+        },
+        {
+          op: "animation.insert",
+          slideId: "s1",
+          animation: { target: "s1-kpi", effect: "big-pop" },
+        },
+      ],
+    });
+    expect(added.isError).toBe(false);
+    expect(added.text).toMatch(/New animation IDs: s1-a1, s1-a2\./);
+    expect(added.text).toMatch(/Motion level: absurd\./);
+    expect(added.text).toMatch(/Click 1 \(\d+ms\): s1-a1 s1-title fade-in/);
+    expect((await call("get_deck_summary")).text).toMatch(
+      /Motion level: absurd\. Saved presets \(use as effects\): "big-pop" \(pop-in\)/,
+    );
+    const tuned = await call("apply_ops", {
+      label: "Slower",
+      ops: [{ op: "animation.update", id: "s1-a1", set: { duration: 1200 } }],
+    });
+    expect(tuned.text).toMatch(/s1-a1 s1-title fade-in \[for 1200ms\]/);
+    const bad = await call("apply_ops", {
+      label: "Bad",
+      ops: [{ op: "animation.insert", slideId: "s1", animation: { target: "s1-title" } }],
+    });
+    expect(bad.text).toMatch(/ops\[0\]\.animation: An animation needs an "effect"/);
+  });
+
+  it("builds and animates a slide in one upsert_slide, with depth and perspective", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    const result = await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        perspective: 1200,
+        children: [
+          { id: "t", type: "text", depth: 200, props: { content: "Deep" } },
+          {
+            id: "card",
+            perspective: 900,
+            children: [{ id: "c", type: "text", props: { content: "x" } }],
+          },
+        ],
+        steps: [[{ target: "t", effect: "flip-in" }], [{ target: "card", effect: "zoom-in" }]],
+      },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.text).toMatch(/root frame \S+ \(stack column\) \[perspective 1200\]/);
+    expect(result.text).toMatch(/- t: text "Deep" \[depth 200\]/);
+    expect(result.text).toMatch(/- card: frame \(stack column\) \[perspective 900\]/);
+    expect(result.text).toMatch(/As the slide appears \(\d+ms\): s1-a1 t flip-in/);
+    expect((await slideNow("s1"))?.root.perspective).toBe(1200);
+
+    // Rebuilding without steps keeps the animations of layers still there.
+    const rebuilt = await call("upsert_slide", {
+      slide: { id: "s1", children: [{ id: "t", type: "text", props: { content: "Deep" } }] },
+    });
+    expect(rebuilt.text).toMatch(/kept 1 animation[\s\S]*removed 1 animation/);
+
+    const bad = await call("upsert_slide", {
+      slide: {
+        id: "s1",
+        children: [{ id: "t", type: "text", props: { content: "Deep" } }],
+        steps: [[{ target: "t", effect: "fade-in" }], [{ target: "t", effect: "nope-in" }]],
+      },
+    });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toMatch(/At: slide\.steps\[1\]\[0\]/);
+  });
+
+  it("previews a moment of a slide's animations", async () => {
+    const shots: unknown[] = [];
+    await connect({
+      ...fakeRender,
+      async screenshot(_deck, options) {
+        shots.push(options.at);
+        return { data: new Uint8Array([0xff, 0xd8, 0xff]), mimeType: "image/jpeg" };
+      },
+    });
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    const rest = await call("render_preview", { slideId: "s1" });
+    expect(rest.text).toMatch(/at rest/);
+    await call("set_animations", {
+      slideId: "s1",
+      steps: [
+        [{ target: "s1-title", effect: "fade-in", duration: 400 }],
+        [{ target: "s1-kpi", effect: "pop-in", duration: 600 }],
+      ],
+    });
+    expect((await call("render_preview", { slideId: "s1" })).text).toMatch(
+      /animates in 2 steps: pass step/,
+    );
+    const mid = await call("render_preview", { slideId: "s1", step: 1, time: 250 });
+    expect(mid.text).toMatch(/step 1 \(click 1\) at 250ms of 600ms/);
+    const end = await call("render_preview", { slideId: "s1", step: 0 });
+    expect(end.text).toMatch(/step 0 \(as the slide appears\) at 400ms of 400ms/);
+    expect(shots).toEqual([undefined, undefined, { step: 1, time: 250 }, { step: 0, time: 400 }]);
+    const none = await call("render_preview", { slideId: "s1", step: 5 });
+    expect(none.text).toMatch(/no step 5[\s\S]*0 \(as the slide appears\) to 1 \(one per click\)/);
+  });
+
+  it("fixes what the real-agent retest found (D126)", async () => {
+    const shots: unknown[] = [];
+    await connect({
+      ...fakeRender,
+      async screenshot(_deck, options) {
+        shots.push(options.at);
+        return { data: new Uint8Array([0xff, 0xd8, 0xff]), mimeType: "image/jpeg" };
+      },
+    });
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    await call("apply_ops", {
+      label: "Preset",
+      ops: [{ op: "preset.save", name: "big-bounce", preset: { effect: { name: "pop-in" } } }],
+    });
+    // A preset's typo gets a "did you mean" (the registry only knows installed effects).
+    const typo = await call("apply_ops", {
+      label: "Typo",
+      ops: [
+        {
+          op: "animation.insert",
+          slideId: "s1",
+          animation: { target: "s1-kpi", effect: "big-bouncee" },
+        },
+      ],
+    });
+    expect(typo.text).toMatch(/Did you mean the saved preset "big-bounce"\?/);
+    // A preset shows as the preset, not as what it expands to.
+    const used = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-kpi", effect: "big-bounce", duration: 300 }]],
+    });
+    expect(used.text).toMatch(/s1-a1 s1-kpi big-bounce \(saved preset\) \[for 300ms\]/);
+    // A time past the step's end shows its end, and says so.
+    const late = await call("render_preview", { slideId: "s1", step: 0, time: 9000 });
+    expect(late.text).toMatch(
+      /at 300ms of 300ms \(9000ms is past the step's end, so this is its end\)/,
+    );
+    expect(shots.at(-1)).toEqual({ step: 0, time: 300 });
+    // Errors about a step's animation don't name an ID the agent never saw.
+    const ghost = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "ghost", effect: "fade-in" }]],
+    });
+    expect(ghost.text).toMatch(/Error: This animation targets "ghost"/);
+    expect(ghost.text).not.toMatch(/s1-a1/);
+    // A keyframe's `at` out of range says what `at` is.
+    const at = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-kpi", tracks: { opacity: [{ at: 1.5, value: 0 }] } }]],
+    });
+    expect(at.text).toMatch(/steps\[0\]\[0\]\.tracks\.opacity\[0\]\.at: /);
+    expect(at.text).toMatch(/0 is its start, 1 its end/);
+    // A text-only effect on a frame says to animate the text inside it; params list them all.
+    const frame = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-list", effect: "count-up" }]],
+    });
+    expect(frame.text).toMatch(/Animate the text layers inside "s1-list" instead/);
+    const params = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-kpi", effect: { name: "slide-in", params: { distance: "far" } } }]],
+    });
+    expect(params.text).toMatch(/Its params, all optional: direction, distance, fade\./);
+  });
+
+  it("fixes what the second retest found (D126)", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    await call("set_animations", {
+      slideId: "s1",
+      level: "lively",
+      steps: [[{ target: "s1-kpi", effect: { name: "slide-in", params: { direction: "left" } } }]],
+    });
+    // An effect by name in animation.update, dropping the old effect's settings.
+    const swapped = await call("apply_ops", {
+      label: "Swap",
+      ops: [{ op: "animation.update", id: "s1-a1", set: { effect: "pop-in" } }],
+    });
+    expect(swapped.isError).toBe(false);
+    expect((await slideNow("s1"))?.animations?.[0]?.effect).toEqual({ name: "pop-in" });
+    // apply_ops errors don't name an ID made up for the agent's animation.
+    const ghost = await call("apply_ops", {
+      label: "Ghost",
+      ops: [
+        { op: "animation.insert", slideId: "s1", animation: { target: "nope", effect: "fade-in" } },
+      ],
+    });
+    expect(ghost.text).toMatch(/This animation targets "nope"/);
+    expect(ghost.text).not.toMatch(/s1-a2/);
+    // A rebuild keeps the slide's own level, as it keeps its layers' animations.
+    await buildSlide();
+    expect((await slideNow("s1"))?.motionLevel).toBe("lively");
+    // Step errors in upsert_slide point into the slide.
+    const empty = await call("upsert_slide", {
+      slide: { id: "s1", children: [], steps: [[], []] },
+    });
+    expect(empty.text).toMatch(/slide\.steps\[1\] is empty[\s\S]*At: slide\.steps\[1\]/);
+    // The two ways of saying when an animation starts, mixed up, get pointed at the other.
+    const start = await call("apply_ops", {
+      label: "Start",
+      ops: [
+        {
+          op: "animation.insert",
+          slideId: "s1",
+          animation: { target: "s1-kpi", effect: "fade-in", start: "after" },
+        },
+      ],
+    });
+    expect(start.text).toMatch(/In apply_ops an animation says when it starts with "trigger"/);
+    const trigger = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-kpi", effect: "fade-in", trigger: "afterPrevious" }]],
+    });
+    expect(trigger.text).toMatch(/"start": "with" \(default\) or "after"/);
+    const preset = await call("apply_ops", {
+      label: "Preset",
+      ops: [{ op: "preset.save", name: "my-pop", preset: { effect: "pop-in" } }],
+    });
+    expect(preset.text).toMatch(/its effect is an installed effect, written as an object/);
+  });
+
+  it("teaches animation from the installed effects, the level and the theme", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion", theme: "ember" });
+    const docs = await call("get_docs", { topic: "animation" });
+    expect(docs.text).toMatch(/# Animation/);
+    expect(docs.text).toMatch(/- `pop-in`: /);
+    expect(docs.text).toMatch(/- `count-up` \(text only\): /);
+    expect(docs.text).toMatch(/- `slide-in`: .*Params: direction, distance, fade\./);
+    expect(docs.text).toMatch(/`subtle` \(this deck\)/);
+    expect(docs.text).toMatch(/At Ember, level subtle: `\$motion\.fast` \d+ms/);
+    for (const alias of ["motion", "effects", "2.5d", "presets"]) {
+      expect((await call("get_docs", { topic: alias })).text).toBe(docs.text);
+    }
+    expect(client.getInstructions()).toMatch(/animate_deck/);
+    expect((await call("get_docs", { topic: "ops" })).text).toMatch(/animation\.insert/);
   });
 });

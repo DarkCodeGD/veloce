@@ -54,7 +54,7 @@ export function measureSlide(
     const m: NodeMeasurement = { bounds: toStage(box) };
     const isFrame = el.classList.contains("v-frame");
     const clipped = style(el).overflow === "hidden";
-    const content = isFrame ? childRects(el, style) : contentRects(el, style);
+    const content = isFrame ? childRects(el, style, scale) : contentRects(el, style);
     const overflow = clipped ? null : overflowOf(box, content, scale);
     if (overflow) m.overflow = overflow;
     if (!isFrame) {
@@ -74,12 +74,29 @@ const round = (v: number) => Math.round(v * 10) / 10;
  * its card's corner is a design, not a frame too small for its content. Leaving the slide
  * is still caught, by lint's off-canvas rule.
  */
-function childRects(el: HTMLElement, style: (el: Element) => CSSStyleDeclaration): DOMRect[] {
-  return [...el.children].flatMap((c) =>
-    c.getClientRects().length && style(c).position !== "absolute"
-      ? [c.getBoundingClientRect()]
-      : [],
-  );
+function childRects(
+  el: HTMLElement,
+  style: (el: Element) => CSSStyleDeclaration,
+  scale: number,
+): Extent[] {
+  const frame = el.getBoundingClientRect();
+  return [...el.children].flatMap((c): Extent[] => {
+    if (!c.getClientRects().length || style(c).position === "absolute") return [];
+    // A layer with depth (2.5D, D112) is drawn nearer, so bigger, but takes only its own
+    // box in the layout: a frame isn't too small for it (D126). Its layout box, unprojected.
+    if (
+      c instanceof HTMLElement &&
+      c.offsetParent === el &&
+      style(c).transform.startsWith("matrix3d")
+    ) {
+      const left = frame.left + (c.offsetLeft + el.clientLeft) * scale;
+      const top = frame.top + (c.offsetTop + el.clientTop) * scale;
+      return [
+        { left, top, right: left + c.offsetWidth * scale, bottom: top + c.offsetHeight * scale },
+      ];
+    }
+    return [c.getBoundingClientRect()];
+  });
 }
 
 /** Words measured per element; beyond this, text is far past any lint word limit anyway. */

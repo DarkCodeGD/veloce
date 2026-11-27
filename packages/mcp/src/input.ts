@@ -24,11 +24,14 @@ import {
   FrameStyleSchema,
   findComponent,
   findSlide,
+  formatIssues,
+  formatPath,
   IdSchema,
   instantiateComponent,
   instantiateSlide,
   LayoutSchema,
   MatchKeySchema,
+  MotionLevelSchema,
   type Node,
   OpSchema,
   PaintSchema,
@@ -39,8 +42,17 @@ import {
   SlideSchema,
   TransitionSchema,
   VeloceError,
+  walkNodes,
 } from "@veloce/core";
 import { z } from "zod";
+import {
+  AnimationInputSchema,
+  animationIdMaker,
+  normalizeAnimation,
+  type StepPaths,
+  StepsInputSchema,
+  stepsToAnimations,
+} from "./motion.js";
 
 const nodeCommon = {
   id: IdSchema.optional().describe("Optional; generated if omitted. Unique across the deck."),
@@ -52,6 +64,14 @@ const nodeCommon = {
   locked: z.boolean().optional(),
   opacity: z.number().min(0).max(1).optional(),
   rotation: z.number().min(-360).max(360).optional(),
+  depth: z
+    .number()
+    .min(-10_000)
+    .max(10_000)
+    .optional()
+    .describe(
+      "2.5D: stage pixels towards the viewer (negative: away). Shows only inside a frame with a `perspective`; layer order still decides what's in front.",
+    ),
   width: SizingSchema.optional().describe(
     'Pixels, "fill" (take free space) or "hug" (fit content).',
   ),
@@ -115,11 +135,21 @@ export interface FrameInput extends Omit<z.infer<typeof FrameFieldsInput>, "chil
   children: NodeInput[];
 }
 
+const PerspectiveInput = z
+  .number()
+  .min(100)
+  .max(100_000)
+  .optional()
+  .describe(
+    "2.5D: the viewer's distance for this frame's own children (their `depth`, and 3D turns), in stage pixels. 800 is strong, 2000 gentle. Default: flat.",
+  );
+
 const FrameFieldsInput = z.strictObject({
   ...nodeCommon,
   kind: z.literal("frame").optional(),
   layout: LayoutSchema.optional().describe('Default: { "mode": "stack" } (a vertical stack).'),
   style: FrameStyleSchema.optional(),
+  perspective: PerspectiveInput,
 });
 
 export const FrameInputSchema = z.strictObject({
@@ -157,6 +187,18 @@ export const SlideInputSchema = z.strictObject({
     'Layout of the slide\'s root frame. Default: a column centered top-to-bottom, with "$space.xl" padding and "$space.md" gap. Children stretch across; add align: "center" to center hug-width content.',
   ),
   style: FrameStyleSchema.optional().describe("Style of the slide's root frame."),
+  perspective: PerspectiveInput,
+  motionLevel: MotionLevelSchema.optional().describe(
+    "This slide's own motion level, over the deck's: calm | subtle | lively | intense | absurd.",
+  ),
+  // Listed light (the full step schema would double this tool's listing), checked in full
+  // with StepsInputSchema when the slide is normalized.
+  steps: z
+    .array(z.array(z.record(z.string(), z.unknown())))
+    .optional()
+    .describe(
+      'Its animations, in one call: steps[0] plays as the slide appears, each later step is one click, e.g. [[{ "target": "title", "effect": "fade-in" }], [{ "target": "chart", "effect": "scale-in" }]]. Replaces the slide\'s animations; omit to keep those of layers still on it. Or animate later with set_animations. get_docs("animation").',
+    ),
   use: ComponentNameSchema.optional().describe(
     'A slide layout to start from, e.g. "Title and content" (see list_components). Its params go in `with`, and `children` fill its slot; leave out layout and style.',
   ),
@@ -170,7 +212,7 @@ export const SlideInputSchema = z.strictObject({
 export type SlideInput = z.infer<typeof SlideInputSchema>;
 
 /** The ops whose node/slide may use the shorthand above. */
-const SHORTHAND_OPS = new Set(["slide.insert", "node.insert"]);
+const SHORTHAND_OPS = new Set(["slide.insert", "node.insert", "animation.insert"]);
 
 /**
  * Core ops, except inserts also accept the shorthand node/slide input above. Keyed on `op`, so
@@ -188,6 +230,13 @@ export const OpInputSchema = z.discriminatedUnion("op", [
     parentId: IdSchema,
     // A superset of core's node: kind, id and layout are optional.
     node: NodeInputSchema,
+    index: z.number().int().min(0).optional(),
+  }),
+  z.strictObject({
+    op: z.literal("animation.insert"),
+    slideId: IdSchema,
+    // A superset of core's animation: id optional, an effect by name alone.
+    animation: AnimationInputSchema,
     index: z.number().int().min(0).optional(),
   }),
   ...OpSchema.options.filter((option) => !SHORTHAND_OPS.has(option.shape.op.value)),
@@ -212,6 +261,11 @@ export interface NormalizeContext {
   taken?: Set<string>;
   /** Slides inserted earlier in this batch → their root frame's ID (a slide ID as parentId). */
   slideRoots?: Map<string, string>;
+  /**
+   * Filled when a slide's `steps` become its animations: where each stored animation came
+   * from in the input (`slide.steps[1][0]`), so an error points at what the agent wrote.
+   */
+  stepPaths?: Map<string, StepPaths>;
 }
 
 /**
@@ -298,7 +352,39 @@ function expandUse(input: UseInput, ctx: NormalizeContext, at: string): Node {
 }
 
 export function normalizeSlide(raw: SlideInput, ctx: NormalizeContext = {}, at = "slide"): Slide {
-  const { id, layout, style, children, use, with: values, ...fields } = withFieldText(raw);
+  const { steps, perspective, ...rest } = withFieldText(raw);
+  const slide = normalizeSlideContent(rest, ctx, at);
+  const root = perspective === undefined ? slide.root : { ...slide.root, perspective };
+  if (steps === undefined) return { ...slide, root };
+  // Its animations, from steps (D126): readable IDs, clear of the slide's own node IDs.
+  ctx.taken ??= ctx.deck ? collectIds(ctx.deck) : new Set();
+  const taken = new Set(ctx.taken);
+  for (const { node } of walkNodes(root)) taken.add(node.id);
+  const newId = animationIdMaker(ctx.deck ?? EMPTY_DECK, slide.id, [], taken);
+  const parsed = StepsInputSchema.safeParse(steps);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new VeloceError("INVALID", formatIssues(parsed.error.issues, [`${at}.steps`]), {
+      path: `${at}.steps${formatPath(issue?.path ?? []).replace(/^(?=[^[])/, ".")}`,
+      hint: 'Each step is a list of { "target", "effect" } (or "tracks"); see get_docs("animation").',
+    });
+  }
+  const { animations, paths } = stepsToAnimations(parsed.data, newId, `${at}.steps`);
+  ctx.stepPaths?.set(slide.id, paths);
+  for (const animation of animations) ctx.taken.add(animation.id);
+  const { animations: _old, ...fields } = slide;
+  return { ...fields, root, ...(animations.length > 0 && { animations }) };
+}
+
+/** `animationIdMaker` with no deck: the IDs to avoid are given. */
+const EMPTY_DECK = { slides: [] } as unknown as Deck;
+
+function normalizeSlideContent(
+  raw: Omit<SlideInput, "steps" | "perspective">,
+  ctx: NormalizeContext,
+  at: string,
+): Slide {
+  const { id, layout, style, children, use, with: values, ...fields } = raw;
   const slideId = id ?? createId("sl");
   const nodes = (list: NodeInput[] | undefined) =>
     list?.map((child, i) => normalizeNode(child, ctx, `${at}.children[${i}]`));
@@ -373,6 +459,20 @@ export function normalizeOp(raw: OpInput, ctx: NormalizeContext = {}, at = "ops[
     };
   }
   if (input.op === "node.move") return { ...input, parentId: parentFrameId(input.parentId, ctx) };
+  // An effect by name in a patch, as in an insert: a new effect starts without the old
+  // one's settings (they belong to the old effect), as the editor's Effect picker does.
+  if (input.op === "animation.update" && typeof input.set.effect === "string") {
+    return { ...input, set: { ...input.set, effect: { name: input.set.effect, params: null } } };
+  }
+  if (input.op === "animation.insert" && "animation" in input) {
+    ctx.taken ??= ctx.deck ? collectIds(ctx.deck) : new Set();
+    const newId = animationIdMaker(ctx.deck ?? EMPTY_DECK, input.slideId, [], ctx.taken);
+    const animation = normalizeAnimation(input.animation, newId, `${at}.animation`);
+    ctx.taken.add(animation.id);
+    // Errors shouldn't name an ID the agent never saw (results still list it).
+    if (input.animation.id === undefined) ctx.generated?.add(animation.id);
+    return { ...input, animation };
+  }
   return input;
 }
 

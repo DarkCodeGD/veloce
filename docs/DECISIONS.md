@@ -3606,3 +3606,114 @@ Phase 6 placement of `icon`; both move into Phase 4.
    thumbnails was added (D10 reserved the file; nothing writes it yet), open questions got
    deadlines (the trademark search before Phase 7), and the head-to-head benchmark is the
    first case of Phase 9's eval suite.
+
+## D126 — Agents animate: steps, choreography, the whole deck, and a moment in a preview
+
+**Status:** Accepted (2026-11-27). Phase 4's MCP animation item; closes the "agents" parts
+left open by D110 §7, D111 §6, D112 §7, D117 §9, D119 §9, D120 §9 and D121 §9.
+
+1. **Agents write steps, core stores triggers.** `set_animations { slideId, steps }`:
+   `steps[0]` plays as the slide appears, each later step is one click; inside a step
+   everything starts together unless `"start": "after"`. `motion.ts` turns that into D110's
+   list in play order (step 0's first as `withPrevious`, each click step's first stored with
+   no trigger, as the editor does). **Why steps, not triggers:** agents reason in "what's on
+   screen after each click", the same model the Animate panel shows; triggers are the
+   storage that keeps concurrent edits meaningful (D101 §2.2), and agents still get them in
+   `animation.insert` for single edits. A click step can't be empty (it would be a click
+   that does nothing); `"steps": []` removes every animation.
+2. **Two ways to choreograph, one engine.** `set_animations { choreograph: { pacing,
+   emphasize } }` for a slide and `animate_deck { level, pacing, keepAnimated }` for the
+   whole deck, both one undo step, both core's `choreograph` (golden rule 1: the editor's
+   buttons call the same function). `animate_deck` sets the level first, in the same
+   transaction, because the level picks which layers move (D111 §7); its result says that
+   changing the level later rescales speeds but doesn't re-pick layers. **Why a deck tool
+   on top of the slide tool:** it's the cheapest path from a built deck to a moving one,
+   one call instead of one per slide, and token cost is the one place agents lost to
+   Claude's slides on economy (D124).
+3. **Shorthand, the same rules.** An effect may be just its name (`"effect": "fade-in"`),
+   `id` is optional, and generated animation IDs are readable (`s3-a1`, reusing the IDs a
+   replace frees), so an agent can `animation.update` one without a lookup. Everything
+   else is core's own schema and checks (effect exists, suits the layer, params valid,
+   `space`/`stagger` rules), with paths rewritten to what the agent wrote
+   (`steps[1][0]`, `slide.steps[1][0]`).
+4. **Build and animate in one call:** `upsert_slide` takes `steps` too, replacing the
+   slide's animations (without `steps` a rebuild still keeps those of layers still there,
+   D110 §6). Its listed schema shows `steps` loosely and checks it in full when the slide is
+   normalized: the full step schema would have pushed the tool's listing past its 16 kB
+   budget.
+5. **Someone else's animations are protected** like slides (D72): replacing a slide's
+   animations that the user or another agent made, or that predate the session, needs
+   `overwrite: true`. A level change alone never touches them, and `animate_deck` keeps
+   animated slides by default.
+6. **`apply_ops` lists and teaches** `animation.insert/update/remove/move`,
+   `deck.setMotionLevel`, `preset.save/remove` and `slide.update`'s `motionLevel`; results
+   name new animation IDs, show the level's summary when it changed, and the steps of every
+   slide whose animations changed.
+7. **Reading motion back:** outlines list each slide's animations by step (`animations:` /
+   `As the slide appears: s3-a1 title fade-in`), the deck summary its level and saved
+   presets, layers their `[depth]` and frames their `[perspective]`. Tool results that
+   change animations, and `get_slide`, add each step's length (with the effects' own
+   durations, resolved through the registry).
+8. **`render_preview { step, time }`** shows a moment: `time` ms into `step`, every step
+   before it played out; `time` defaults to the step's end. The render page already seeked
+   (D115), so this was plumbing; the caption says which moment it is, and a preview at rest
+   of an animated slide says how to ask for one.
+9. **`get_docs("animation")`** (also under motion, effects, presets, 2.5d…): the three ways,
+   the level table, steps, `$motion` values at the deck's theme and level, the effect
+   gallery generated from the installed plugins (golden rule 5), lists and layout,
+   loops, keyframes, 2.5D, presets, checking with previews, and recipes. `depth` and
+   `perspective` are in node and slide input.
+10. **The real-agent retest** (Sonnet 5.5, high effort, a 7-slide deck through every tool,
+    then trying to break it) animated a whole deck in four calls and judged the errors
+    "mostly the best I've seen from an MCP". Its findings, fixed:
+    - **Choreography:** a figure with a longer unit word ("70 cherries") now counts up (a
+      year heading like "2026 roadmap" still doesn't); `flip-in` where the layer's frame
+      has no perspective drew a flat squash, so the engine zooms instead and a note says to
+      add a perspective to get the flip.
+    - **Lint:** a layer with `depth` is drawn bigger than the box it takes, so its stack read
+      as overflowing ("children are 32px too tall"). The renderer's measure now takes such a
+      layer's layout box for its frame's overflow. A real-Chromium test over MCP reproduces
+      the agent's exact error without the fix.
+    - **Errors:** a typo of a saved preset gets "Did you mean the saved preset …?" (the
+      registry only knew installed effects); a text-only effect on a frame says to animate
+      the text inside it; an effect's params hint lists every param (it listed only those
+      with defaults, so `distance` was missing); schema errors in a step get a hint for that
+      field (`at` is 0–1 of the duration) instead of one generic line; and errors no longer
+      name an animation ID the agent never saw.
+    - **Output:** a preset shows as itself (`big-bounce (saved preset)`), not as what it
+      expands to; `render_preview` past a step's end shows its end and says so; the deck
+      summary gives each slide's animations one line (count, clicks, layers; get_slide has
+      the steps), and `animate_deck` one line per slide without timing, since both were the
+      heaviest outputs.
+    - **Docs:** how steps map to triggers and why `animation.insert`/`move` can regroup
+      steps; what `delay` counts from; `"start": "after"` after a loop waits one play;
+      springs arrive early, so slowing down takes an easing as well as a duration; text-only
+      effects and flips; a preview past a step's end.
+      Left for later, on purpose: `count-up` on text with no number is accepted (the motion
+      lint item can flag it); intense and absurd choreography repeat one pattern per slide
+      (more variety, kinetic text and camera moves come with Phase 5's motion); a title
+      slide under `build` puts its subtitle on a click, as the pacing says.
+11. **The second retest** (a fresh 6-slide deck, the same brief) called the tools clean
+    enough to ship and the errors their best part; the step/trigger docs matched what
+    `animation.insert` and `move` did. Fixed from it: "1,200 °C" is a figure (degrees are a
+    unit) so a big number counts up; `animation.update` takes an effect by name (dropping
+    the old effect's settings, as the editor's picker does); `apply_ops` errors no longer
+    name a made-up animation ID; rebuilding a slide keeps its own motion level; step error
+    paths in `upsert_slide` all start at `slide.steps`; `absurd`'s summary promises only
+    what plays today (kinetic text, particles and camera moves come with Phase 5); the docs
+    say `count-up` doesn't hide its layer before it plays, and that scaling full-width text
+    grows it from the slide's middle (give it `"width": "hug"`). Left for the motion lint
+    item: `count-up` with no number, a manual `flip-in` without perspective, two entrances
+    on one layer, and a loop that starts before its layer's entrance.
+12. **The third retest** (a 4-slide deck, checking the fixes) confirmed them: degrees count
+    up, `animation.update` takes an effect by name, a rebuilt slide keeps its level, a
+    preview past a step's end says so, made-up IDs are gone from errors. Its one "blocker",
+    `animation.insert` overwriting an animation with the same ID, didn't reproduce: core
+    refuses a duplicate ID ("is already used in this deck"); `set_animations` reuses a
+    slide's old IDs when it replaces the whole list, which is what the agent saw. Fixed from
+    it: mixing `start` (steps) and `trigger` (the stored list) points to the other; a
+    preset's effect given as a name says it's an object; the preview hint after
+    `set_animations` asks for step 0 on a slide with no clicks; the docs say which figures
+    choreography counts up and that a loop's step lasts one play. Left for the motion lint
+    item: a child's own entrance under a staggered parent, and a slide whose step 0 is a
+    bare `count-up` (the engine could pair it with a fade).
