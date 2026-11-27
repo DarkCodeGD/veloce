@@ -37,6 +37,7 @@ import type { Deck, Slide } from "./schema/deck.js";
 import type { MotionLevel, Time } from "./schema/motion.js";
 import { type ElementNode, type FrameNode, isFreeLayer, type Node } from "./schema/node.js";
 import { toPlainText } from "./schema/rich-text.js";
+import { morphPartners } from "./transition.js";
 
 type StaggerFrom = NonNullable<NonNullable<Animation["stagger"]>["from"]>;
 
@@ -87,6 +88,13 @@ const stronger = (a: LayerRole, b: LayerRole) =>
 
 /** Something the engine animates as one: a layer, or a list played one by one. */
 export interface ChoreographyUnit {
+  /**
+   * A kicker above the title (or the big number) or a subtitle under it: plays as part of
+   * the heading, with it (D126).
+   */
+  companion?: boolean;
+  /** A drawing (a free-form frame of shapes): its parts cascade in, but it's one point. */
+  drawing?: boolean;
   node: Node;
   role: LayerRole;
   /** A list's items in reading order (the frame staggers them); absent for one layer. */
@@ -141,7 +149,9 @@ export function choreographyUnits(slide: Slide, stage: Deck["stage"]): Choreogra
 
   const elementRole = (node: ElementNode, parent: FrameNode): LayerRole => {
     if (isBackdrop(node, parent, stage)) return "backdrop";
-    if (node.type === "shape") return "accent";
+    // A shape big enough to look at is the slide's visual (a planet, a star); small ones
+    // (dots, rules, badges) decorate.
+    if (node.type === "shape") return sized(node, HERO_SHAPE) ? "visual" : "accent";
     if (node.type !== "text") return "visual";
     const style = textStyle(node) ?? "body";
     const text = textOf(node);
@@ -179,6 +189,11 @@ export function choreographyUnits(slide: Slide, stage: Deck["stage"]): Choreogra
       units.push({ node, role: "backdrop" });
       return;
     }
+    // A drawing: a free-form frame of shapes (labels allowed). One visual, built in parts.
+    if (isDrawing(node, shown)) {
+      units.push({ node, role: "visual", items: shown, drawing: true });
+      return;
+    }
     // A stack or grid of alike children reads as a list: bullets, a row of stats, cards.
     const kinds = new Set(shown.map(kindOf));
     const flowing = shown.every((c) => !isFreeLayer(c, node.layout));
@@ -202,7 +217,64 @@ export function choreographyUnits(slide: Slide, stage: Deck["stage"]): Choreogra
   };
 
   for (const child of slide.root.children) visit(child, slide.root);
+  markCompanions(slide, units);
   return units;
+}
+
+/** Shapes at least this big both ways are visuals (stage pixels). */
+const HERO_SHAPE = 160;
+const sized = (node: Node, min: number) =>
+  typeof node.width === "number" &&
+  typeof node.height === "number" &&
+  Math.min(node.width, node.height) >= min;
+
+/** Small text styles that label rather than say: kickers, captions on drawings. */
+const LABELS = new Set(["caption", "small", "overline", "label", "eyebrow"]);
+/** Styles a subtitle under a title is set in. */
+const SUBTITLES = new Set(["h2", "h3", "lead"]);
+
+function isDrawing(frame: FrameNode, shown: readonly Node[]): boolean {
+  const free = frame.layout.mode === "absolute" || shown.every((c) => isFreeLayer(c, frame.layout));
+  if (!free || shown.length < 2) return false;
+  let shapes = 0;
+  for (const child of shown) {
+    if (child.kind !== "element") return false;
+    if (child.type === "shape" || child.type === "image") shapes++;
+    else if (child.type !== "text" || !LABELS.has(textStyle(child) ?? "body")) return false;
+  }
+  return shapes >= 2;
+}
+
+/**
+ * A kicker ("Stage 1 · Nebula") right before the title or the big number, and a subtitle
+ * right after the title, in the same frame: they come with the heading, not on a click.
+ */
+function markCompanions(slide: Slide, units: ChoreographyUnit[]): void {
+  const parent = (u: ChoreographyUnit | undefined) => u && parentOf(slide.root, u.node.id);
+  const style = (u: ChoreographyUnit) =>
+    u.node.kind === "element" && u.node.type === "text" && !u.items
+      ? (textStyle(u.node) ?? "body")
+      : undefined;
+  units.forEach((unit, i) => {
+    const next = units[i + 1];
+    const prev = units[i - 1];
+    const s = style(unit);
+    if (!s || unit.role === "title") return;
+    const kicker =
+      next &&
+      LABELS.has(s) &&
+      (next.role === "title" || next.role === "number") &&
+      parent(next) === parent(unit);
+    const subtitle =
+      prev?.role === "title" &&
+      !prev.companion &&
+      SUBTITLES.has(s) &&
+      parent(prev) === parent(unit);
+    if (kicker || subtitle) {
+      unit.role = "title";
+      unit.companion = true;
+    }
+  });
 }
 
 // ── What each level plays ─────────────────────────────────────────────────────────────
@@ -310,7 +382,7 @@ interface Planned {
  * nothing: names in `emphasize` that aren't on the slide are left out with a note.
  */
 export function choreograph(
-  deck: Pick<Deck, "motionLevel" | "stage">,
+  deck: Pick<Deck, "motionLevel" | "stage"> & Partial<Pick<Deck, "slides" | "theme">>,
   slide: Slide,
   intent: ChoreographyIntent = {},
   options: ChoreographyOptions = {},
@@ -335,6 +407,25 @@ export function choreograph(
     units.find((u) => u.role === "body") ??
     units.find((u) => u.role === "title");
 
+  // Morph partners (D123): an arriving one comes in by the morph, so it gets no entrance; a
+  // leaving one must be at rest at the cut, so it gets no loop. Either would turn its glide
+  // into a fade (D126).
+  const partners =
+    deck.slides && deck.theme
+      ? morphPartners(
+          { slides: deck.slides, theme: deck.theme, motionLevel: deck.motionLevel },
+          slide,
+        )
+      : { arriving: new Set<string>(), leaving: new Set<string>() };
+  const holds = (unit: ChoreographyUnit, ids: ReadonlySet<string>) =>
+    ids.has(unit.node.id) || [...ids].some((id) => contains(unit.node, id));
+  const morphed = units.filter((u) => holds(u, partners.arriving));
+  if (morphed.length > 0) {
+    notes.push(
+      `${morphed.map((u) => `"${u.node.id}"`).join(", ")} ${morphed.length === 1 ? "comes" : "come"} in by the morph from the slide before, so ${morphed.length === 1 ? "it gets" : "they get"} no entrance.`,
+    );
+  }
+
   // Who to punch: the layers asked for, by the unit that plays them.
   const punched = new Set<ChoreographyUnit>();
   for (const id of intent.emphasize ?? []) {
@@ -350,7 +441,8 @@ export function choreograph(
       ? new Set(units.filter((u) => u.role === "title" || u === main))
       : new Set(units.filter((u) => REACH[scale.reach]?.has(u.role)));
   for (const unit of punched) reach.add(unit);
-  const still = units.length - reach.size;
+  for (const unit of morphed) reach.delete(unit);
+  const still = units.length - reach.size - morphed.length;
   if (still > 0) {
     notes.push(
       `${still} ${still === 1 ? "layer stays" : "layers stay"} still at "${level}": ${scale.summary}`,
@@ -358,11 +450,14 @@ export function choreograph(
   }
 
   const cap = scale.effectsPerLayer ?? Number.POSITIVE_INFINITY;
-  // What keeps moving: the main point (key), what carries the slide (content), or all.
+  // What keeps moving: the slide's visual (key), what carries the slide (content), or all.
+  // Reading text never drifts below absurd, and nothing a morph carries on loops.
+  const hero = units.find((u) => u.role === "visual" && !holds(u, partners.leaving));
   const keepsMoving = (unit: ChoreographyUnit) =>
-    scale.ambient === "all" ||
-    (scale.ambient === "content" && AMBIENT_CONTENT.has(unit.role)) ||
-    (scale.ambient === "key" && unit === main && unit.role !== "title");
+    !holds(unit, partners.leaving) &&
+    (scale.ambient === "all" ||
+      (scale.ambient === "content" && AMBIENT_CONTENT.has(unit.role)) ||
+      (scale.ambient === "key" && unit === hero));
   const planned: Planned[] = units
     .filter((u) => reach.has(u))
     .map((unit) => {
@@ -463,11 +558,28 @@ export function choreograph(
   if (pacing === "auto") {
     cascade(planned, "withPrevious");
   } else if (pacing === "build") {
-    // The title and the scenery come with the slide; then each point on its own click.
-    const withSlide = planned.filter((p) => ["title", "accent", "backdrop"].includes(p.unit.role));
+    // The heading and the scenery come with the slide; then each point on its own click.
+    // With no heading, the big number is the headline: it comes with the slide, its
+    // caption with it, so the slide never opens empty (D126).
+    const heading = units.some((u) => u.role === "title" && !u.companion);
+    const headline = !heading && main?.role === "number" ? main : undefined;
+    const after = headline ? units[units.indexOf(headline) + 1] : undefined;
+    const caption =
+      after && after.node.kind === "element" && after.node.type === "text" && !after.items
+        ? after
+        : undefined;
+    // A visual with nothing else to say beside the heading (a title slide's art) is scenery.
+    const points = units.filter((u) => u.role === "body" || u.role === "number").length;
+    const withSlide = planned.filter(
+      (p) =>
+        ["title", "accent", "backdrop"].includes(p.unit.role) ||
+        (p.unit.role === "visual" && points === 0) ||
+        p.unit === headline ||
+        p.unit === caption,
+    );
     cascade(withSlide, "withPrevious");
     for (const p of planned.filter((q) => !withSlide.includes(q))) {
-      if (p.unit.items) {
+      if (p.unit.items && !p.unit.drawing) {
         for (const item of p.unit.items) play(item.id, p.entrance, { trigger: "onClick" });
       } else {
         enter(p, "onClick");

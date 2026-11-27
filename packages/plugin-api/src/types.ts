@@ -10,7 +10,7 @@
  *
  * Built-in elements use this exact contract (golden rule #6).
  */
-import type { EffectContext, FieldValues, ResolvedEffect, Sizing } from "@veloce/core";
+import type { EffectContext, FieldValues, Node, ResolvedEffect, Sizing } from "@veloce/core";
 import type { z } from "zod";
 
 export type ElementProps = Record<string, unknown>;
@@ -120,6 +120,12 @@ export interface EffectDefinition<P extends EffectParams = EffectParams> {
    * `context.tokens.distance` says how far things travel at this level.
    */
   resolve(params: P, context: EffectContext): ResolvedEffect;
+  /**
+   * A warning when it can play on `target` but won't show well there (count-up on text with
+   * no number): lint shows it with the fix (D126). It never blocks: a layer's content can
+   * change after it's animated. Omitted: no warnings.
+   */
+  check?(target: Node): { message: string; fix: string } | undefined;
 }
 
 export interface VelocePlugin {

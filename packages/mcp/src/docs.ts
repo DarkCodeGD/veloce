@@ -326,16 +326,20 @@ function animationDocs(registry: PluginRegistry, deck: Deck | null): string {
   const levels = MOTION_LEVELS.map(
     (l) => `- \`${l}\`${l === level ? " (this deck)" : ""}: ${MOTION_LEVEL_SCALES[l].summary}`,
   ).join("\n");
+  const about = deck
+    ? `This page is written for your current deck, "${deck.meta.title}" (${themeName}, level ${level}): after create_deck or open_deck, read it again.\n\n`
+    : "";
   return `# Animation
 
-Slides animate in **steps**: step 0 plays as the slide appears, then each click plays the next step. The **motion level** (deck-wide, or per slide) decides how much moves and how fast; the theme gives the motion its personality (\`$motion\` tokens).
+${about}Slides animate in **steps**: step 0 plays as the slide appears, then each click plays the next step. The **motion level** (deck-wide, or per slide) decides how much moves and how fast; the theme gives the motion its personality (\`$motion\` tokens).
 
 ## Three ways, from quickest to most exact
 1. **animate_deck** \`{ "level": "lively", "pacing": "build" }\`: every slide at once, written by the choreography engine from each layer's role (title, big number, visual, body, accent, backdrop), reading order and the level. Slides that already have animations stay (\`keepAnimated: false\` redoes them).
 2. **set_animations** \`{ "slideId", "choreograph": { "pacing": "focus", "emphasize": ["kpi"] } }\`: the same engine on one slide, with the layers to punch.
 3. **set_animations** \`{ "slideId", "steps": [...] }\` (or \`"steps"\` in upsert_slide's slide): exactly what you write.
 
-Pacings: \`auto\` (default): everything comes in as the slide appears, cascading; \`build\`: the title with the slide, then one point per click (a list one item per click); \`focus\`: everything comes in, then a click punches the main point.
+Pacings: \`auto\` (default): everything comes in as the slide appears, cascading; \`build\`: the heading (with its kicker and subtitle) with the slide, then one point per click (a list one item per click; a slide whose headline is a big number opens with it and its caption); \`focus\`: everything comes in, then a click punches the main point.
+Choreography leaves morph partners to the morph (no entrance on a layer arriving by morph, no loop on one leaving by it), loops only the slide's visual below \`intense\`, and treats big shapes and free-form frames of shapes (a drawing) as visuals.
 
 A good flow: build the slides, animate_deck once, then hand-tune the slides that matter most (the title, the key number, the big reveal) with set_animations or animation.update. The results list every animation's ID; get_slide and the deck summary list them too.
 
@@ -355,7 +359,7 @@ Set the deck's with animate_deck \`level\` or apply_ops \`deck.setMotionLevel\`;
 \`\`\`
 - \`steps[0]\`: as the slide appears (\`[]\` if nothing should). Each later step: one click, never empty. \`"steps": []\` removes every animation.
 - Inside a step everything starts together; \`"start": "after"\` waits for the animation before it to end. \`delay\` (ms) shifts one.
-- Fields: \`target\` (a node ID on the slide), \`effect\` (a name, or \`{ "name", "params" }\`) or \`tracks\` (your own keyframes), \`delay\`, \`duration\`, \`easing\`, \`repeat\` (a count or \`"forever"\`), \`alternate\`, \`space\`, \`stagger\`, \`id\` (optional).
+- Fields: \`target\` (a node ID on the slide), \`effect\` (a name, or \`{ "name", "params" }\`: params go inside the effect, never beside it) or \`tracks\` (your own keyframes), \`delay\`, \`duration\`, \`easing\`, \`repeat\` (a count or \`"forever"\`), \`alternate\`, \`space\`, \`stagger\`, \`id\` (optional).
 - \`delay\` counts from where the animation would start: with the one before it, from that one's start; with \`"start": "after"\`, from its end; the first of a step, from the step's start.
 - After a loop (\`"repeat": "forever"\`), \`"start": "after"\` waits for one play of it.
 - A layer can have several animations: an entrance, then an emphasis on a later click, then an exit.
@@ -363,7 +367,7 @@ Set the deck's with animate_deck \`level\` or apply_ops \`deck.setMotionLevel\`;
 
 ## Steps and triggers (apply_ops, get_slide)
 Stored, a slide's animations are one list in play order, each with a \`trigger\`: \`"onClick"\` (the default when it's left out) starts a new step, \`"withPrevious"\` and \`"afterPrevious"\` join the step of the animation before it. Animations before the first \`onClick\` are step 0 (as the slide appears). So steps map to triggers like this: steps[0]'s animations are \`withPrevious\`, each later step's first is \`onClick\` and the rest \`withPrevious\` (or \`afterPrevious\` for \`"start": "after"\`).
-That's why \`animation.insert\` and \`animation.move\` can regroup steps: an \`onClick\` animation inserted or moved to index 0 makes the old step 0 part of click 1, and a \`withPrevious\` one put first starts a step 0. To reshape steps, prefer set_animations with the whole list; use the ops for one change in place (\`animation.update\` of its \`duration\`, \`effect\` or \`trigger\`). Every result shows the steps as they now play.
+That's why \`animation.insert\` and \`animation.move\` can regroup steps: an \`onClick\` animation inserted or moved to index 0 makes the old step 0 part of click 1, and a \`withPrevious\` one put first starts a step 0. To reshape steps, prefer set_animations with the whole list; use the ops for one change in place (\`animation.update\` of its \`duration\`, \`effect\` or \`trigger\`). In \`animation.update\`, \`"effect": "pop-in"\` (a name) swaps the effect and drops the old one's params; \`"effect": { "params": { … } }\` merges into them. \`animation.move\` needs its \`index\` (the last index is the end). Every result shows the steps as they now play.
 
 ## Timing: \`$motion\` tokens
 Durations and easings are best given as tokens: they follow the theme and the level. At ${themeName}, level ${level}: \`$motion.fast\` ${tokens.fast}ms, \`$motion.normal\` ${tokens.normal}ms, \`$motion.slow\` ${tokens.slow}ms, \`$motion.stagger\` ${tokens.stagger}ms; easings \`$motion.enter\` ${easingLabel(tokens.enter)}, \`$motion.exit\` ${easingLabel(tokens.exit)}, \`$motion.move\` ${easingLabel(tokens.move)}.
@@ -372,7 +376,7 @@ Numbers (ms, up to 600000) are used as given at every level.
 
 ## Effects
 Effects without params follow the level (how far a slide travels, how hard a pop bounces); a number you give is used as is.
-Text-only effects (\`count-up\`, \`typewriter\`) go on text layers: for a card or a list, animate the text inside it (one animation each), or give the frame an effect for any layer. \`count-up\` needs a number in the text (choreography counts up a figure: digits with an optional sign, symbol or short unit, like "75 %", "$4.2M", "1,200 °C", "70 cherries"; "1 in 3 bites" reads as text, so ask for \`count-up\` yourself), and doesn't hide its layer: until it plays the layer shows its numbers at 0 (add a \`fade-in\` with it on the same click to keep it hidden until then). \`flip-in\`/\`flip-out\` turn in 3D: give the layer's frame (or the slide) a \`perspective\`, or they read as a flat squash; choreography zooms instead where there's none, and says so.
+Text-only effects (\`count-up\`, \`typewriter\`) go on text layers: for a card or a list, animate the text inside it (one animation each), or give the frame an effect for any layer. \`count-up\` needs a number in the text (choreography counts up a figure: digits with an optional sign, symbol or short unit, like "75 %", "$4.2M", "1,200 °C", "70 cherries"; "1 in 3 bites" reads as text, so ask for \`count-up\` yourself); it fades its layer in as it counts, and lint warns when there's no number (effect-misfit). \`flip-in\`/\`flip-out\` and \`rotateX\`/\`rotateY\` tracks turn in 3D: give the layer's frame (or the slide) a \`perspective\`, or they read as a flat squash; lint warns (flat-turn), and choreography zooms instead.
 
 ${effectGallery(registry)}
 
@@ -392,18 +396,19 @@ For motion no effect gives: \`{ "target": "logo", "duration": 1200, "tracks": { 
 - \`at\` is 0–1 of the duration, in order. An end with no keyframe is the layer's own value, so \`{ "opacity": [{ "at": 0, "value": 0 }] }\` fades in to however opaque it is. Each keyframe may have its own \`easing\`.
 
 ## 2.5D: depth and perspective
-Give a frame \`"perspective": 1200\` (the viewer's distance for its own children; 800 is strong, 2000 gentle; on a slide, set it on the slide) and its children \`"depth"\` (stage pixels towards the viewer, negative away). Nearer layers are drawn bigger and drift more in moves and 3D turns (\`rotateX\`/\`rotateY\` tracks, \`flip-in\`). Layer order still decides what's in front. Lint flags depth without perspective (flat-depth) and depth at or past it (depth-behind-viewer). A layer with depth takes only its own size in the layout, though it's drawn bigger: keep gaps generous so near layers don't cover their neighbours.
+Give a frame \`"perspective": 1200\` (the viewer's distance for its own children; 800 is strong, 2000 gentle; on a slide, set it on the slide) and its children \`"depth"\` (stage pixels towards the viewer, negative away). Nearer layers are drawn bigger and drift more when they move or turn inside that frame. A frame turning itself (a \`rotateY\` track on it) turns as one flat card: its children's depth doesn't parallax then, so for a 3D group, move or turn the layers inside the frame, not the frame. On a slide, set \`perspective\` on the slide (upsert_slide, or \`slide.update\`). Layer order still decides what's in front. Lint flags depth without perspective (flat-depth) and depth at or past it (depth-behind-viewer). A layer with depth takes only its own size in the layout, though it's drawn bigger: keep gaps generous so near layers don't cover their neighbours.
 
 ## Saved presets
 Tune an animation once, save it with apply_ops \`preset.save\`, then play it by name anywhere: \`"effect": "big-bounce"\`. Linked: changing the preset changes every animation that plays it. An animation's own fields win over the preset's. ${presetDocs(deck)}
 
 ## Checking it
 - render_preview \`{ "slideId", "step": 1, "time": 200 }\`: the slide 200ms into the first click (every step before it played out). \`time\` omitted, or past the step's end: the end of that step (a loop's step lasts one play of it). \`"step": 0, "time": 0\`: before anything entered. Look mid-motion for overlaps and landings; at the end for the final state.
-- Transitions between slides (and morph) are separate: get_docs("transitions"). A layer with an entrance animation isn't morphed.
+- Transitions between slides (and morph) are separate: get_docs("transitions"); render_preview can't show them. A layer a morph carries mustn't have its own entrance (arriving) or a loop (leaving): it would fade instead of gliding. Lint flags it (morph-blocked).
+- Lint also flags motion that silently doesn't show: \`flat-turn\`, \`effect-misfit\`, \`morph-blocked\`. Scaling effects (\`pulse\`, \`pop-in\`) aren't checked mid-motion yet: preview the peak of a big one.
 
 ## Recipes
 - **Title slide:** title \`blur-in\` or \`scale-in\`, subtitle \`slide-in\` with \`"start": "after"\`.
-- **Big number:** \`count-up\` on the figure, the caption \`fade-in\` with it; at lively and up, \`pulse\` it on the next click.
+- **Big number:** \`count-up\` on the figure (it fades in as it counts), the caption \`fade-in\` with it; at lively and up, \`pulse\` it on the next click.
 - **Bullets:** the list frame with \`slide-in\` and \`stagger\` (all in), or one step per item (build).
 - **Hero image:** \`zoom-in\` as the slide appears, then \`float\` with \`"repeat": "forever", "alternate": true\`.
 - **Replace one thing with another:** the old layer \`fade-out\` with \`"space": "collapse"\`, then the new one \`pop-in\` with \`"space": "makeRoom"\` on the same click.

@@ -39,6 +39,9 @@ export const RULE_NAMES: Record<LintRule, string> = {
   "morph-unpaired": "Morph with nothing to glide",
   "flat-depth": "Depth has no effect",
   "depth-behind-viewer": "Layer is behind the viewer",
+  "morph-blocked": "Animation stops a morph",
+  "flat-turn": "3D turn looks flat",
+  "effect-misfit": "Effect can't show here",
 };
 
 /**

@@ -36,7 +36,7 @@
 - **Done in Phase 4:** visual regression tests (D102), the motion slot (D103), the animation
   direction (D104), our own timeline with proven libraries drawing (D105), three UI depths
   (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123); the head-to-head with Claude's slides (D124); a consistency pass (D125); agents animate over MCP (D126).
-- **State:** `pnpm check` is green (1219 tests, including real-Chromium lint, preview, editor
+- **State:** `pnpm check` is green (1228 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 18 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -316,7 +316,7 @@ block (D124) widens what agents and people can draw; its schema changes land bef
 - [x] MCP animation: `set_animations` (steps or choreography, the slide's level), `animate_deck`,
       steps in `upsert_slide`, animation/level/preset ops in `apply_ops`, `depth` and
       `perspective`, steps in outlines, `render_preview` at a step and time,
-      `get_docs("animation")`; retested with a real agent three times (D126)
+      `get_docs("animation")`; retested with real agents four times (D126)
 - [ ] From the head-to-head with Claude's slides (D124; it won on looks, we won on cost,
       speed and polish):
   - [ ] `vector` element (moved from Phase 5): paths, polygons, stars, chevrons, block
@@ -340,11 +340,11 @@ block (D124) widens what agents and people can draw; its schema changes land bef
         different line counts misalign a timeline's markers
   - [ ] Standing benchmark: rerun the head-to-head (D124 §1) once these land and at phase
         gates, plus a motion-heavy brief. The first case of Phase 9's AI eval suite
-- [ ] Motion lint: a slide doing far more than its level says (more layers, effects or loops
-      than its reach) gets a warning with the fix (D111 §7); and the agent retests' traps
-      (D126 §10–12): `count-up` on text with no number, `flip-in` without perspective, two
-      entrances on one layer, a loop that starts before its layer's entrance, a child's
-      entrance under a staggered parent
+- [ ] Motion lint, the rest (the first rules shipped: `morph-blocked`, `flat-turn`,
+      `effect-misfit`, D126 §13): a slide doing far more than its level says (more layers,
+      effects or loops than its reach, D111 §7); two entrances on one layer; a loop that
+      starts before its layer's entrance; a child's entrance under a staggered parent; and
+      peak frames (a big `pulse` that overlaps a neighbour or leaves the slide mid-motion)
 - [ ] Choreography variety at `intense` and `absurd`: each slide got the same pattern in the
       agent retest (D126 §10); vary entrances by position and role, and use 2.5D when the
       slide has a perspective

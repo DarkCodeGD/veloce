@@ -111,7 +111,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
 - **Errors** (`errors.ts`) are written to be acted on: a code, a message, a path and a hint
   ("Did you mean `title`?"), for people and agents alike.
 - **Lint** (`lint.ts`) checks a deck for overflow, contrast, overlaps and more; visual rules
-  use measurements from a real renderer.
+  use measurements from a real renderer, and motion rules (a blocked morph, a flat 3D turn,
+  an effect that can't show on its layer) use the installed effects, which the server passes
+  in from the plugin registry (`registry.motionLint`, D126).
 
 ## The file (`packages/format`)
 

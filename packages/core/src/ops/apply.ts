@@ -148,7 +148,7 @@ function slideRemove(deck: Deck, op: OpOf<"slide.remove">): OpResult {
 
 function slideMove(deck: Deck, op: OpOf<"slide.move">): OpResult {
   const { slide, index } = requireSlide(deck, op.id);
-  const target = resolveIndex(op.index, deck.slides.length - 1, "the deck's slides");
+  const target = resolveIndex(op.index, deck.slides.length - 1, "the deck's slides", true);
   const slides = deck.slides.toSpliced(index, 1).toSpliced(target, 0, slide);
   return { deck: { ...deck, slides }, inverse: { op: "slide.move", id: op.id, index } };
 }
@@ -324,7 +324,7 @@ function animationRemove(deck: Deck, op: OpOf<"animation.remove">): OpResult {
 function animationMove(deck: Deck, op: OpOf<"animation.move">): OpResult {
   const { slide, slideIndex, index, animation } = requireAnimation(deck, op.id);
   const list = slide.animations ?? [];
-  const target = resolveIndex(op.index, list.length - 1, `slide "${slide.id}"'s animations`);
+  const target = resolveIndex(op.index, list.length - 1, `slide "${slide.id}"'s animations`, true);
   const moved = list.toSpliced(index, 1).toSpliced(target, 0, animation);
   return {
     deck: replaceSlide(deck, slideIndex, withAnimations(slide, moved)),
@@ -611,12 +611,15 @@ function removeChild(deck: Deck, loc: NodeLocation): Deck {
   return replaceSlide(deck, loc.slideIndex, { ...loc.slide, root });
 }
 
-/** `undefined` → append. Otherwise must be within 0…max. */
-function resolveIndex(index: number | undefined, max: number, what: string): number {
+/**
+ * `undefined` → append. Otherwise must be within 0…max. A move needs its index (there's no
+ * "append" to omit it for), so its hint names the last place instead.
+ */
+function resolveIndex(index: number | undefined, max: number, what: string, move = false): number {
   if (index === undefined) return max;
   if (index > max) {
     throw new VeloceError("INVALID", `Index ${index} is out of range for ${what} (0–${max})`, {
-      hint: "Omit the index to append at the end.",
+      hint: move ? `Use ${max} to move it to the end.` : "Omit the index to append at the end.",
     });
   }
   return index;

@@ -78,7 +78,7 @@ describe("reading a slide (D121)", () => {
     expect(units.map((u) => [u.node.id, u.role, u.items?.length])).toEqual([
       ["bg", "backdrop", undefined],
       ["title", "title", undefined],
-      ["sub", "body", undefined],
+      ["sub", "title", undefined], // a subtitle right under the title: part of the heading
       ["stats", "number", 3], // a row of cards: a list, its strongest role a figure
       ["points", "body", 3],
       ["hero", "visual", undefined],
@@ -88,12 +88,12 @@ describe("reading a slide (D121)", () => {
 });
 
 describe("how much moves, by level (D111 §7)", () => {
-  it("calm: only the title and the main point, with soft fades", () => {
+  it("calm: only the heading and the main point, with soft fades", () => {
     const { animations, notes } = run("calm");
-    expect(targets(animations)).toEqual(["title", "stats"]);
+    expect(targets(animations)).toEqual(["title", "sub", "stats"]);
     expect(animations.every((a) => a.effect?.name === "fade-in")).toBe(true);
     expect(animations.some((a) => a.stagger)).toBe(false); // a list comes in whole
-    expect(notes[0]).toContain('5 layers stay still at "calm"');
+    expect(notes[0]).toContain('4 layers stay still at "calm"');
   });
 
   it("subtle: the content in reading order, one effect each, nothing decorative", () => {
@@ -106,13 +106,14 @@ describe("how much moves, by level (D111 §7)", () => {
     expect(animations.slice(1).every((a) => a.delay === "$motion.fast")).toBe(true);
   });
 
-  it("lively: accents too, cards pop, and the main point keeps drifting", () => {
+  it("lively: accents too, cards pop, and the slide's visual keeps drifting", () => {
     const { animations } = run("lively");
     expect(targets(animations)).toContain("rule");
     expect(targets(animations)).not.toContain("bg");
     expect(animations.find((a) => a.target === "stats")?.effect?.name).toBe("pop-in");
     const loops = animations.filter((a) => a.repeat === "forever");
-    expect(loops.map((a) => [a.target, a.effect?.name])).toEqual([["stats", "float"]]);
+    // The visual drifts, not the figures: reading text never loops below absurd (D126).
+    expect(loops.map((a) => [a.target, a.effect?.name])).toEqual([["hero", "float"]]);
   });
 
   it("intense and absurd: everything, and more keeps moving", () => {
@@ -159,8 +160,7 @@ describe("pacing and focus (D121)", () => {
   it("build: the title with the slide, then one point per click, lists one item a click", () => {
     const { animations } = run("subtle", { pacing: "build" });
     expect(stepsOf(animations)).toEqual([
-      ["title"],
-      ["sub"],
+      ["title", "sub"],
       ["c1"],
       ["c2"],
       ["c3"],
@@ -294,5 +294,115 @@ describe("agents' retest findings (D126)", () => {
     // still have none, and the note names that frame.
     expect(turned.notes.join(" ")).not.toMatch(/"title"/);
     expect(turned.notes.join(" ")).toMatch(/"stats" zoom in instead of flipping/);
+  });
+});
+
+describe("agents' second animation test (D126)", () => {
+  const stage = { width: 1920, height: 1080 };
+  const effectOf = (animations: Animation[], target: string) =>
+    animations.find((a) => a.target === target)?.effect?.name;
+  const loops = (animations: Animation[]) =>
+    animations.filter((a) => a.repeat === "forever").map((a) => a.target);
+  const star = (id: string, size = 300) =>
+    element("shape", { shape: "ellipse" }, { id, width: size, height: size, matchKey: "star" });
+  const drawing = frame({
+    id: "art",
+    layout: { mode: "absolute" },
+    children: [
+      element(
+        "shape",
+        { shape: "ellipse" },
+        { id: "shell", positioning: "free", position: { x: 0, y: 0 }, width: 600, height: 600 },
+      ),
+      element(
+        "shape",
+        { shape: "ellipse" },
+        { id: "core", positioning: "free", position: { x: 260, y: 260 }, width: 80, height: 80 },
+      ),
+      element(
+        "text",
+        { content: "Earth's orbit", style: "$text.small" },
+        { id: "label", positioning: "free", position: { x: 0, y: 0 } },
+      ),
+    ],
+  });
+
+  it("reads big shapes and drawings as the visual, kickers and subtitles as the heading", () => {
+    const s = slide([
+      frame({
+        id: "left",
+        layout: { mode: "stack", direction: "column" },
+        children: [
+          text("kicker", "Stage 1 · Nebula", "caption"),
+          text("title", "Born in a cloud", "h1"),
+          text("sub", "Gravity does the rest", "h3"),
+          text("body", "Gas clumps and spins.", "body"),
+        ],
+      }),
+      drawing,
+      star("star"),
+      element("shape", { shape: "ellipse" }, { id: "dot", width: 12, height: 12 }),
+    ]);
+    const units = choreographyUnits(s, stage);
+    const role = (id: string) => units.find((u) => u.node.id === id);
+    expect(role("kicker")).toMatchObject({ role: "title", companion: true });
+    expect(role("sub")).toMatchObject({ role: "title", companion: true });
+    expect(role("body")?.role).toBe("body");
+    expect(role("art")).toMatchObject({ role: "visual", drawing: true });
+    expect(role("star")?.role).toBe("visual");
+    expect(role("dot")?.role).toBe("accent");
+
+    // Build: the heading together, then the points; the drawing comes whole on its click.
+    const steps = stepsOf(run("lively", { pacing: "build" }, s).animations);
+    expect(steps[0]).toEqual(expect.arrayContaining(["kicker", "title", "sub"]));
+    expect(steps[0]).not.toContain("body");
+    expect(steps.slice(1).map((step) => step[0])).toEqual(["body", "art", "star"]);
+  });
+
+  it("loops the visual, never reading text, below absurd", () => {
+    const s = slide([
+      text("title", "Black holes", "h1"),
+      text("sub", "Where light ends", "lead"),
+      drawing,
+    ]);
+    expect(loops(run("lively", {}, s).animations)).toEqual(["art"]);
+    expect(
+      loops(
+        run("lively", {}, slide([text("title", "Hi", "h1"), text("b", "Text only")])).animations,
+      ),
+    ).toEqual([]);
+  });
+
+  it("opens a big-number slide with the number and its caption", () => {
+    const s = slide([
+      text("kicker", "Stage 2", "caption"),
+      text("kpi", "15,000,000 °C", "display"),
+      text("cap", "at the Sun's core", "h3"),
+    ]);
+    const { animations } = run("lively", { pacing: "build" }, s);
+    expect(stepsOf(animations)).toEqual([["kicker", "kpi", "cap"]]);
+    expect(effectOf(animations, "kpi")).toBe("count-up");
+  });
+
+  it("leaves morph partners to the morph: no entrance arriving, no loop leaving", () => {
+    const one = createSlide({ id: "one", children: [text("t1", "A star", "h1"), star("s1-star")] });
+    const two = createSlide({
+      id: "two",
+      transition: { type: "morph" },
+      children: [text("t2", "Nebula", "h1"), text("b2", "Gas", "body"), star("s2-star")],
+    });
+    const deck = {
+      ...createDeck({ title: "Motion", slides: [one, two] }),
+      motionLevel: "lively" as const,
+    };
+    const first = choreograph(deck, one, {}, { hasEffect: () => true });
+    expect(loops(first.animations)).not.toContain("s1-star"); // it glides on into "two"
+    const second = choreograph(deck, two, {}, { hasEffect: () => true });
+    expect(second.animations.map((a) => a.target)).not.toContain("s2-star");
+    expect(second.notes.join(" ")).toMatch(/"s2-star" comes in by the morph/);
+    // Without the deck's slides (an editor preview of one slide), nothing is skipped.
+    expect(
+      choreograph({ ...deck, slides: undefined }, two).animations.map((a) => a.target),
+    ).toContain("s2-star");
   });
 });

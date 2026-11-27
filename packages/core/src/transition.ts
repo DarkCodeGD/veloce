@@ -67,6 +67,28 @@ export function transitionInto(
   };
 }
 
+/**
+ * The layers a morph carries on `slide` (D123): `arriving` glide in from the shown slide
+ * before it (when this one morphs), `leaving` glide on into the next (when that one does).
+ * A morph only pairs layers at rest at the cut, so an entrance on an arriving layer or a
+ * loop on a leaving one quietly turns its glide into a fade: choreography leaves them be,
+ * and lint says so (D126).
+ */
+export function morphPartners(
+  deck: Pick<Deck, "slides" | "theme" | "motionLevel">,
+  slide: Slide,
+): { arriving: Set<string>; leaving: Set<string> } {
+  const shown = deck.slides.filter((s) => !s.hidden || s.id === slide.id);
+  const index = shown.findIndex((s) => s.id === slide.id);
+  const before = index > 0 ? shown[index - 1] : undefined;
+  const after = index >= 0 ? shown[index + 1] : undefined;
+  const morphs = (s: Slide | undefined) => s && transitionInto(deck, s)?.type === "morph";
+  return {
+    arriving: new Set(before && morphs(slide) ? morphPairs(before, slide).map((p) => p.to.id) : []),
+    leaving: new Set(after && morphs(after) ? morphPairs(slide, after).map((p) => p.from.id) : []),
+  };
+}
+
 // ── Whole slides: fade, push, zoom ────────────────────────────────────────────────────
 
 /**

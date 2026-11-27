@@ -16,6 +16,7 @@ import {
   type ElementCheck,
   formatIssues,
   getPreset,
+  type MotionLintHooks,
   type Node,
   suggest,
   TracksSchema,
@@ -270,6 +271,24 @@ export class PluginRegistry {
       hint: `Its params, all optional: ${paramNames(definition.paramsSchema).join(", ") || "none"}. Defaults: ${JSON.stringify(definition.defaultParams)}.`,
     };
   };
+
+  /** An effect's warning about a layer it plays on but won't show well (lint, D126). */
+  readonly effectWarning = (
+    effect: EffectRef,
+    target: Node,
+  ): { message: string; fix: string } | undefined => {
+    const definition = this.#effects.get(effect.name)?.definition;
+    try {
+      return definition?.check?.(target);
+    } catch {
+      return undefined; // a broken plugin never breaks lint
+    }
+  };
+
+  /** What core's motion lint needs from the installed effects (`lintDeck({ motion })`). */
+  get motionLint(): MotionLintHooks {
+    return { effects: this.resolveEffect, effectWarning: this.effectWarning };
+  }
 
   /**
    * Core's effect resolver: the effect's tracks for one animation, or null when the effect is

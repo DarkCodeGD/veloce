@@ -1419,16 +1419,22 @@ describe("animation (D126)", () => {
     await connect();
     await call("create_deck", { title: "Motion" });
     await buildSlide();
+    // A layer to punch that isn't there is a typo: an error with a guess (D126).
+    const ghost = await call("set_animations", {
+      slideId: "s1",
+      choreograph: { pacing: "focus", emphasize: ["s1-kpii"] },
+    });
+    expect(ghost.isError).toBe(true);
+    expect(ghost.text).toMatch(/"s1-kpii" isn't a layer on slide s1[\s\S]*Did you mean "s1-kpi"/);
     const result = await call("set_animations", {
       slideId: "s1",
       level: "lively",
-      choreograph: { pacing: "build", emphasize: ["s1-kpi", "ghost"] },
+      choreograph: { pacing: "build", emphasize: ["s1-kpi"] },
     });
     expect(result.isError).toBe(false);
     expect(result.text).toMatch(/\d+ layers? move/);
     expect(result.text).toMatch(/level lively \(this slide's own\)/);
     expect(result.text).toMatch(/Click 1/);
-    expect(result.text).toMatch(/Notes: .*ghost/);
     const slide = await slideNow("s1");
     expect(slide?.motionLevel).toBe("lively");
     expect(slide?.animations?.every((a) => a.id.startsWith("s1-a"))).toBe(true);
@@ -1741,6 +1747,79 @@ describe("animation (D126)", () => {
       ops: [{ op: "preset.save", name: "my-pop", preset: { effect: "pop-in" } }],
     });
     expect(preset.text).toMatch(/its effect is an installed effect, written as an object/);
+  });
+
+  it("fixes what the star-deck test found (D126)", async () => {
+    await connect();
+    await call("create_deck", { title: "Motion" });
+    await buildSlide();
+    // A slide's perspective through slide.update lands on its root frame.
+    const deep = await call("apply_ops", {
+      label: "Depth",
+      ops: [{ op: "slide.update", id: "s1", set: { perspective: 1200, name: "Deep" } }],
+    });
+    expect(deep.isError).toBe(false);
+    expect(deep.text).toMatch(/Applied "Depth" \(1 op\)/);
+    const slide = await slideNow("s1");
+    expect(slide?.root.perspective).toBe(1200);
+    expect(slide?.name).toBe("Deep");
+    // Errors still name the agent's own op, though it became two.
+    const bad = await call("apply_ops", {
+      label: "Bad",
+      ops: [
+        { op: "slide.update", id: "s1", set: { perspective: 1200 } },
+        { op: "node.update", id: "nope", set: { name: "x" } },
+      ],
+    });
+    expect(bad.text).toMatch(/ops\[1\]/);
+    expect(bad.text).not.toMatch(/ops\[2\]/);
+    // A move past the end says which index is the end (a move has no "omit to append").
+    await call("set_animations", {
+      slideId: "s1",
+      steps: [
+        [
+          { target: "s1-title", effect: "fade-in" },
+          { target: "s1-kpi", effect: "count-up" },
+        ],
+      ],
+    });
+    const far = await call("apply_ops", {
+      label: "Far",
+      ops: [{ op: "animation.move", id: "s1-a1", index: 99 }],
+    });
+    expect(far.text).toMatch(/Use 1 to move it to the end/);
+    // Params beside the effect: shown where they go.
+    const params = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-title", effect: "slide-in", params: { direction: "left" } }]],
+    });
+    expect(params.text).toMatch(/params go inside it: "effect": \{ "name": "slide-in"/);
+    // A saved preset says what plays it.
+    await call("apply_ops", {
+      label: "Use",
+      ops: [{ op: "preset.save", name: "flare", preset: { effect: { name: "pulse" } } }],
+    });
+    await call("apply_ops", {
+      label: "Play",
+      ops: [{ op: "animation.update", id: "s1-a1", set: { effect: "flare" } }],
+    });
+    const saved = await call("apply_ops", {
+      label: "Tune",
+      ops: [
+        { op: "preset.save", name: "flare", preset: { effect: { name: "pulse" }, duration: 900 } },
+      ],
+    });
+    expect(saved.text).toMatch(/Preset "flare": played by s1-a1 \(s1\); they follow it\./);
+    // count-up on words: lint says so.
+    const words = await call("set_animations", {
+      slideId: "s1",
+      steps: [[{ target: "s1-sub", effect: "count-up" }]],
+    });
+    expect(words.text).toMatch(/effect-misfit[\s\S]*count-up has no number to count in "s1-sub"/);
+    // The docs say which deck they describe.
+    expect((await call("get_docs", { topic: "animation" })).text).toMatch(
+      /written for your current deck, "Motion"/,
+    );
   });
 
   it("teaches animation from the installed effects, the level and the theme", async () => {

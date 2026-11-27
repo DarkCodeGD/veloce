@@ -10,7 +10,13 @@
  * (debounced, so a burst of edits is one run), only while someone is watching it, and never
  * runs two lints of one deck at once.
  */
-import { type Deck, type LintReport, lintDeck, type SlideMeasurement } from "@veloce/core";
+import {
+  type Deck,
+  type LintReport,
+  lintDeck,
+  type MotionLintHooks,
+  type SlideMeasurement,
+} from "@veloce/core";
 import type { OpenDeck } from "./open-deck.js";
 import type { RenderService } from "./render.js";
 
@@ -28,6 +34,8 @@ export async function lintWithRender(
     /** Why there's no renderer, when `render` is null. */
     unavailable?: string;
     slideIds?: readonly string[];
+    /** The installed effects (`registry.motionLint`): motion rules run with them (D126). */
+    motion?: MotionLintHooks;
   },
 ): Promise<DeckLint> {
   const { deckId, render, slideIds } = options;
@@ -45,6 +53,7 @@ export async function lintWithRender(
   const issues = lintDeck(deck, {
     ...(slideIds && { slideIds }),
     ...(measurements && { measurements }),
+    ...(options.motion && { motion: options.motion }),
   });
   return { issues, visual };
 }
@@ -54,6 +63,8 @@ export interface DeckLinterOptions {
   render: () => RenderService | null;
   /** Why there's no renderer, when `render()` returns null. */
   unavailable?: () => string | undefined;
+  /** The installed effects, for the motion rules (D126). */
+  motion?: MotionLintHooks;
   /** How long after a change to re-lint, so a burst of changes is one run. Default 250 ms. */
   delayMs?: number;
 }
@@ -146,6 +157,7 @@ export class DeckLinter {
           deckId: open.id,
           render,
           ...(unavailable && { unavailable }),
+          ...(this.#options.motion && { motion: this.#options.motion }),
         });
         if (this.#closed || this.#decks.get(open.id) !== entry) return; // nobody's watching now
         if (version !== open.version) continue; // outdated: a change already queued a run

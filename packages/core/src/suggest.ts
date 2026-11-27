@@ -39,7 +39,15 @@ export function suggest(input: string, candidates: Iterable<string>, max = 3): s
 /** `"Did you mean "title"?"`, or a short list of valid values when nothing is close. */
 export function notFoundHint(input: string, candidates: readonly string[], what: string): string {
   const close = suggest(input, candidates);
-  if (close.length) return `Did you mean ${close.map((c) => `"${c}"`).join(" or ")}?`;
+  if (close.length) {
+    const guess = `Did you mean ${close.map((c) => `"${c}"`).join(" or ")}?`;
+    // Several equally close ("s8" → s1, s2, s3): show them all when there are few.
+    const all =
+      close.length > 1 && candidates.length <= 15
+        ? ` All ${what} IDs: ${candidates.map((c) => `"${c}"`).join(", ")}.`
+        : "";
+    return `${guess}${all}`;
+  }
   if (!candidates.length) return `There are no ${what}s yet.`;
   const shown = candidates.slice(0, 15).map((c) => `"${c}"`);
   const more =

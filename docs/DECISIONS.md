@@ -3717,3 +3717,39 @@ left open by D110 §7, D111 §6, D112 §7, D117 §9, D119 §9, D120 §9 and D121
     choreography counts up and that a loop's step lasts one play. Left for the motion lint
     item: a child's own entrance under a staggered parent, and a slide whose step 0 is a
     bare `count-up` (the engine could pair it with a fade).
+13. **The fourth test** (the maintainer's prompt: a 7-slide "Life of a Star" deck with a
+    morph, 2.5D, presets and 10+ break attempts) rated the exact-control layer
+    ship-quality and `animate_deck` not yet: its output had to be partly undone. Fixed:
+    - **Choreography reads slides the way people build them.** A shape at least 160 px both
+      ways is the slide's visual (a star, a planet), not an accent; a free-form frame of
+      shapes (labels allowed) is one _drawing_, its parts cascading in. A kicker right
+      before the title or big number, and a subtitle right after the title, come with the
+      heading (`companion`). Under `build`, a slide whose headline is a big number opens
+      with it and its caption, and a visual with nothing else beside the heading (a title
+      slide's art) comes with the slide. Below `intense` only the visual loops; reading
+      text never drifts. Five steps of rewriting on the agent's deck became none.
+    - **Choreography leaves morph partners to the morph.** The renderer pairs only layers at
+      rest at the cut, so an entrance on an arriving layer, or a loop on a leaving one, made
+      the morph fade without a word. `morphPartners(deck, slide)` (core) names them;
+      choreography gives them neither, with a note. The editor's Animate buttons, MCP and
+      `choreographDeck` all pass the whole deck, so all of them get it.
+    - **Motion lint, its first rules,** run where effects are known (`lintDeck({ motion })`,
+      from `registry.motionLint`): `morph-blocked`, `flat-turn` (any `rotateX`/`rotateY`,
+      from an effect or a track, in a frame with no perspective) and `effect-misfit`, which
+      asks the effect itself through a new optional plugin hook, `EffectDefinition.check
+      (target)`. **Why a warning, not an error:** files are validated on open, and a layer's
+      text can change after it's animated; an error would lock the deck. count-up is the
+      first to use it ("no number to count"). `set_animations` and `animate_deck` now
+      return lint, so these show where the animation was written.
+    - **`count-up` fades its layer in** as it counts (opacity 0 → 1 over its first 15 %), so
+      it's a real entrance: before it plays, nothing shows, not a bare "0 °C".
+    - **MCP:** `slide.update { perspective }` sets the slide's root frame, as upsert_slide
+      does (errors keep naming the agent's own op); an `emphasize` ID not on the slide is an
+      error with a guess, not a note; a move past the end says which index is the end
+      (moves have no "omit it to append"); `params` beside `effect` points inside it;
+      `preset.save` lists the animations that play it; an ambiguous "did you mean" lists
+      every ID when there are few; get_docs("animation") says which deck it describes.
+    - **Docs** stop promising parallax from turning a frame: D112 §3 draws frames without
+      `preserve-3d`, so a turning frame is one flat card; move or turn the layers inside it.
+      Left for later: an arriving morph partner could still get a loop once it's in; a
+      preview of a transition (render_preview shows one slide).

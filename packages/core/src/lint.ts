@@ -7,7 +7,9 @@
  * slide without guessing (or looking at a screenshot).
  */
 
+import { compileSlide, type EffectResolver } from "./evaluate.js";
 import { sectionAt } from "./fields.js";
+import { parentOf } from "./layout-motion.js";
 import {
   contrastRatio,
   flattenLayers,
@@ -17,6 +19,10 @@ import {
   type SlideMeasurement,
 } from "./measure.js";
 import { duplicateMatchKeys, morphPairs } from "./morph.js";
+import { isRestMotion, type MotionState } from "./motion.js";
+import { slideMotionTokens } from "./motion-tokens.js";
+import { expandAnimation } from "./presets.js";
+import type { EffectRef } from "./schema/animation.js";
 import type { Deck, Slide } from "./schema/deck.js";
 import {
   type ElementNode,
@@ -29,7 +35,7 @@ import { TextContentSchema, toPlainText } from "./schema/rich-text.js";
 import type { Theme } from "./schema/theme.js";
 import { suggest } from "./suggest.js";
 import { parseColorToken, parseTokenRef, resolveToken } from "./tokens.js";
-import { transitionInto } from "./transition.js";
+import { morphPartners, transitionInto } from "./transition.js";
 
 export type LintSeverity = "error" | "warning" | "info";
 
@@ -58,6 +64,12 @@ export const LINT_RULES = {
     "A layer has a `depth` but its frame has no `perspective`, so the depth shows nothing (2.5D).",
   "depth-behind-viewer":
     "A layer's `depth` is at or past its frame's `perspective`: it's behind the viewer and isn't drawn.",
+  "morph-blocked":
+    "A layer a morph would glide has its own entrance (or a loop as the slide leaves), so it fades instead of gliding.",
+  "flat-turn":
+    "An animation turns a layer in 3D (a flip, rotateX/rotateY), but its frame has no `perspective`, so it draws as a flat squash.",
+  "effect-misfit":
+    "An effect plays on a layer it can't show on well (an installed effect says why: count-up on text with no number).",
 } as const;
 export type LintRule = keyof typeof LINT_RULES;
 
@@ -77,6 +89,15 @@ export interface LintOptions {
   slideIds?: readonly string[];
   /** Renderer measurements keyed by slide ID. Visual rules run only for measured slides. */
   measurements?: ReadonlyMap<string, SlideMeasurement>;
+  /** The installed effects (`registry.motionLint`): motion rules run only with them (D126). */
+  motion?: MotionLintHooks;
+}
+
+/** What motion lint needs from the plugins: how effects play, and their own warnings. */
+export interface MotionLintHooks {
+  effects: EffectResolver;
+  /** An effect's warning about a layer it can play on but won't show well (count-up, no number). */
+  effectWarning?: (effect: EffectRef, target: Node) => { message: string; fix: string } | undefined;
 }
 
 /** Thresholds, in pixels of a 1920-wide stage (scaled for other stage sizes). */
@@ -121,6 +142,7 @@ export function lintDeck(deck: Deck, options: LintOptions = {}): LintIssue[] {
       ...matchKeyRules(slide),
       ...morphRules(deck, slide, index),
       ...depthRules(slide),
+      ...(options.motion ? motionRules(deck, slide, options.motion) : []),
       ...tokenRules(slide, deck.theme),
       ...visualRules(slide, options.measurements?.get(slide.id)),
       ...balanceRules(slide, options.measurements?.get(slide.id)),
@@ -319,6 +341,93 @@ function morphRules(deck: Deck, slide: Slide, index: number): LintIssue[] {
         : 'Use another transition ("fade", or null for the theme\'s), or move the slide after the one it should morph from.',
     },
   ];
+}
+
+/**
+ * Motion that quietly doesn't show (D126): a morph partner with its own entrance or loop
+ * fades instead of gliding, a 3D turn without perspective squashes flat, and an effect on a
+ * layer it can't show (count-up with no number). Each plays without error, which is why
+ * agents and people missed them: lint names them with the fix.
+ */
+function motionRules(deck: Deck, slide: Slide, hooks: MotionLintHooks): LintIssue[] {
+  const animations = slide.animations ?? [];
+  if (animations.length === 0) return [];
+  const issues: LintIssue[] = [];
+  const tokens = slideMotionTokens(deck, slide);
+  const nodes = new Map(visibleNodes(slide).map(({ node }) => [node.id, node]));
+
+  // Morph partners: at rest when the slide arrives, and when it leaves.
+  const { arriving, leaving } = morphPartners(deck, slide);
+  if (arriving.size > 0 || leaving.size > 0) {
+    const compiled = compileSlide(deck, slide, { effects: hooks.effects });
+    const atStart = compiled.seek(0, 0);
+    const last = compiled.steps.length - 1;
+    const atEnd = compiled.seek(last, compiled.steps[last]?.duration ?? 0);
+    const moved = (frame: typeof atStart, id: string) =>
+      !isRestMotion(frame.get(id)?.motion as MotionState | undefined);
+    for (const id of arriving) {
+      if (!moved(atStart, id)) continue;
+      issues.push({
+        rule: "morph-blocked",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [id],
+        message: `"${id}" has its own entrance, so the morph into slide "${slide.id}" doesn't glide it: it fades in by its animation instead.`,
+        fix: `Remove "${id}"'s entrance (the morph brings it in), or remove its matchKey if it shouldn't glide.`,
+      });
+    }
+    for (const id of leaving) {
+      const loops = animations.some((a) => a.target === id && a.repeat === "forever");
+      if (!loops && !moved(atEnd, id)) continue;
+      issues.push({
+        rule: "morph-blocked",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [id],
+        message: `"${id}" ${loops ? "loops" : "has moved away"} as slide "${slide.id}" ends, so the morph to the next slide doesn't glide it.`,
+        fix: `Remove its ${loops ? "loop" : "exit"} (a morph needs it at rest at the cut), or remove its matchKey.`,
+      });
+    }
+  }
+
+  for (const stored of animations) {
+    const animation = expandAnimation(stored, deck.presets);
+    const target = nodes.get(animation.target);
+    if (!target) continue;
+    const resolved = animation.effect
+      ? hooks.effects(animation.effect, { animation, target, tokens })
+      : null;
+    const tracks = { ...resolved?.tracks, ...animation.tracks };
+    // A 3D turn without perspective on the frame that draws it.
+    if ("rotateX" in tracks || "rotateY" in tracks) {
+      const frame = parentOf(slide.root, target.id);
+      const space = animation.stagger && target.kind === "frame" ? target : frame;
+      if (space && space.perspective === undefined) {
+        const where = space.id === slide.root.id ? "the slide" : `frame "${space.id}"`;
+        issues.push({
+          rule: "flat-turn",
+          severity: "warning",
+          slideId: slide.id,
+          nodeIds: [target.id],
+          message: `Animation "${stored.id}" turns "${target.id}" in 3D, but ${where} has no perspective, so it draws as a flat squash.`,
+          fix: `Give ${where} "perspective": 1200 (800 strong, 2000 gentle)${space.id === slide.root.id ? "" : ", or turn it without 3D (zoom-in)"}.`,
+        });
+      }
+    }
+    // The effect's own word on this layer.
+    const warning = animation.effect && hooks.effectWarning?.(animation.effect, target);
+    if (warning) {
+      issues.push({
+        rule: "effect-misfit",
+        severity: "warning",
+        slideId: slide.id,
+        nodeIds: [target.id],
+        message: `Animation "${stored.id}": ${warning.message}`,
+        fix: warning.fix,
+      });
+    }
+  }
+  return issues;
 }
 
 /**

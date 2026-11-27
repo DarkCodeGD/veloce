@@ -102,6 +102,7 @@ export async function startVeloceServer(options: VeloceServerOptions): Promise<V
   const linter = new DeckLinter({
     render: () => render,
     unavailable: () => "the server was started without a renderer",
+    motion: options.registry.motionLint,
   });
   const settings = options.settings ?? (await SettingsStore.open(null));
   // Settings the workspace uses while running: now, and after every change.

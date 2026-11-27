@@ -18,6 +18,7 @@ import {
   tokenCssVar,
   tokenRefSchema,
   toParagraphs,
+  toPlainText,
 } from "@veloce/core";
 import { cssColor, defineEffect, defineElement, definePlugin, z } from "@veloce/plugin-api";
 
@@ -164,8 +165,29 @@ export const countUpEffect = defineEffect({
         { at: 0, value: 0 },
         { at: 1, value: 1 },
       ],
+      // An entrance: hidden until it plays, then in quickly while the numbers run (D126).
+      opacity: [
+        { at: 0, value: 0 },
+        { at: 0.15, value: 1 },
+      ],
     },
   }),
+  check: (target) => {
+    if (target.kind !== "element" || target.type !== "text") return undefined;
+    const content = (target.props as { content?: unknown }).content;
+    let text = "";
+    try {
+      text = toPlainText(content as never);
+    } catch {
+      return undefined;
+    }
+    return /\d/.test(text)
+      ? undefined
+      : {
+          message: `count-up has no number to count in "${target.id}" ("${text.slice(0, 40)}"), so it shows nothing.`,
+          fix: 'Use it on text with a figure ("75 %", "$4.2M"), or another entrance for words: fade-in, slide-in, typewriter.',
+        };
+  },
 });
 
 export const textPlugin = definePlugin({

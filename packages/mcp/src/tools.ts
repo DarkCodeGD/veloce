@@ -68,6 +68,7 @@ import {
   normalizeNode,
   normalizeOp,
   normalizeSlide,
+  type OpInput,
   OpInputSchema,
   SlideInputSchema,
   withFieldText,
@@ -261,6 +262,7 @@ async function lintReport(
   const { issues, visual } = await lintWithRender(open.deck, {
     deckId: open.id,
     render: ctx.render,
+    motion: ctx.registry.motionLint,
     ...(ctx.renderUnavailable && { unavailable: ctx.renderUnavailable }),
     ...(slideIds && { slideIds }),
   });
@@ -332,6 +334,8 @@ interface CommitErrors {
   stepPaths?: readonly string[];
   /** An op the tool made from one of the agent's steps: op index → `steps[1][0]`. */
   opPaths?: ReadonlyMap<number, string>;
+  /** The agent's op each committed op came from, when one became several. */
+  opOrigins?: readonly number[];
 }
 
 /** The "How to fix" for arguments that don't match a tool's schema: the likeliest mix-up first. */
@@ -346,6 +350,9 @@ function invalidArgumentsHint(
   }
   // The two ways of saying when an animation starts, mixed up (steps vs the stored list).
   const stray = issues.flatMap((i) => (i.code === "unrecognized_keys" ? (i.keys ?? []) : []));
+  if (stray.includes("params")) {
+    return 'An effect\'s params go inside it: "effect": { "name": "slide-in", "params": { "direction": "left" } }.';
+  }
   if (tool === "apply_ops" && stray.includes("start")) {
     return 'In apply_ops an animation says when it starts with "trigger": "onClick" (default: a new step), "withPrevious" or "afterPrevious". "start" is for set_animations steps.';
   }
@@ -376,9 +383,14 @@ function invalidArgumentsHint(
 /** Rewrites a core error into the terms of what the agent actually sent. */
 function presentError(
   error: ErrorLike & { opIndex?: number | undefined },
-  { generated, asSlide, asComponent, stepPaths, opPaths }: CommitErrors,
+  { generated, asSlide, asComponent, stepPaths, opPaths, opOrigins }: CommitErrors,
 ): ErrorLike {
   let { message, path } = error;
+  if (opOrigins) {
+    const origin = (_: string, n: string) => `ops[${opOrigins[Number(n)] ?? n}]`;
+    message = message.replace(/\bops\[(\d+)\]/g, origin);
+    path = path?.replace(/^ops\[(\d+)\]/, origin);
+  }
   const fromStep = error.opIndex === undefined ? undefined : opPaths?.get(error.opIndex);
   if (fromStep) {
     message = message
@@ -744,8 +756,18 @@ const applyOps = defineTool({
     const open = await currentDeck(ctx);
     const generated = new Set<string>();
     const normalize = { generated, deck: open.deck, validateElement: ctx.registry.validateElement };
-    const ops = inputs.map((input, i) => normalizeOp(input, normalize, `ops[${i}]`));
-    const { before, after } = await commit(ctx, open, label, ops, { generated });
+    const ops: unknown[] = [];
+    const opOrigins: number[] = [];
+    inputs.forEach((input, i) => {
+      for (const one of expandOp(input, open.deck)) {
+        ops.push(normalizeOp(one, normalize, `ops[${i}]`));
+        opOrigins.push(i);
+      }
+    });
+    const { before, after } = await commit(ctx, open, label, ops, {
+      generated,
+      ...(ops.length !== inputs.length && { opOrigins }),
+    });
     const created = ops.flatMap((op) => {
       const node = (op as { op: string; node?: Node }).node;
       return node ? [...walkNodes(node)].map((n) => n.node.id) : [];
@@ -773,9 +795,23 @@ const applyOps = defineTool({
       return was !== findSlide(after, id)?.slide.animations;
     });
     const levelChanged = before.motionLevel !== after.motionLevel;
+    // A saved preset is linked: say what plays it now (D119, D126).
+    const presetLines = ops.flatMap((op) => {
+      const o = op as { op: string; name?: string };
+      if (o.op !== "preset.save" || !o.name) return [];
+      const players = after.slides.flatMap((s) =>
+        (s.animations ?? [])
+          .filter((a) => a.effect?.name === o.name)
+          .map((a) => `${a.id} (${s.id})`),
+      );
+      return [
+        `Preset "${o.name}": ${players.length ? `played by ${players.join(", ")}; they follow it.` : `nothing plays it yet. Use it as "effect": "${o.name}".`}`,
+      ];
+    });
     return text(
-      `Applied "${label}" (${ops.length} op${ops.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}${animations.length ? ` New animation IDs: ${animations.join(", ")}.` : ""}${slides.length ? ` New slides: ${slides.join("; ")}.` : ""}${regrouped.length ? ` Sections: ${regrouped.join("; ")}.` : ""}`,
+      `Applied "${label}" (${inputs.length} op${inputs.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}${animations.length ? ` New animation IDs: ${animations.join(", ")}.` : ""}${slides.length ? ` New slides: ${slides.join("; ")}.` : ""}${regrouped.length ? ` Sections: ${regrouped.join("; ")}.` : ""}`,
       levelChanged ? levelNote(after) : "",
+      ...presetLines,
       ...animated.slice(0, 5).flatMap((id) => {
         const slide = findSlide(after, id)?.slide;
         return slide ? [stepsReport(after, slide, ctx)] : [];
@@ -784,6 +820,21 @@ const applyOps = defineTool({
     );
   },
 });
+
+/**
+ * One agent op as the ops that do it. A slide's `perspective` lives on its root frame (D112),
+ * as in upsert_slide's slide: `slide.update { perspective }` sets it there (D126).
+ */
+function expandOp(input: OpInput, deck: Deck): OpInput[] {
+  if (input.op !== "slide.update" || !("perspective" in input.set)) return [input];
+  const root = findSlide(deck, input.id)?.slide.root.id;
+  if (!root) return [input]; // core says the slide isn't there
+  const { perspective, ...rest } = input.set;
+  return [
+    ...(Object.keys(rest).length ? [{ ...input, set: rest }] : []),
+    { op: "node.update", id: root, set: { perspective } } as OpInput,
+  ];
+}
 
 // ── Motion (D126) ───────────────────────────────────────────────────────────────────
 
@@ -869,6 +920,15 @@ const setAnimations = defineTool({
         hint: "Change single animations with apply_ops (animation.update / animation.insert / animation.remove by ID: get_slide lists them), or pass overwrite: true if the user asked to redo this slide's motion.",
       });
     }
+    // A layer to punch that isn't on the slide is a typo, not a choice (D126).
+    const layerIds = [...walkNodes(slide.root)].slice(1).map(({ node }) => node.id);
+    const unknown = intent?.emphasize?.find((id) => !layerIds.includes(id));
+    if (unknown !== undefined) {
+      throw new ToolError({
+        message: `choreograph.emphasize: "${unknown}" isn't a layer on slide ${slideId}`,
+        hint: notFoundHint(unknown, layerIds, "layer"),
+      });
+    }
     const ops: Op[] = [];
     if (level !== undefined && level !== (slide.motionLevel ?? null)) {
       ops.push({ op: "slide.update", id: slideId, set: { motionLevel: level } });
@@ -918,6 +978,8 @@ const setAnimations = defineTool({
       count > 0
         ? `See a moment: render_preview({ "slideId": "${slideId}", "step": ${slideSteps(after, saved, ctx.registry.resolveEffect).length > 1 ? 1 : 0}, "time": 300 }). Tune one: apply_ops animation.update { "id", "set": { … } }.`
         : "",
+      // Motion that won't show (a blocked morph, a flat flip…) is flagged right here (D126).
+      await lintReport(ctx, open, [slideId]),
     );
   },
 });
@@ -1005,6 +1067,13 @@ const animateDeck = defineTool({
       ...lines,
       results.length
         ? "get_slide shows a slide's steps with their timing. Check a moment with render_preview { slideId, step, time }; tune with set_animations or apply_ops animation.update."
+        : "",
+      results.length
+        ? await lintReport(
+            ctx,
+            open,
+            results.map((r) => r.slideId),
+          )
         : "",
     );
   },
