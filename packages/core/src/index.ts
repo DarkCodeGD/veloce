@@ -47,5 +47,7 @@ export * from "./vector/graphics.js";
 export * from "./vector/path-data.js";
 export * from "./vector/schema.js";
 export * from "./vector/shapes.js";
+export * from "./vector/svg.js";
 export * from "./vector/transform.js";
+export * from "./vector/xml.js";
 export * from "./versions.js";

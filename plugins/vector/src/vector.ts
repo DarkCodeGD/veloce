@@ -137,6 +137,8 @@ Any shape from SVG path data: icons, logos, badges, arrows that bend, blobs, map
 **Example:** a ring (a hole with evenodd)
 \`{ "type": "vector", "width": 200, "height": 200, "props": { "d": "M0 50 A50 50 0 1 0 100 50 A50 50 0 1 0 0 50 Z M20 50 A30 30 0 1 0 80 50 A30 30 0 1 0 20 50 Z", "fillRule": "evenodd", "fill": "$color.primary" } }\`
 
+**Importing an SVG file:** don't translate it by hand. Put \`{ "svg": "<svg …>…</svg>", "width": 200 }\` wherever a node goes (upsert_slide's children, node.insert in apply_ops): it's imported as one vector, or as a Free frame of them when it has several colors, sized to the width or height you give, keeping its proportions. Paths, basic shapes, colors, gradients and transforms come through; scripts, text, images and links are left out, and the result says what. \`currentColor\` becomes \`"$color.text"\`, so icons follow the theme.
+
 **Tips:** Draw in a simple coordinate space (0–24 or 0–100) and set \`viewBox\` to it. Straight lines and arrows between two points are \`line\`; rectangles, ellipses, stars, polygons and block arrows are \`shape\` (they have settings instead of path data). The same icon used several times: save it as a component.`;
 
 export const vectorElement = defineElement<VectorProps>({

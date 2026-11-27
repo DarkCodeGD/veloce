@@ -8,7 +8,7 @@
  * another deck copies them over before the (single) paste transaction. Image and font files
  * on the clipboard (a screenshot, a file copied in the file manager) are imported.
  */
-import type { Deck } from "@veloce/core";
+import { type Deck, looksLikeSvg } from "@veloce/core";
 import { useEffect, useRef } from "react";
 import { run } from "../actions.js";
 import { copyAssets, UploadError } from "../assets.js";
@@ -21,6 +21,7 @@ import {
   missingAssets,
   parsePayload,
   pasteNodes,
+  pasteSvg,
   pasteText,
   plainTextOf,
   serializePayload,
@@ -78,8 +79,27 @@ export function useClipboard(
         );
         return;
       }
-      const command = pasteText(index, selection, e.clipboardData.getData("text/plain"));
+      const text =
+        e.clipboardData.getData("image/svg+xml") || e.clipboardData.getData("text/plain");
+      if (looksLikeSvg(text)) return void pasteSvgText(text);
+      const command = pasteText(index, selection, text);
       if (command) void run(command).then((ok) => ok && setSelection(command.select ?? []));
+    };
+
+    /** An SVG from another app: vector layers, and what it left out (D127 §4). */
+    const pasteSvgText = async (text: string) => {
+      const { deck, index, selection, setSelection } = latest.current;
+      if (!deck || !index) return;
+      const result = pasteSvg(index, selection, text, deck.stage);
+      if (!result.ok) return showToast({ message: result.message, tone: "error" });
+      if (!(await run(result.command))) return;
+      setSelection(result.command.select ?? []);
+      if (result.leftOut.length > 0) {
+        showToast(
+          { message: `Pasted the SVG. Left out: ${result.leftOut.join("; ")}`, tone: "info" },
+          8000,
+        );
+      }
     };
 
     /** Layers from the clipboard; files from another deck are copied over first. */

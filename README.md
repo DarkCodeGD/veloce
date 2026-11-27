@@ -39,12 +39,12 @@
 ## What works today
 
 - **For agents (MCP):** build whole slides in one call, batch edits, themes, images, shapes,
-  lines and arrows, and drawings from SVG paths, lint feedback after every change, slide
+  lines and arrows, drawings from SVG paths and SVG files imported safely, lint feedback after every change, slide
   previews, reusable components and slide layouts, sections, footers and slide numbers, slide
   transitions and morph, and undo of their own work.
 - **In the editor:** slides, layers and an inspector; direct manipulation (move, resize,
   rotate, crop, snapping), auto layout and free layers; shapes (stars, polygons, arrows and
-  more), and lines and arrows drawn by their ends; rich text; themes, colors and
+  more), lines and arrows drawn by their ends, and SVG pasted from design tools; rich text; themes, colors and
   gradients; images and fonts; a menu bar, command palette and Preferences; components and
   slide layouts; slide numbers, footers and sections; history with per-person undo; versions
   kept inside the file; and live lint.

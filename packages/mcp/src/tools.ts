@@ -583,12 +583,14 @@ const upsertSlide = defineTool({
     const replaced = input.id === undefined ? undefined : findSlide(open.deck, input.id)?.slide;
     if (replaced) for (const { node } of walkNodes(replaced.root)) taken.delete(node.id);
     const stepPaths = new Map<string, string[]>();
+    const notes: string[] = [];
     const normalized = normalizeSlide(input, {
       generated,
       deck: open.deck,
       validateElement: ctx.registry.validateElement,
       taken,
       stepPaths,
+      notes,
     });
     const existing = findSlide(open.deck, normalized.id);
     const remover = open.removedBy(normalized.id);
@@ -660,6 +662,7 @@ const upsertSlide = defineTool({
     const saved = after.slides[position];
     return text(
       `${label}: done.${animationNote(kept.length, dropped)}`,
+      ...notes,
       saved
         ? slideOutline(saved, position, {
             footer: !!after.footer,
@@ -755,7 +758,13 @@ const applyOps = defineTool({
   async run({ label, ops: inputs }, ctx) {
     const open = await currentDeck(ctx);
     const generated = new Set<string>();
-    const normalize = { generated, deck: open.deck, validateElement: ctx.registry.validateElement };
+    const notes: string[] = [];
+    const normalize = {
+      generated,
+      deck: open.deck,
+      validateElement: ctx.registry.validateElement,
+      notes,
+    };
     const ops: unknown[] = [];
     const opOrigins: number[] = [];
     inputs.forEach((input, i) => {
@@ -810,6 +819,7 @@ const applyOps = defineTool({
     });
     return text(
       `Applied "${label}" (${inputs.length} op${inputs.length === 1 ? "" : "s"}).${created.length ? ` New node IDs: ${created.join(", ")}.` : ""}${animations.length ? ` New animation IDs: ${animations.join(", ")}.` : ""}${slides.length ? ` New slides: ${slides.join("; ")}.` : ""}${regrouped.length ? ` Sections: ${regrouped.join("; ")}.` : ""}`,
+      ...notes,
       levelChanged ? levelNote(after) : "",
       ...presetLines,
       ...animated.slice(0, 5).flatMap((id) => {

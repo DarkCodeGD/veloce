@@ -3844,6 +3844,26 @@ Amends D124's single `vector` element: one roadmap item, three element kinds.
      is one drawing, and morph keeps a `contain` vector's proportions while a line or a
      stretched path stretches. **Why one list:** four places named `"shape"` on their own,
      and each new graphic type would have slipped past one of them.
+   - **SVG import, as built.** Core's `xml.ts` refuses any `<!` declaration (DOCTYPE,
+     ENTITY), decodes only the five built-in and numeric entities, skips script and style
+     bodies as raw text (so a `<` in a script can't fail the file), and caps the file at
+     2 MB, 20 000 elements and 64 levels. `svg.ts` reads shapes, groups, `transform`,
+     inherited fills and strokes (attributes and the `style` attribute), opacity,
+     `display`/`visibility`, and linear and radial gradients (user-space ones, as Figma
+     exports them, measured against the shape's own box), and reports everything else.
+     Every shape becomes `vector` path data, `<line>` included (not the `line` element:
+     an SVG's look is what it says, and a `vector` reproduces it exactly). Neighbours that
+     look the same merge into one layer, within a path's limits (sizes summed, linear), so
+     an icon is one vector; several layers come as a Free frame of stretched vectors at
+     their exact places. `currentColor` becomes `$color.text`, so icons follow the theme.
+     **For agents, no new tool:** `{ "svg": "…", "width": 200 }` goes wherever a node goes
+     (like `use`), so slides and batches import inline, and the tool result lists what was
+     left out; an unreadable or hostile file is an error pointing at `…svg` with a fix.
+     It takes only the fields that place a drawing (ID, name, match key, size, position)
+     to keep `upsert_slide`'s schema in its budget. **In the editor**, SVG text on the
+     clipboard (Figma's "Copy as SVG", icon sites) pastes as vectors, an icon-sized one
+     scaled up to 160 px and a huge one fitted to 80% of the slide, and a toast lists what
+     was left out. SVG _files_ (dropped or uploaded) stay images (D44).
    - **`vector` isn't in the Add menu on its own.** An empty path isn't a useful insert
      without a pen tool (parked after 1.0). People get vectors by pasting SVG; agents
      write `d` or import an SVG.

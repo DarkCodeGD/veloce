@@ -63,7 +63,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   box (`shapes.ts`), which the renderer clips to and export and morphing read. Affine
   transforms and fitting a viewBox into a box (`transform.ts`), for drawing and SVG import.
   `graphics.ts` says which element types are graphics (shape, line, vector), which lint,
-  choreography and morph treat alike.
+  choreography and morph treat alike. **SVG import** (`xml.ts`, `svg.ts`): a strict XML
+  reader (no DOCTYPE, no entities, capped) and an importer that turns an SVG into `vector`
+  layers and says what it left out; MCP input and editor paste both call it.
 - **Components and slide layouts** (D94, D95): named templates in the deck, inserted as
   plain copies (`use` / `with`), so the rest of the system never sees them.
 - **Morph match keys** (`morph.ts`, D109): a layer's key is its `matchKey`, else its ID;
@@ -154,7 +156,7 @@ Few, high-leverage, batch-friendly tools (`tools.ts`): `upsert_slide` builds a w
 `apply_ops` batches any edits, `set_animations` and `animate_deck` animate a slide or the
 whole deck, plus deck, theme, asset, lint, preview, components and undo tools. Agent input
 is friendlier than core's (`input.ts`: optional IDs, kinds and layouts, `use` for
-components; `motion.ts`: animations as steps, effects by name, readable animation IDs) and
+components, `svg` for an SVG file imported as vector layers; `motion.ts`: animations as steps, effects by name, readable animation IDs) and
 is normalized into plain ops before it reaches core. Choreography is core's
 `choreograph`, the same function the editor's "Animate slide" calls (D121, D126).
 

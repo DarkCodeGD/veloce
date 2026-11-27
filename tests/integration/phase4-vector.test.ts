@@ -2,7 +2,8 @@
  * Phase 4 acceptance (D127): lines and arrows by hand. The Line tool (L) and Arrow tool
  * (Shift+L) draw from the press to the release, in a box that hugs the line; a selected line
  * shows its two end knobs, and dragging one moves that end: a free line's box refits, a
- * stacked line's end stays in the box the layout gave it. Real Chromium, real server.
+ * stacked line's end stays in the box the layout gave it. A pasted SVG becomes a vector, its
+ * script left out. Real Chromium, real server.
  */
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Page } from "playwright-core";
@@ -201,6 +202,46 @@ describe.skipIf(problem)("lines and arrows by hand (D127)", () => {
     expect(op.set).not.toHaveProperty("width");
     expect(op.set).not.toHaveProperty("position");
     expect(op.set?.props).toMatchObject({ to: { x: 1, y: 0 } }); // clamped to the corner
+  });
+
+  it("pastes an SVG from another app as a vector, without its script, and says so", async () => {
+    const before = h.userTransactions();
+    let alerted = false;
+    page.once("dialog", (dialog) => {
+      alerted = true;
+      void dialog.dismiss();
+    });
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    // What Figma's "Copy as SVG" or an icon site puts on the clipboard: SVG as plain text.
+    await page.evaluate(() => {
+      const data = new DataTransfer();
+      data.setData(
+        "text/plain",
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" onload="alert(1)"><path d="M20 6 9 17l-5-5"/><script>alert(2)</script></svg>',
+      );
+      document.body.dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: data, bubbles: true }),
+      );
+    });
+    await waitForTransactions(before + 1);
+    const { node } = lastOp() as Required<Pick<Op, "node">>;
+    expect(node).toMatchObject({
+      type: "vector",
+      width: 160,
+      height: 160,
+      props: { fill: "transparent" },
+    });
+    // Drawn: a stroked path on the canvas.
+    await expect
+      .poll(() =>
+        page.locator(`.editor-canvas [data-node-id='${String(node.id)}'] path`).getAttribute("d"),
+      )
+      .toMatch(/^M/);
+    await expect
+      .poll(() => page.locator(".toast").last().textContent())
+      .toMatch(/Left out.*scripts never run/);
+    expect(alerted).toBe(false);
   });
 
   it("raised no page errors", () => {

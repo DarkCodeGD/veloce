@@ -1839,3 +1839,68 @@ describe("animation (D126)", () => {
     expect((await call("get_docs", { topic: "ops" })).text).toMatch(/animation\.insert/);
   });
 });
+
+describe("SVG import (D127 §4)", () => {
+  const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50">
+    <script>alert(1)</script>
+    <rect width="40" height="50" fill="#ff0000"/>
+    <circle cx="75" cy="25" r="25" fill="currentColor"/>
+    <text x="0" y="10">ACME</text></svg>`;
+  const deck = async () => (await workspace.get(workspace.activeDeckId ?? "")).deck;
+
+  it("imports an agent's SVG as vector layers, sized as asked, and says what it left out", async () => {
+    await connect();
+    await call("create_deck", { title: "Logos" });
+    const r = await call("upsert_slide", {
+      slide: { id: "s1", children: [{ id: "logo", svg: LOGO, width: 400 }] },
+    });
+    expect(r.isError).toBe(false);
+    expect(r.text).toMatch(/SVG at slide\.children\[0\]: left out <script>: scripts never run/);
+    expect(r.text).toMatch(/<text>: add text as text layers/);
+    const logo = (await deck()).slides[0]?.root.children[0];
+    expect(logo).toMatchObject({ id: "logo", kind: "frame", width: 400, height: 200 });
+    const parts = logo?.kind === "frame" ? logo.children : [];
+    expect(parts.map((p) => (p.kind === "element" ? p.props.fill : null))).toEqual([
+      "#ff0000",
+      "$color.text",
+    ]);
+    expect(JSON.stringify(logo)).not.toMatch(/alert|script|ACME/);
+
+    // In apply_ops too, wherever a node goes; one shape is one vector.
+    const root = (await deck()).slides[0]?.root.id;
+    const icon = await call("apply_ops", {
+      label: "Add an icon",
+      ops: [
+        {
+          op: "node.insert",
+          parentId: root,
+          node: {
+            id: "check",
+            svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>',
+            width: 48,
+          },
+        },
+      ],
+    });
+    expect(icon.isError).toBe(false);
+    const check = (await deck()).slides[0]?.root.children[1];
+    expect(check).toMatchObject({ id: "check", type: "vector", width: 48, height: 48 });
+  });
+
+  it("refuses a hostile or unreadable SVG with a fix, pointing at it", async () => {
+    await connect();
+    await call("create_deck", { title: "Bad" });
+    const r = await call("upsert_slide", {
+      slide: {
+        children: [
+          { type: "text", props: { content: "Hi" } },
+          { svg: '<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///etc/passwd">]><svg>&x;</svg>' },
+        ],
+      },
+    });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/DOCTYPE/);
+    expect(r.text).toMatch(/slide\.children\[1\]\.svg/);
+    expect(r.text).toMatch(/How to fix:.*element\/vector/);
+  });
+});

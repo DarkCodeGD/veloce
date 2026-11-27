@@ -22,6 +22,7 @@ import {
   AssetInfoSchema,
   collectAssetRefs,
   element,
+  importSvg,
   isFreeLayer,
   type Node,
   NodeSchema,
@@ -232,6 +233,56 @@ export function pasteText(
       },
     ],
     select: [node.id],
+  };
+}
+
+/** A pasted SVG this small (an icon at 24 px) is scaled up so it can be seen and grabbed. */
+const SVG_SMALLEST = 160;
+/** …and one bigger than this share of the slide is scaled down to fit it. */
+const SVG_LARGEST = 0.8;
+
+export type SvgPaste =
+  | { ok: true; command: Command; leftOut: string[] }
+  | { ok: false; message: string };
+
+/**
+ * SVG text from another app (Figma's "Copy as SVG", an icon site): imported as vector layers
+ * (D127 §4), never inlined. It keeps its proportions; an icon-sized one is scaled up, and a
+ * huge one fits the slide.
+ */
+export function pasteSvg(
+  index: SlideIndex,
+  selection: readonly string[],
+  text: string,
+  stage: { width: number; height: number },
+): SvgPaste {
+  const first = importSvg(text);
+  if (!first.ok) return { ok: false, message: first.message };
+  const w = typeof first.node.width === "number" ? first.node.width : SVG_SMALLEST;
+  const h = typeof first.node.height === "number" ? first.node.height : SVG_SMALLEST;
+  const longest = Math.max(w, h);
+  const fit = Math.min((stage.width * SVG_LARGEST) / w, (stage.height * SVG_LARGEST) / h);
+  const scale = longest < SVG_SMALLEST ? SVG_SMALLEST / longest : Math.min(1, fit);
+  const result = scale === 1 ? first : importSvg(text, { width: w * scale });
+  if (!result.ok) return { ok: false, message: result.message };
+  const node = result.node;
+  const target = pasteTarget(index, selection, new Set());
+  place(index, target.parentId, [node]);
+  return {
+    ok: true,
+    leftOut: result.leftOut,
+    command: {
+      label: "Paste SVG",
+      ops: [
+        {
+          op: "node.insert",
+          parentId: target.parentId,
+          node,
+          ...(target.index === undefined ? {} : { index: target.index }),
+        },
+      ],
+      select: [node.id],
+    },
   };
 }
 

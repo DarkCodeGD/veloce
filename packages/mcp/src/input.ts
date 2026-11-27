@@ -27,9 +27,11 @@ import {
   formatIssues,
   formatPath,
   IdSchema,
+  importSvg,
   instantiateComponent,
   instantiateSlide,
   LayoutSchema,
+  MAX_SVG_LENGTH,
   MatchKeySchema,
   MotionLevelSchema,
   type Node,
@@ -130,7 +132,29 @@ export const UseInputSchema = z.strictObject({
   },
 });
 
-export type NodeInput = z.infer<typeof ElementInputSchema> | FrameInput | UseInput;
+/**
+ * An SVG file's text, imported as vector layers (D127 §4): never inlined. Sized by
+ * `width`/`height` in pixels (it keeps its proportions); the rest of the root's fields apply.
+ */
+export const SvgInputSchema = z.strictObject({
+  svg: z
+    .string()
+    .max(MAX_SVG_LENGTH)
+    .describe(
+      "An SVG file's text, imported as vector layers (paths, shapes, colors, gradients). Scripts, text, images and links are left out; the result says what. width or height in pixels sizes it, keeping its proportions. currentColor becomes $color.text.",
+    ),
+  // Placing a drawing needs few fields; the rest can be set with node.update afterwards.
+  id: nodeCommon.id,
+  name: nodeCommon.name,
+  matchKey: nodeCommon.matchKey,
+  width: nodeCommon.width,
+  height: nodeCommon.height,
+  position: nodeCommon.position,
+  positioning: nodeCommon.positioning,
+});
+export type SvgInput = z.infer<typeof SvgInputSchema>;
+
+export type NodeInput = z.infer<typeof ElementInputSchema> | FrameInput | UseInput | SvgInput;
 export interface FrameInput extends Omit<z.infer<typeof FrameFieldsInput>, "children"> {
   children: NodeInput[];
 }
@@ -163,6 +187,7 @@ export const NodeInputSchema: z.ZodType<NodeInput> = z.union([
   FrameInputSchema,
   ElementInputSchema,
   UseInputSchema,
+  SvgInputSchema,
 ]);
 
 export const SlideInputSchema = z.strictObject({
@@ -266,6 +291,8 @@ export interface NormalizeContext {
    * from in the input (`slide.steps[1][0]`), so an error points at what the agent wrote.
    */
   stepPaths?: Map<string, StepPaths>;
+  /** Filled by SVG imports: what each one left out, for the tool's result (D127 §4). */
+  notes?: string[];
 }
 
 /**
@@ -307,6 +334,7 @@ export function withFieldText<T>(value: T, key?: string): T {
 
 export function normalizeNode(input: NodeInput, ctx: NormalizeContext = {}, at = "node"): Node {
   if ("use" in input) return expandUse(input, ctx, at);
+  if ("svg" in input) return expandSvg(input, ctx, at);
   const { id: given, kind: _kind, ...rest } = input;
   let id = given;
   if (id === undefined) {
@@ -325,6 +353,43 @@ export function normalizeNode(input: NodeInput, ctx: NormalizeContext = {}, at =
   }
   const element = rest as Omit<z.infer<typeof ElementInputSchema>, "id" | "kind">;
   return { ...element, id, kind: "element", props: element.props ?? {} };
+}
+
+/** An `svg` node: the file imported as vector layers, the root's own fields laid over it. */
+function expandSvg(input: SvgInput, ctx: NormalizeContext, at: string): Node {
+  const { svg, id, ...fields } = input;
+  const size = (v: unknown) => (typeof v === "number" ? v : undefined);
+  const width = size(fields.width);
+  const height = size(fields.height);
+  const result = importSvg(svg, {
+    ...(width !== undefined && { width }),
+    ...(height !== undefined && { height }),
+    ...(fields.name !== undefined && { name: fields.name }),
+  });
+  if (!result.ok) {
+    const left = result.leftOut.length ? ` Left out: ${result.leftOut.join("; ")}.` : "";
+    throw new VeloceError("INVALID", `${result.message}${left}`, {
+      hint: 'Send a plain SVG (paths and basic shapes, no DOCTYPE), or draw it as a vector with path data: get_docs("element/vector").',
+      path: `${at}.svg`,
+    });
+  }
+  const node = result.node;
+  for (const { node: inner } of walkNodes(node)) ctx.generated?.add(inner.id);
+  if (id !== undefined) {
+    ctx.generated?.delete(node.id);
+    node.id = id;
+  }
+  if (result.leftOut.length > 0) {
+    ctx.notes?.push(`SVG at ${at}: left out ${result.leftOut.join("; ")}.`);
+  }
+  // A size in pixels was the import's; "fill" or "hug" sit on the root as asked.
+  const { width: w, height: h, ...rest } = fields;
+  return {
+    ...node,
+    ...rest,
+    ...(typeof w === "string" && { width: w }),
+    ...(typeof h === "string" && { height: h }),
+  } as Node;
 }
 
 /** A `use` node: a plain copy of the component, the root's own fields laid over it. */

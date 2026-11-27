@@ -16,6 +16,7 @@ import {
   missingAssets,
   parsePayload,
   pasteNodes,
+  pasteSvg,
   pasteTarget,
   pasteText,
   plainTextOf,
@@ -275,5 +276,35 @@ describe("clipboard", () => {
     expect(node?.kind === "element" && node.props.content).toBe("Line one\nLine two");
     expect(childIds(next, "card")).toEqual(["title", command?.select?.[0], "body"]);
     expect(pasteText(indexOf(deck), [], "   ")).toBeNull();
+  });
+
+  it("pastes SVG from other apps as vector layers, an icon scaled up to be seen (D127)", () => {
+    const deck = makeDeck();
+    const icon =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/><script>alert(1)</script></svg>';
+    const result = pasteSvg(indexOf(deck), ["title"], icon, deck.stage);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.leftOut).toEqual(["<script>: scripts never run in a deck"]);
+    const next = apply(deck, result.command);
+    const node = indexOf(next).nodes.get(result.command.select?.[0] ?? "")?.node;
+    expect(node).toMatchObject({ type: "vector", width: 160, height: 160 });
+    expect(node?.kind === "element" && node.props.stroke).toEqual({
+      color: "$color.text",
+      width: 13.33, // 2 units, scaled with the icon
+    });
+    expect(childIds(next, "card")).toEqual(["title", node?.id, "body"]);
+
+    // A huge one fits the slide; a broken one says why.
+    const poster = pasteSvg(
+      indexOf(deck),
+      [],
+      '<svg viewBox="0 0 5000 1000"><rect width="5000" height="1000"/></svg>',
+      deck.stage,
+    );
+    expect(poster.ok && poster.command.ops[0]).toMatchObject({
+      node: { width: 1536, height: 307.2 },
+    });
+    const broken = pasteSvg(indexOf(deck), [], "<svg><g></svg>", deck.stage);
+    expect(broken.ok).toBe(false);
   });
 });

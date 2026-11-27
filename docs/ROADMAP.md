@@ -32,12 +32,12 @@
 
 - **Active phase:** Phase 4: Motion core
 - **Last updated:** 2026-11-27
-- **Next:** SVG import (D127 §4), then vector docs and a real-agent retest; then icons,
-  fonts and visual rhythm (D124).
+- **Next:** vector docs and a real-agent retest of shapes, lines, paths and SVG import
+  (D127); then icons, fonts and visual rhythm (D124).
 - **Done in Phase 4:** visual regression tests (D102), the motion slot (D103), the animation
   direction (D104), our own timeline with proven libraries drawing (D105), three UI depths
-  (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123); the head-to-head with Claude's slides (D124); a consistency pass (D125); agents animate over MCP (D126); vector so far: path data, shape kinds, `line`, `vector` (D127).
-- **State:** `pnpm check` is green (1272 tests, including real-Chromium lint, preview, editor
+  (D106); the performance test settled playback (D107); toasts work over dialogs (D108); morph match keys (D109); the timeline schema (D110); motion levels and `$motion` tokens (D111); 2.5D (D112); format v3's fixtures and the animated reference deck (D113); the timeline evaluator (D114); the clock (D115); Present, pulled forward (D116); effect presets (D117); the Animate workspace's first slice (D118); saved presets (D119); layout animations and stagger (D120); choreography, Animate this slide and whole deck (D121); sliders, the level previewed while dragging (D122); slide transitions and morph (D123); the head-to-head with Claude's slides (D124); a consistency pass (D125); agents animate over MCP (D126); vector so far: path data, shape kinds, `line`, `vector`, SVG import (D127).
+- **State:** `pnpm check` is green (1291 tests, including real-Chromium lint, preview, editor
   and visual regression tests). `pnpm start` runs it on `http://127.0.0.1:4321` (decks in `./decks`). MCP has 18 tools.
 - **Docs:** [ARCHITECTURE.md](ARCHITECTURE.md) is the map of how it fits together; keep it
   true when the architecture changes. User guide and references come in Phase 10 (D96).
@@ -325,8 +325,7 @@ block (D124) widens what agents and people can draw; its schema changes land bef
     - [x] Shape kinds: triangle, polygon, star, block arrow, chevron, settings per kind (D127 §5)
     - [x] `line`: two ends, six heads; Line (L) and Arrow (Shift+L) tools, end knobs (D127 §7)
     - [x] `vector`: any path, any paint, `evenodd` holes, a stroke that never stretches (D127 §7)
-    - [ ] SVG import: our own strict parser in core (no entities, DOCTYPE or scripts), an
-          MCP route for agents and paste in the editor; never inlined (D125 §3)
+    - [x] SVG import: strict parser in core, `{ "svg" }` nodes over MCP, paste (D127 §7)
     - [ ] Docs, then a real-agent retest of shapes, lines, paths and import. Connectors that
           stay attached wait for after 1.0
   - [ ] `icon` plugin (moved from Phase 6; Lucide, ISC): agents stop drawing icons from
