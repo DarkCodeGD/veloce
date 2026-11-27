@@ -71,6 +71,8 @@ export const SHORTCUTS = {
   toolFrame: "F",
   toolRect: "R",
   toolEllipse: "O",
+  toolLine: "L",
+  toolArrow: "Shift+L",
   toolText: "T",
   toolHand: "H",
   addMenu: "Shift+A",

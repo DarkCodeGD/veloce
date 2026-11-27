@@ -20,6 +20,7 @@
     "@veloce/plugin-image": "workspace:*",
     "@veloce/plugin-effects": "workspace:*",
     "@veloce/plugin-shape": "workspace:*",
-    "@veloce/plugin-text": "workspace:*"
+    "@veloce/plugin-text": "workspace:*",
+    "@veloce/plugin-vector": "workspace:*"
   }
 }

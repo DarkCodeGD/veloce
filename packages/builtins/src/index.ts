@@ -9,11 +9,13 @@ import { effectsPlugin } from "@veloce/plugin-effects";
 import { imagePlugin } from "@veloce/plugin-image";
 import { shapePlugin } from "@veloce/plugin-shape";
 import { textPlugin } from "@veloce/plugin-text";
+import { vectorPlugin } from "@veloce/plugin-vector";
 
 export const BUILTIN_PLUGINS: readonly VelocePlugin[] = [
   textPlugin,
   shapePlugin,
   imagePlugin,
+  vectorPlugin,
   effectsPlugin,
 ];
 

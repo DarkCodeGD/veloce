@@ -16,6 +16,8 @@
  * around the layer; drag inside the layer to move it over the picture, drag the dimmed
  * picture to pan it, drag the layer's edges to trim, drag the picture's corners to scale it. Enter, Esc, a double-click or a click elsewhere leaves.
  */
+
+import type { Node as DeckNode } from "@veloce/core";
 import { type Deck, fieldValues, type TextContent } from "@veloce/core";
 import { NODE_ID_ATTR, SlidePlayer, SlideView } from "@veloce/renderer";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -45,6 +47,7 @@ import {
   resizeCursor,
 } from "../model/geometry.js";
 import { BUILTIN_INSERTABLES } from "../model/insert.js";
+import { isLine, type LineEndName, lineEnds } from "../model/line-ends.js";
 import { ancestorRotation } from "../model/manipulate.js";
 import { editableText, pick, pickTarget } from "../model/selection.js";
 import { indexSlide, nodeLabel, type SlideIndex } from "../model/slide-index.js";
@@ -56,6 +59,7 @@ import {
   type CropPicture,
   cropDrag,
   drawDrag,
+  lineEndDrag,
   marqueeDrag,
   moveDrag,
   resizeDrag,
@@ -466,6 +470,22 @@ export function EditorCanvas({
     );
   };
 
+  const onLineEndDown = (e: React.PointerEvent, id: string, which: LineEndName) => {
+    if (camera.startPan(e)) return;
+    if (e.button !== 0) return;
+    e.stopPropagation(); // not a click on the slide
+    const start = { x: e.clientX, y: e.clientY };
+    begin(
+      e,
+      "resize",
+      () => {
+        const ctx = context();
+        return ctx ? lineEndDrag(ctx, id, which, start) : null;
+      },
+      { threshold: 1, capture: wrapperRef.current ?? e.currentTarget },
+    );
+  };
+
   const labelFor = (id: string) => {
     const node = shownIndex?.nodes.get(id)?.node;
     return node ? nodeLabel(node) : "";
@@ -481,6 +501,11 @@ export function EditorCanvas({
     primary.id !== index.rootId &&
     !index.nodes.get(primary.id)?.node.locked;
   const { stage } = boxes;
+  /** A line layer as shown now (its ends follow a live drag), or undefined. */
+  const shownLine = (id: string) => {
+    const node = shownIndex?.nodes.get(id)?.node;
+    return isLine(node) ? node : undefined;
+  };
   /** What crop mode draws: the crop as shown now (live preview included), and the picture. */
   const cropView = (() => {
     const box = cropId ? boxes.selected.find((b) => b.id === cropId) : undefined;
@@ -596,9 +621,22 @@ export function EditorCanvas({
           .filter((box) => box.id !== cropView?.box.id)
           .map((box) => (
             <div key={box.id} className="outline outline-selected" style={boxStyle(box)}>
-              {box === primary && editable && active !== "move" && box !== gradientBox && (
-                <Handles box={box} onHandleDown={(e, handle) => onHandleDown(e, box.id, handle)} />
-              )}
+              {box === primary &&
+                editable &&
+                active !== "move" &&
+                box !== gradientBox &&
+                (shownLine(box.id) ? (
+                  <LineEndHandles
+                    box={box}
+                    node={shownLine(box.id) as DeckNode}
+                    onDown={(e, which) => onLineEndDown(e, box.id, which)}
+                  />
+                ) : (
+                  <Handles
+                    box={box}
+                    onHandleDown={(e, handle) => onHandleDown(e, box.id, handle)}
+                  />
+                ))}
             </div>
           ))}
         {gradientSession && gradientBox && (
@@ -804,6 +842,35 @@ function CropOverlay({
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * A line's two end knobs (D127), in place of the resize handles: drag one to move that end.
+ * They sit in the outline's own (turned) box, so they follow the layer's rotation.
+ */
+function LineEndHandles({
+  box,
+  node,
+  onDown,
+}: {
+  box: OverlayBox;
+  node: DeckNode;
+  onDown(e: React.PointerEvent, which: LineEndName): void;
+}) {
+  const ends = lineEnds(node);
+  return (
+    <>
+      {(["from", "to"] as const).map((which) => (
+        <div
+          key={which}
+          className="handle line-end"
+          data-handle={`line-${which}`}
+          style={{ left: ends[which].x * box.w, top: ends[which].y * box.h }}
+          onPointerDown={(e) => onDown(e, which)}
+        />
+      ))}
+    </>
   );
 }
 

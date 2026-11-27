@@ -30,7 +30,21 @@ import {
   rotateVector,
   topLeft,
 } from "../model/geometry.js";
-import { drawnRect, type ElementInfo, type Insertable, insertCommand } from "../model/insert.js";
+import {
+  drawnRect,
+  type ElementInfo,
+  type InsertAt,
+  type Insertable,
+  insertCommand,
+} from "../model/insert.js";
+import {
+  type LineEndName,
+  lineBox,
+  lineEnds,
+  lineReadout,
+  moveLineEnd,
+  snapAngle,
+} from "../model/line-ends.js";
 import {
   ancestorRotation,
   depthScale,
@@ -401,6 +415,72 @@ export function resizeDrag(
   };
 }
 
+/**
+ * Drag one end of a line (D127). A free, unturned line refits its box around both ends, so
+ * the other end stays put; in a stack or grid (or turned) the layout owns the box and the end
+ * moves inside it. Shift snaps the line to 45° steps.
+ */
+export function lineEndDrag(
+  ctx: Context,
+  id: string,
+  which: LineEndName,
+  start: Point,
+): Drag | null {
+  const { index, space } = ctx;
+  const node = index.nodes.get(id)?.node;
+  const size = space.size(id);
+  const rect = space.rect(id);
+  if (node?.kind !== "element" || !size || !rect) return null;
+  const rotation = node.rotation ?? 0;
+  const refit =
+    isFree(index, id) &&
+    rotation === 0 &&
+    ancestorRotation(index, id) === 0 &&
+    depthScale(index, id) === 1;
+  const ends = lineEnds(node);
+  const px = (f: Point): Point => ({ x: f.x * size.w, y: f.y * size.h });
+  const end0 = px(ends[which]);
+  const other = px(ends[which === "from" ? "to" : "from"]);
+  const p0 = space.toSlide(start);
+
+  return {
+    update(pointer, mods) {
+      // The pointer's travel in the layer's own axes (its parent's turn, then its own).
+      const d = rotateVector(toLayerSpace(index, id, sub(space.toSlide(pointer), p0)), -rotation);
+      let to = { x: end0.x + d.x, y: end0.y + d.y };
+      if (mods.shift) to = snapAngle(other, to);
+      const next = moveLineEnd(size, ends, which, to, refit);
+      const set: Record<string, unknown> = { props: { from: next.from, to: next.to } };
+      if (next.size && next.moved) {
+        set.width = next.size.w;
+        set.height = next.size.h;
+        set.position = movedPosition(node, next.moved, {
+          w: next.size.w - size.w,
+          h: next.size.h - size.h,
+        });
+      }
+      const command: Command = {
+        label: `Move the end of ${node.name ?? "the line"}`,
+        ops: [{ op: "node.update", id, set }],
+      };
+      // Where the dragged end is now, in slide pixels (exact for unturned lines).
+      const origin = { x: rect.x + (next.moved?.x ?? 0), y: rect.y + (next.moved?.y ?? 0) };
+      const box = next.size ?? size;
+      const at = (f: Point) => ({ x: origin.x + f.x * box.w, y: origin.y + f.y * box.h });
+      const a = at(next.from);
+      const b = at(next.to);
+      const end = which === "from" ? a : b;
+      return {
+        command,
+        feedback:
+          rotation === 0
+            ? { badge: { text: lineReadout(a, b), at: { x: end.x, y: end.y + 24 } } }
+            : {},
+      };
+    },
+  };
+}
+
 // ── Crop (D84) ──────────────────────────────────────────────────────────────────────
 
 /** What a crop gesture needs about the layer's picture (crop-mode.ts's `Picture`). */
@@ -585,10 +665,24 @@ export function drawDrag(
   const band = EDGE_BAND_PX / space.scale;
   // One ID for the whole drag, so the preview updates one layer instead of remounting it.
   const id = createId("nd");
+  const line = item.make.kind === "element" && item.make.type === "line";
   return {
     update(pointer, mods) {
-      const rect = drawnRect(p0, space.toSlide(pointer), mods);
-      const made = insertCommand(index, frames, item, elements, { point: p0, rect }, [], band);
+      // A line runs from the press to the pointer (Shift: in 45° steps), in a box that hugs it.
+      let at: InsertAt;
+      let readout: string;
+      if (line) {
+        const p = mods.shift ? snapAngle(p0, space.toSlide(pointer)) : space.toSlide(pointer);
+        const box = lineBox(p0, p);
+        at = { point: p0, rect: box.rect, ends: { from: box.from, to: box.to } };
+        readout = lineReadout(p0, p);
+      } else {
+        const rect = drawnRect(p0, space.toSlide(pointer), mods);
+        at = { point: p0, rect };
+        readout = `${Math.round(rect.w)} × ${Math.round(rect.h)}`;
+      }
+      const rect = at.rect as Rect;
+      const made = insertCommand(index, frames, item, elements, at, [], band);
       const command: Command | null = made && {
         ...made,
         ops: made.ops.map((op) =>
@@ -596,8 +690,6 @@ export function drawDrag(
         ),
         select: [id],
       };
-      const w = Math.round(rect.w);
-      const h = Math.round(rect.h);
       return {
         command,
         feedback: {
@@ -608,7 +700,7 @@ export function drawDrag(
             h: rect.h,
             rotation: 0,
           },
-          badge: { text: `${w} × ${h}`, at: { x: rect.x + rect.w / 2, y: rect.y + rect.h } },
+          badge: { text: readout, at: { x: rect.x + rect.w / 2, y: rect.y + rect.h } },
         },
       };
     },

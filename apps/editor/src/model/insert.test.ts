@@ -87,6 +87,13 @@ describe("adding layers by hand (D81)", () => {
       "frame",
       "rect",
       "ellipse",
+      "triangle",
+      "polygon",
+      "star",
+      "arrow",
+      "chevron",
+      "line",
+      "arrow-line",
       "image",
       "element:chart",
     ]);

@@ -3753,3 +3753,78 @@ left open by D110 §7, D111 §6, D112 §7, D117 §9, D119 §9, D120 §9 and D121
       `preserve-3d`, so a turning frame is one flat card; move or turn the layers inside it.
       Left for later: an arriving morph partner could still get a loop once it's in; a
       preview of a transition (render_preview shows one slide).
+
+## D127 — Vector: more shapes, lines and arrows, and paths (with safe SVG)
+
+**Status:** Accepted (2026-11-27). Phase 4's head-to-head block, first item (D124 §4, D125 §3).
+Amends D124's single `vector` element: one roadmap item, three element kinds.
+
+1. **Three kinds, split the way people think of them** (and Figma, Keynote and PowerPoint
+   split them):
+   - **More shapes:** `shape` gains `triangle`, `polygon` (`sides`), `star` (`points`,
+     `innerRadius`), `arrow` (a block arrow: `headLength`, `shaftWidth`) and `chevron`
+     (`depth`), beside `rect` and `ellipse`. Same fill, stroke and box as today: they
+     stretch with their box like any shape. **Why not a `vector` kind:** they're shapes to
+     the person using them (the Shapes menu, swapping rect → star, morphing later), and
+     every prop they share already works.
+   - **`line`** (new element): two ends, `from` and `to`, as fractions of its box, a stroke
+     (`color`, `width`, `dash`, `cap`) and an end at each side (`none`, `arrow`,
+     `triangle`, `circle`, `square`, `bar`), sized by the stroke's width. Dragged by its ends
+     in the editor. **Why fractions of the box:** the box stays the layout's (stacks,
+     grids, `position`), so a line moves, aligns and animates like any layer, and an agent
+     writes `{ "from": { "x": 0, "y": 1 }, "to": { "x": 1, "y": 0 } }` without coordinates.
+   - **`vector`** (new element): path data (`d`, the SVG syntax agents already write) in a
+     `viewBox` (default: the path's bounds), drawn to fit its box (`fit`: `contain` keeps
+     its proportions, the default; `stretch` fills it), with `fill` and `stroke`. For
+     icons, logos and an agent's drawings.
+     `line` and `vector` live in a new built-in plugin, `@veloce/plugin-vector`.
+2. **Paint is the same everywhere.** Filled shapes and paths are drawn as a box with CSS
+   paint (`cssPaint`: colors, tokens, every gradient including conic, image fills),
+   clipped to the outline by an SVG `clipPath` in the box's own units; the stroke is an SVG
+   outline on top with a non-scaling stroke, so a 2 px stroke stays 2 px however the box is
+   stretched. Lines draw in pixel space (percent coordinates), so their ends never distort.
+   **Why:** SVG `fill` has no conic gradient or image fill, and one paint path means a
+   gradient looks the same on a rect, a star and a logo.
+3. **A strict path-data validator in core** (`vector/path-data.ts`, pure, no DOM): the SVG
+   path grammar (M L H V C S Q T A Z, absolute and relative), finite numbers, arc flags
+   0/1, at most 20 000 characters and 4 000 commands; it parses into commands (for bounds,
+   and later morphing and draw-on strokes) and rejects everything else with the position
+   and a fix. Every `vector` prop is checked by its Zod schema (golden rule 5), so files,
+   ops, MCP and the editor share it. **Why core:** MCP validates agent input and SVG
+   import runs on the server; neither may depend on a plugin, and export reuses it.
+4. **SVG is never inlined (D125 §3).** An agent's (or a pasted, or a downloaded deck's) SVG
+   is **imported**: core's own small parser (`vector/svg.ts`) reads only shapes (`path`,
+   `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`), groups and their
+   transforms, `fill`, `stroke`, `stroke-width`, opacity and `viewBox`, into a frame of
+   `vector` and `line` layers. Anything else (scripts, `foreignObject`, links, `use`,
+   images, styles, events, entities, a DOCTYPE) is dropped or refused, and the result says
+   what was left out. Rendering only ever sets validated path data on elements made with
+   `createElementNS`. **Why our own parser:** a general XML parser brings entities and
+   DOCTYPEs (the XXE family); the subset agents write is small, and a parser that can't
+   expand entities can't be tricked into it. SVG files as assets stay `<img>`-only (D44).
+5. **The inspector shows a field only where it applies**: a prop's schema can say
+   `.meta({ when: { shape: ["star"] } })`, and the generated inspector hides it for other
+   kinds (`sides` only for polygons, `radius` only for rects). **Why:** flat props keep the
+   inspector, MCP and docs generated from one schema (nested unions show read-only), and a
+   plugin's element gets the same for free.
+6. **Order:** core's path data and shape geometry → the shape kinds → `vector` and `line`
+   with conformance tests → the editor (the Shapes menu, `when`, dragging a line's ends) →
+   SVG import (MCP and paste) → docs and a real-agent retest. Draw-on strokes, shape
+   morphing and curved or attached connectors stay in Phase 5 and after 1.0, on top of
+   the parsed path data.
+7. **How the pieces draw** (found while building them):
+   - **Outline shapes clip with CSS `clip-path: polygon(%)`**, not an SVG `clipPath`: no
+     document-wide IDs, and the fill stays the same CSS paint as a rect's (conic gradients
+     and image fills included). The stroke is an SVG polygon at twice the width, clipped
+     to the same outline, so it sits inside like a rect's border.
+   - **A line draws its own heads in pixels**, not with SVG markers: it reads its box size
+     (a `ResizeObserver`, disconnected on dispose) and computes the shaft and heads, so
+     heads never stretch, a filled head's tip is exactly on the end (the shaft stops under
+     its base, so a round cap can't poke out), and two heads on a short line share it.
+   - **Drawing and dragging a line's ends** (editor): the Line (L) and Arrow (Shift+L)
+     tools draw from the press to the release in a box that hugs the ends plus 16px for the
+     heads; Shift snaps to 45°. A selected line shows two end knobs instead of resize
+     handles. Dragging one end of a free, unturned line refits the box around both ends
+     (the other end stays put, one `node.update`); in a stack or grid, or turned, the
+     layout owns the box and the end moves inside it. **Why:** that's how Figma and
+     PowerPoint behave, and a box that hugs the line keeps hit-testing and snapping honest.

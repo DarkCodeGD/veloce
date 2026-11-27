@@ -58,6 +58,9 @@ Pure TypeScript with no DOM and no Node APIs, used by every other package.
   restylable; built-in themes in `themes.ts`.
 - **Assets** are content-hashed (SHA-256) files in the `.veloce` zip, referenced as
   `asset:<hash>`; never base64 in the document.
+- **Vector geometry** (D127, `src/vector/`): SVG path data parsed to absolute segments and
+  formatted back (`path-data.ts`), and the outlines of the parametric shape kinds in a unit
+  box (`shapes.ts`), which the renderer clips to and export and morphing read.
 - **Components and slide layouts** (D94, D95): named templates in the deck, inserted as
   plain copies (`use` / `with`), so the rest of the system never sees them.
 - **Morph match keys** (`morph.ts`, D109): a layer's key is its `matchKey`, else its ID;
@@ -187,8 +190,9 @@ is normalized into plain ops before it reaches core. Choreography is core's
   into keyframe tracks), and registers them in a registry that core uses to validate props
   and effects (`applyContext`) and players use to resolve effects (`resolveEffect`). Every
   element and effect passes its conformance kit. The built-in ones (`text` with typewriter
-  and count-up, `shape`, `image`, and `effects` with the entrances, exits and emphasis) use
-  the same public API (`packages/builtins` bundles them).
+  and count-up, `shape` with its outline kinds, `image`, `line` from the `vector` plugin
+  (D127), and `effects` with the entrances, exits and emphasis) use the same public API
+  (`packages/builtins` bundles them).
 
 ## The editor (`apps/editor`)
 

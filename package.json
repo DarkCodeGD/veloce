@@ -39,6 +39,7 @@
     "@veloce/plugin-api": "workspace:*",
     "@veloce/plugin-image": "workspace:*",
     "@veloce/plugin-shape": "workspace:*",
+    "@veloce/plugin-vector": "workspace:*",
     "@veloce/plugin-text": "workspace:*",
     "@veloce/renderer": "workspace:*",
     "@veloce/server": "workspace:*",

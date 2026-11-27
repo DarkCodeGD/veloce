@@ -68,7 +68,7 @@ import {
   switchLayout,
 } from "../model/manipulate.js";
 import { withPaintAssets } from "../model/paint.js";
-import { propFields } from "../model/schema-fields.js";
+import { applicableFields, propFields } from "../model/schema-fields.js";
 import { parseNumber } from "../model/scrub.js";
 import { SHORTCUTS } from "../model/shortcuts.js";
 import { collapsePadding, paddingSides, SIDES, type Side, setPaddingSide } from "../model/sides.js";
@@ -967,7 +967,7 @@ function PropsSection({ deck, node }: { deck: Deck; node: ElementNode }) {
     );
   }
   const props = node.props as Record<string, unknown>;
-  const fields = propFields(definition);
+  const fields = applicableFields(propFields(definition), node.props as Record<string, unknown>);
   // A cropped picture's focus only matters if the layer's shape strays from the crop's.
   const cropped = fields.some((f) => f.kind === "crop" && props[f.key] !== undefined);
   return (

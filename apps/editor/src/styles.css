@@ -5412,3 +5412,23 @@ html.is-scrubbing * {
     transition: none;
   }
 }
+
+/* A line's end knobs (D127): round, centred on each end. */
+.line-end {
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  z-index: 1;
+  cursor: crosshair;
+}
+
+.line-end::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: transform var(--fast) var(--ease);
+}

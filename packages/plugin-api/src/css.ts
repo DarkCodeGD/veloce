@@ -102,3 +102,34 @@ function pct(fraction: number): string {
 export function cssUrl(url: string): string {
   return `url(${JSON.stringify(url)})`;
 }
+
+// ── SVG (D127) ────────────────────────────────────────────────────────────────────────
+
+export const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** An SVG element, made the only way plugins may make SVG: by name, never from markup. */
+export function svgElement<K extends keyof SVGElementTagNameMap>(name: K): SVGElementTagNameMap[K] {
+  return document.createElementNS(SVG_NS, name);
+}
+
+/**
+ * A stroke on an SVG shape: its color (theme tokens follow the theme), width and dash, in
+ * screen pixels however the shape is stretched (`non-scaling-stroke`). `scale` multiplies
+ * the width (2 when half of it is clipped away, for a stroke inside the outline).
+ */
+export function applySvgStroke(el: SVGElement, stroke: Stroke | undefined, scale = 1): void {
+  if (!stroke) {
+    el.setAttribute("stroke", "none");
+    return;
+  }
+  const width = stroke.width * scale;
+  el.setAttribute("stroke-width", String(width));
+  el.setAttribute("vector-effect", "non-scaling-stroke");
+  el.style.stroke = cssColor(stroke.color);
+  const w = stroke.width;
+  if (stroke.style === "dashed") el.setAttribute("stroke-dasharray", `${3 * w} ${2 * w}`);
+  else if (stroke.style === "dotted") {
+    el.setAttribute("stroke-dasharray", `0 ${2 * w}`);
+    el.setAttribute("stroke-linecap", "round");
+  } else el.removeAttribute("stroke-dasharray");
+}

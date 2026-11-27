@@ -23,6 +23,7 @@ const ALLOWED: Record<string, readonly string[]> = {
     "@veloce/plugin-api",
     "@veloce/plugin-text",
     "@veloce/plugin-shape",
+    "@veloce/plugin-vector",
     "@veloce/plugin-image",
     "@veloce/plugin-effects",
   ],

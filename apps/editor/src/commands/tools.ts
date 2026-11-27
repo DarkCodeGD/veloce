@@ -4,15 +4,22 @@
  * both without editor code.
  */
 import {
+  ArrowBigRight,
+  ChevronRight,
   Circle,
   Frame,
   Hand,
+  Hexagon,
   ImagePlus,
   type LucideIcon,
   MousePointer2,
+  MoveUpRight,
   Plus,
   Puzzle,
+  Slash,
   Square,
+  Star,
+  Triangle,
   Type,
 } from "lucide-react";
 import { canvasCentre, openAddMenu, pointerOverCanvas } from "../add-menu.js";
@@ -22,11 +29,18 @@ import { SHORTCUTS } from "../model/shortcuts.js";
 import { setTool, type Tool, toolStore } from "../tools.js";
 import { type EditorCommand, onSlide } from "./context.js";
 
-const TOOLS: ReadonlyArray<{ tool: Tool; label: string; icon: LucideIcon; shortcut: string }> = [
+const TOOLS: ReadonlyArray<{ tool: Tool; label: string; icon: LucideIcon; shortcut?: string }> = [
   { tool: "select", label: "Select", icon: MousePointer2, shortcut: SHORTCUTS.toolSelect },
   { tool: "frame", label: "Frame", icon: Frame, shortcut: SHORTCUTS.toolFrame },
   { tool: "rect", label: "Rectangle", icon: Square, shortcut: SHORTCUTS.toolRect },
   { tool: "ellipse", label: "Ellipse", icon: Circle, shortcut: SHORTCUTS.toolEllipse },
+  { tool: "triangle", label: "Triangle", icon: Triangle },
+  { tool: "polygon", label: "Polygon", icon: Hexagon },
+  { tool: "star", label: "Star", icon: Star },
+  { tool: "arrow", label: "Block arrow", icon: ArrowBigRight },
+  { tool: "chevron", label: "Chevron", icon: ChevronRight },
+  { tool: "line", label: "Line", icon: Slash, shortcut: SHORTCUTS.toolLine },
+  { tool: "arrow-line", label: "Arrow", icon: MoveUpRight, shortcut: SHORTCUTS.toolArrow },
   { tool: "text", label: "Text", icon: Type, shortcut: SHORTCUTS.toolText },
   { tool: "hand", label: "Hand", icon: Hand, shortcut: SHORTCUTS.toolHand },
 ];
@@ -36,6 +50,13 @@ const ADD_ICONS: Record<string, LucideIcon> = {
   frame: Frame,
   rect: Square,
   ellipse: Circle,
+  triangle: Triangle,
+  polygon: Hexagon,
+  star: Star,
+  arrow: ArrowBigRight,
+  chevron: ChevronRight,
+  line: Slash,
+  "arrow-line": MoveUpRight,
   image: ImagePlus,
 };
 
@@ -46,7 +67,7 @@ export function toolCommands(): EditorCommand[] {
         id: `tool.${tool}`,
         label,
         icon,
-        shortcut,
+        ...(shortcut && { shortcut }),
         group: "tools",
         enabled: (c) => tool === "select" || onSlide(c),
         checked: () => toolStore.get() === tool,

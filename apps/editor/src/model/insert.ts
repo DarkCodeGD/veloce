@@ -73,6 +73,37 @@ export const BUILTIN_INSERTABLES: readonly Insertable[] = [
     keywords: "circle oval round dot shape",
     make: { kind: "element", type: "shape", props: { shape: "ellipse" }, name: "Ellipse" },
   },
+  ...(
+    [
+      ["triangle", "Triangle", "pyramid delta warning shape"],
+      ["polygon", "Polygon", "hexagon pentagon octagon shape"],
+      ["star", "Star", "rating favourite burst shape"],
+      ["arrow", "Block arrow", "pointer direction next shape"],
+      ["chevron", "Chevron", "process step pointer shape"],
+    ] as const
+  ).map(
+    ([shape, label, keywords]): Insertable => ({
+      id: shape,
+      label,
+      group: "Shapes",
+      keywords,
+      make: { kind: "element", type: "shape", props: { shape }, name: label },
+    }),
+  ),
+  {
+    id: "line",
+    label: "Line",
+    group: "Shapes",
+    keywords: "rule divider connector stroke straight",
+    make: { kind: "element", type: "line", props: { end: "none" }, name: "Line" },
+  },
+  {
+    id: "arrow-line",
+    label: "Arrow",
+    group: "Shapes",
+    keywords: "pointer connector direction callout line",
+    make: { kind: "element", type: "line", props: { end: "triangle" }, name: "Arrow" },
+  },
   {
     id: "image",
     label: "Image…",
@@ -83,7 +114,7 @@ export const BUILTIN_INSERTABLES: readonly Insertable[] = [
 ];
 
 /** Element types the built-in entries already cover. */
-const COVERED = new Set(["text", "shape", "image"]);
+const COVERED = new Set(["text", "shape", "line", "image"]);
 
 /**
  * Everything the Add menu offers: the built-ins, then one entry per other registered
@@ -173,6 +204,8 @@ export interface InsertAt {
   point: Point;
   /** Drawn on the canvas: the layer takes this box (in a free frame) or this size (in a flow). */
   rect?: Rect;
+  /** A drawn line: where its ends are, as fractions of `rect`. */
+  ends?: { from: Point; to: Point };
 }
 
 /** A new frame's look: a card in the theme's surface color, laying out what goes inside. */
@@ -189,6 +222,7 @@ export function newLayer(
   elements: readonly ElementInfo[],
   size: { w: number; h: number } | null,
   free: boolean,
+  ends?: { from: Point; to: Point },
 ): Node | null {
   const drawn = size && {
     width: Math.max(1, Math.round(size.w)),
@@ -222,6 +256,9 @@ export function newLayer(
       ...name,
       ...(drawn ?? { width: NEW_SHAPE_SIZE, height: NEW_SHAPE_SIZE }),
     });
+  }
+  if (make.type === "line" && drawn && ends) {
+    return element("line", { ...props, from: ends.from, to: ends.to }, { ...name, ...drawn });
   }
   // A plugin's element: its own default size unless drawn.
   return element(make.type, props, { ...name, ...drawn });
@@ -297,12 +334,12 @@ export function insertCommand(
   band?: number,
 ): Command | null {
   // Free or not decides the new layer's shape (text width), so find the parent first.
-  const probe = newLayer(item, elements, at?.rect ?? null, false);
+  const probe = newLayer(item, elements, at?.rect ?? null, false, at?.ends);
   if (!probe) return null;
   const placed = placeNew(index, frames, probe, at, selection, band);
   const parent = index.nodes.get(placed.parentId)?.node;
   const free = parent?.kind === "frame" && parent.layout.mode === "absolute";
-  const base = free ? newLayer(item, elements, at?.rect ?? null, true) : probe;
+  const base = free ? newLayer(item, elements, at?.rect ?? null, true, at?.ends) : probe;
   if (!base) return null;
   const node: Node = placed.position ? { ...base, position: placed.position } : base;
   return {

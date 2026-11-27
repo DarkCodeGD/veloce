@@ -5,7 +5,16 @@
 import { createStore } from "./store.js";
 
 /** Drawing tools are named after what they add (insertable IDs, model/insert.ts). */
-export type DrawTool = "frame" | "rect" | "ellipse" | "text";
+/** The shapes past rect and ellipse (D127): drawn like them, chosen from the Shapes menu. */
+export const OUTLINE_SHAPES = ["triangle", "polygon", "star", "arrow", "chevron"] as const;
+export type DrawTool =
+  | "frame"
+  | "rect"
+  | "ellipse"
+  | (typeof OUTLINE_SHAPES)[number]
+  | "line"
+  | "arrow-line"
+  | "text";
 export type Tool = "select" | "hand" | DrawTool;
 
 export const toolStore = createStore<Tool>("select");

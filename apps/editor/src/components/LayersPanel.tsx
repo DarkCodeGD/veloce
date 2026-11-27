@@ -6,18 +6,25 @@
  */
 import type { LintSeverity, Node, Slide } from "@veloce/core";
 import {
+  ArrowBigRight,
   ChevronDown,
   ChevronRight,
   Circle,
   Columns3,
   Eye,
   EyeOff,
+  Hexagon,
   Image,
   LayoutGrid,
   Lock,
   LockOpen,
+  type LucideIcon,
+  MoveUpRight,
   Rows3,
+  Slash,
   Square,
+  Star,
+  Triangle,
   Type,
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -208,6 +215,16 @@ export function LayersPanel({ slide: live, selection, issues, onSelect, onHover 
   );
 }
 
+const SHAPE_ICONS: Record<string, LucideIcon> = {
+  rect: Square,
+  ellipse: Circle,
+  triangle: Triangle,
+  polygon: Hexagon,
+  star: Star,
+  arrow: ArrowBigRight,
+  chevron: ChevronRight,
+};
+
 function LayerIcon({ node }: { node: Node }) {
   if (node.kind === "frame") {
     if (node.layout.mode === "grid") return <LayoutGrid size={14} />;
@@ -216,9 +233,17 @@ function LayerIcon({ node }: { node: Node }) {
     return <Rows3 size={14} />;
   }
   if (node.type === "text") return <Type size={14} />;
+  if (node.type === "line")
+    return node.props.end && node.props.end !== "none" ? (
+      <MoveUpRight size={14} />
+    ) : (
+      <Slash size={14} />
+    );
   if (node.type === "image") return <Image size={14} />;
-  if (node.type === "shape")
-    return node.props.shape === "ellipse" ? <Circle size={14} /> : <Square size={14} />;
+  if (node.type === "shape") {
+    const Icon = SHAPE_ICONS[String(node.props.shape)] ?? Square;
+    return <Icon size={14} />;
+  }
   return <Square size={14} />;
 }
 

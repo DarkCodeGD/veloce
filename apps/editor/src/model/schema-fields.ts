@@ -35,11 +35,21 @@ export type FieldKind =
   /** Not editable in the inspector yet (nested objects): shown read-only. */
   | { kind: "readonly" };
 
-export type FieldSpec = FieldKind & { key: string; label: string };
+export type FieldSpec = FieldKind & {
+  key: string;
+  label: string;
+  /**
+   * Shown only while other props have these values (`.meta({ when: { shape: ["star"] } })`,
+   * D127 §5): a star's points only on stars.
+   */
+  when?: Record<string, readonly string[]>;
+};
 
 type JsonSchema = {
   /** Set by a plugin with `.meta({ animationOnly: true })`: moved by effects, not edited. */
   animationOnly?: boolean;
+  /** Set with `.meta({ when: { prop: [values] } })`: the field applies only then (D127 §5). */
+  when?: Record<string, string[]>;
   type?: string;
   pattern?: string;
   enum?: unknown[];
@@ -139,6 +149,18 @@ export function fieldKind(s: JsonSchema): FieldKind {
   return { kind: "readonly" };
 }
 
+/** The fields that apply to these props: a field with `when` only while its condition holds. */
+export function applicableFields(
+  fields: readonly FieldSpec[],
+  props: Record<string, unknown>,
+): FieldSpec[] {
+  return fields.filter(
+    (f) =>
+      !f.when ||
+      Object.entries(f.when).every(([key, values]) => values.includes(String(props[key]))),
+  );
+}
+
 const cache = new WeakMap<object, FieldSpec[]>();
 
 export function propFields(definition: Pick<ElementDefinition, "propsSchema">): FieldSpec[] {
@@ -163,7 +185,8 @@ export function propFields(definition: Pick<ElementDefinition, "propsSchema">): 
         : flatten(schema).some(isFractionRect)
           ? { kind: "crop", asset }
           : fieldKind(schema);
-    return { key, label: labelFor(key), ...kind };
+    const when = flatten(schema).find((s) => s.when)?.when ?? schema.when;
+    return { key, label: labelFor(key), ...kind, ...(when && { when }) };
   });
   cache.set(definition.propsSchema, fields);
   return fields;

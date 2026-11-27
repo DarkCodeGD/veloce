@@ -25,13 +25,24 @@ const SLOTS = [
   "add.image",
   "tool.hand",
 ] as const;
-const SHAPES = ["tool.rect", "tool.ellipse"] as const;
+const SHAPES = [
+  "tool.rect",
+  "tool.ellipse",
+  "tool.triangle",
+  "tool.polygon",
+  "tool.star",
+  "tool.arrow",
+  "tool.chevron",
+  "tool.line",
+  "tool.arrow-line",
+] as const;
 
 export function ToolBar() {
   const tool = useTool(); // re-render when the tool changes
   // The shape slot shows the last shape tool used (Figma).
   const [shape, setShape] = useState<(typeof SHAPES)[number]>("tool.rect");
-  const shownShape = tool === "ellipse" ? "tool.ellipse" : tool === "rect" ? "tool.rect" : shape;
+  const armed = SHAPES.find((id) => id === `tool.${tool}`);
+  const shownShape = armed ?? shape;
   const addButton = useRef<HTMLButtonElement>(null);
 
   const openAdd = () => {

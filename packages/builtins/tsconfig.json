@@ -13,6 +13,7 @@
     { "path": "../../packages/plugin-api" },
     { "path": "../../plugins/text" },
     { "path": "../../plugins/shape" },
+    { "path": "../../plugins/vector" },
     { "path": "../../plugins/image" },
     { "path": "../../plugins/effects" }
   ]

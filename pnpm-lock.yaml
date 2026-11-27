@@ -214,6 +214,9 @@ importers:
       '@veloce/plugin-text':
         specifier: workspace:*
         version: link:plugins/text
+      '@veloce/plugin-vector':
+        specifier: workspace:*
+        version: link:plugins/vector
       '@veloce/renderer':
         specifier: workspace:*
         version: link:packages/renderer
@@ -357,6 +360,9 @@ importers:
       '@veloce/plugin-text':
         specifier: workspace:*
         version: link:../../plugins/text
+      '@veloce/plugin-vector':
+        specifier: workspace:*
+        version: link:../../plugins/vector
 
   packages/core:
     dependencies:
@@ -467,6 +473,15 @@ importers:
         version: link:../../packages/plugin-api
 
   plugins/text:
+    dependencies:
+      '@veloce/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@veloce/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+
+  plugins/vector:
     dependencies:
       '@veloce/core':
         specifier: workspace:*

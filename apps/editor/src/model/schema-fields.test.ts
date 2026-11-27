@@ -2,7 +2,7 @@ import { createBuiltinRegistry } from "@veloce/builtins";
 import { AssetRefSchema, CropSchema, PointSchema, StrokeSchema } from "@veloce/core";
 import { z } from "@veloce/plugin-api";
 import { describe, expect, it } from "vitest";
-import { labelFor, propFields } from "./schema-fields.js";
+import { applicableFields, labelFor, propFields } from "./schema-fields.js";
 
 describe("inspector fields from plugin schemas", () => {
   const registry = createBuiltinRegistry();
@@ -85,5 +85,31 @@ describe("inspector fields from plugin schemas", () => {
     expect(kinds({ cut: CropSchema })).toEqual(["readonly"]); // no picture to crop
     const box = z.strictObject({ x: z.number(), y: z.number(), w: z.number(), h: z.string() });
     expect(kinds({ photo: AssetRefSchema, cut: box })).toEqual(["asset", "readonly"]);
+  });
+});
+
+describe("fields that apply to some kinds only (D127 §5)", () => {
+  it("shows a star's settings on stars and a rect's radius on rects", () => {
+    const definition = {
+      propsSchema: z.strictObject({
+        shape: z.enum(["rect", "star"]),
+        radius: z
+          .number()
+          .optional()
+          .meta({ when: { shape: ["rect"] } }),
+        points: z
+          .number()
+          .int()
+          .min(3)
+          .optional()
+          .meta({ when: { shape: ["star"] } }),
+      }),
+    };
+    const fields = propFields(definition);
+    expect(fields.find((f) => f.key === "points")?.when).toEqual({ shape: ["star"] });
+    const keys = (props: Record<string, unknown>) =>
+      applicableFields(fields, props).map((f) => f.key);
+    expect(keys({ shape: "star" })).toEqual(["shape", "points"]);
+    expect(keys({ shape: "rect" })).toEqual(["shape", "radius"]);
   });
 });
